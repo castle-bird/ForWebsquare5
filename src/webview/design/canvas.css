@@ -1,0 +1,40 @@
+.wse-view { position: relative; height: 100%; }
+/* 엔진 페이지처럼 높이를 캔버스 크기로 고정(html·body height:100%)해야 flex:1 같은 레이아웃이 실제처럼 늘어난다. 넘치면 페이지 안에서 스크롤.
+   z-index:0으로 쌓임 맥락을 만들어 프로젝트 CSS의 z-index가 겹침 층 위로 못 올라오게 가둔다 */
+.wse-page { position: relative; z-index: 0; box-sizing: border-box; height: 100%; overflow: auto; background: #fff; color: #000; color-scheme: light; }
+/* VS Code 웹뷰가 문서에 건 scrollbar-color(테마색, 상속)가 캔버스까지 내려와 다크 테마에서 검게 보여서, 테마와 무관한 회색으로 고정 */
+.wse-page { scrollbar-color: #b0b0b0 #f0f0f0; }
+
+.wse-page > .w2body { height: 100%; }
+.wse-page [data-wse] { cursor: pointer !important; }
+/* 그리드 본문 inputType 아이콘(renderers.tsx INPUT_ICONS): 칸 오른쪽. 스킨 배경 아이콘(이미지 없어 깨짐)과 겹치지 않게 배경은 끈다 */
+.wse-page td.wse-has-input-icon { background-image: none !important; }
+.wse-page .wse-input-icon { display: inline-block; width: 14px; height: 14px; margin: 0 2px; opacity: .55; vertical-align: middle; }
+.wse-page [data-wse-resize] { position: relative; }
+.wse-page [data-wse-resize]::after { content: ''; position: absolute; top: 0; right: 0; width: 5px; height: 100%; cursor: col-resize; }
+.wse-page .w2group { outline: 1px dashed rgba(0, 0, 0, .12); outline-offset: -1px; }
+
+.wse-page tr.w2group { outline: none; }
+.wse-unknown, .wse-todo { border: 1px dashed #999; min-height: 20px; padding: 2px; box-sizing: border-box; }
+.wse-unknown::before, .wse-todo::before { content: attr(data-tag); font: 11px monospace; color: #888; }
+.wse-overlay { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
+.wse-frame { position: absolute; box-sizing: border-box; }
+.wse-frame.selected { outline: 2px solid var(--vscode-focusBorder); }
+.wse-frame.selected.extra { outline-style: dashed; }
+.wse-frame.hover { background: color-mix(in srgb, var(--vscode-focusBorder) 15%, transparent); }
+.wse-handle { position: absolute; width: 5px; height: 5px; box-sizing: border-box; background: #fff; border: 1px solid var(--vscode-focusBorder); pointer-events: auto; }
+.wse-handle.s { left: calc(50% - 3px); bottom: -4px; cursor: ns-resize; }
+.wse-handle.e { top: calc(50% - 3px); right: -4px; cursor: ew-resize; }
+.wse-handle.se { right: -4px; bottom: -4px; cursor: nwse-resize; }
+.wse-error { color: #c00; white-space: pre-wrap; }
+
+.wse-image-empty { display: inline-block; vertical-align: baseline; overflow: hidden; box-sizing: border-box; background: #ebebeb; color: #888; font: 600 13px sans-serif; }
+.wse-image-empty > span { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 100%; }
+.wse-image-empty img { width: 40%; max-width: 48px; opacity: .45; }
+.wse-page .edit { resize: none; position: absolute; z-index: 2147483647; box-sizing: border-box; padding: 2px 4px; font: 13px/18px sans-serif; color: #000; background: #fff; border: 2px solid var(--vscode-focusBorder); outline: none; }
+.wse-badges { position: absolute; display: flex; gap: 2px; padding: 1px; }
+.wse-badges > span { width: 5px; height: 5px; border-radius: 50%; box-shadow: 0 0 0 1px #fff; }
+.wse-badges > .bind { background: #8fd19e; }
+.wse-badges > .event { background: #f4a09a; }
+.wse-chip { position: absolute; max-width: 100%; box-sizing: border-box; padding: 0 6px; border-radius: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px/16px var(--vscode-font-family, sans-serif); color: var(--vscode-button-foreground, #fff); background: var(--vscode-focusBorder); transition: opacity .12s; }
+.wse-chip.faded { opacity: .15; }

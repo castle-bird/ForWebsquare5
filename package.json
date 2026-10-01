@@ -1,0 +1,316 @@
+{
+  "name": "websquare5-editor",
+  "displayName": "For Websquare5",
+  "publisher": "castle-bird",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/castle-bird/ForWebsquare5.git"
+  },
+  "bugs": {
+    "url": "https://github.com/castle-bird/ForWebsquare5/issues"
+  },
+  "homepage": "https://github.com/castle-bird/ForWebsquare5#readme",
+  "description": "VS Code에서 WebSquare5 에디터를 사용할 수 있게 해주는 비공식 확장",
+  "version": "0.1.0",
+  "icon": "media/logo.png",
+  "engines": {
+    "vscode": "^1.138.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "화면 XML과 프로젝트 도구를 다루므로 신뢰한 작업 폴더에서만 동작한다."
+    },
+    "virtualWorkspaces": false
+  },
+  "activationEvents": [
+    "workspaceContains:**/websquare/config.xml",
+    "onLanguage:xml"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "websquare5-editor.format",
+        "title": "WebSquare5: 코드 탭 포맷 (Source·Script·연결 파일)"
+      },
+      {
+        "command": "websquare5-editor.setup",
+        "title": "WebSquare5: 환경 설정"
+      },
+      {
+        "command": "websquare5-editor.codeTheme",
+        "title": "WebSquare5: 코드 편집기 테마…"
+      },
+      {
+        "command": "websquare5-editor.choose",
+        "title": "WebSquare5: 도구 경로 선택"
+      },
+      {
+        "command": "websquare5-editor.insertComponent",
+        "title": "WebSquare5: 팔레트 컴포넌트 넣기"
+      },
+      {
+        "command": "websquare5-editor.searchPalette",
+        "title": "WebSquare5: 팔레트 검색",
+        "icon": "$(search)"
+      },
+      {
+        "command": "websquare5-editor.clearPaletteSearch",
+        "title": "WebSquare5: 팔레트 검색 지우기",
+        "icon": "$(clear-all)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "websquare5-editor.choose",
+          "when": "false"
+        },
+        {
+          "command": "websquare5-editor.insertComponent",
+          "when": "false"
+        },
+        {
+          "command": "websquare5-editor.searchPalette",
+          "when": "false"
+        },
+        {
+          "command": "websquare5-editor.clearPaletteSearch",
+          "when": "false"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "websquare5-editor.codeTheme",
+          "when": "webviewId == 'websquare5-editor.designer' && webviewSection == 'codeEditor'",
+          "group": "z_theme"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "websquare5-editor.searchPalette",
+          "when": "view == websquare5-editor.palette",
+          "group": "navigation@1"
+        },
+        {
+          "command": "websquare5-editor.clearPaletteSearch",
+          "when": "view == websquare5-editor.palette && websquare5-editor.paletteFiltered",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "websquare5-editor",
+          "title": "WebSquare5",
+          "icon": "media/palette.svg"
+        }
+      ]
+    },
+    "views": {
+      "websquare5-editor": [
+        {
+          "id": "websquare5-editor.palette",
+          "name": "Palette",
+          "icon": "media/palette.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "websquare5-editor.palette",
+        "contents": "WebSquare 화면을 디자이너로 열면 넣을 수 있는 컴포넌트가 여기에 나옵니다.\n컴포넌트 정의 파일을 못 찾았다면 환경 설정부터 확인해 주세요.\n[환경 설정](command:websquare5-editor.setup)"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "setup",
+        "title": "WebSquare5 Editor 시작하기",
+        "description": "Eclipse 설치 폴더 하나만 고르면 나머지는 자동으로 찾습니다.",
+        "steps": [
+          {
+            "id": "eclipse",
+            "title": "Eclipse 설치 폴더",
+            "description": "**폴더:** Eclipse 설치 폴더 (예: `C:\\eclipse_egov{버전}`)\n그 안에서 컴포넌트 정의·wpack 변환기·API 문서를 자동으로 찾습니다. 못 찾은 항목은 저장 시·자동완성 사용 시 알림으로 안내합니다.\n[폴더 선택](command:websquare5-editor.choose?%5B%22eclipseInstallPath%22%5D)",
+            "media": {
+              "markdown": "media/setup-eclipse.md"
+            },
+            "completionEvents": [
+              "onContext:websquare5-editor.found.eclipseInstallPath"
+            ]
+          }
+        ]
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "websquare5-editor.format",
+        "key": "ctrl+alt+l",
+        "when": "activeCustomEditorId == websquare5-editor.designer"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "websquare5-editor.designer",
+        "displayName": "Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.xml"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "configuration": {
+      "title": "WebSquare5 Editor",
+      "properties": {
+        "websquare5-editor.eclipseInstallPath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "**폴더:** Eclipse 설치 폴더 (예: `C:\\eclipse_egov{버전}`)\n\n지정하면 이 폴더 밑을 뒤져서 컴포넌트 정의 파일·wpack 변환기·API 문서 폴더를 자동으로 찾습니다. 플러그인 폴더 이름은 설치본마다 달라도 됩니다.\n\n상대 경로는 작업 폴더 기준."
+        },
+        "websquare5-editor.apiDocumentationPath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "**폴더:** `index.html`·`$p`·`WebSquare.*`가 있는 API 문서 폴더\n\n**비워두면:** `eclipseInstallPath` 밑에서 자동 탐색, 없으면 WebSquare 메서드 자동완성만 빠짐\n\n상대 경로는 작업 폴더 기준."
+        },
+        "websquare5-editor.componentDefinitionFile": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "**파일:** 프로젝트 엔진 버전의 `WebSquareConfig.xml`\n\n**비워두면:** `eclipseInstallPath` 밑에서 자동 탐색, 없으면 Property·Event 목록이 비어 있음\n\n상대 경로는 작업 폴더 기준."
+        },
+        "websquare5-editor.wpackExecutable": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "**파일:** `w-pack/index.js` (또는 `standalone_wpack-win.exe`)\n\n**비워두면:** `eclipseInstallPath` 밑에서 자동 탐색, 없으면 저장 시 JS 변환을 건너뜀\n\n상대 경로는 작업 폴더 기준. 웹 루트 `websquare/config.xml`이 `<wpack use=\"true\">`일 때만 동작."
+        },
+        "websquare5-editor.linkFileExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".java",
+            ".xml",
+            ".html",
+            ".htm",
+            ".css",
+            ".js",
+            ".sql"
+          ],
+          "markdownDescription": "**연결 탭(Controller·Service 등)에 연결할 수 있는 파일 확장자** (예: `.jsp` 추가)\n\n모든 연결 탭 공통. 편집기 언어는 확장자로 고르고(Java·XML·HTML·CSS·JS·SQL), 그 밖의 확장자는 일반 텍스트로 편집합니다. 비우면 기본값."
+        },
+        "websquare5-editor.sqlDialect": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "oracle",
+            "mysql",
+            "mariadb",
+            "postgresql",
+            "mssql",
+            "sqlite"
+          ],
+          "enumDescriptions": [
+            "표준 SQL",
+            "Oracle (PL/SQL)",
+            "MySQL",
+            "MariaDB",
+            "PostgreSQL",
+            "SQL Server (T-SQL)",
+            "SQLite"
+          ],
+          "default": "standard",
+          "markdownDescription": "**SQL 방언** — MyBatis 매퍼 XML 안의 SQL과 `.sql` 연결 파일의 색·키워드 자동완성에 쓰입니다."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test:editors": "node scripts/test-editors.mjs",
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "package:vsix": "npx @vscode/vsce package --no-dependencies",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "tsc --noEmit && tsc --noEmit -p src/webview",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/vscode": "^1.138.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.5.0",
+    "npm-run-all": "^4.1.5",
+    "puppeteer-core": "^25.12.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.1"
+  },
+  "overrides": {
+    "diff": "^8.0.4",
+    "serialize-javascript": "^7.0.6"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.12",
+    "@codemirror/lang-java": "^6.0.2",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lang-sql": "^6.10.0",
+    "@codemirror/lang-xml": "^6.1.0",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/merge": "^6.12.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.13",
+    "@dnd-kit/core": "^6.3.1",
+    "@floating-ui/dom": "^1.8.0",
+    "@fsegurai/codemirror-theme-vscode-dark": "^6.2.8",
+    "@fsegurai/codemirror-theme-vscode-light": "^6.2.8",
+    "@lezer/common": "^1.5.3",
+    "@lezer/highlight": "^1.2.5",
+    "@replit/codemirror-indentation-markers": "^6.5.3",
+    "@vscode/codicons": "^0.0.46-24",
+    "acorn": "^8.18.0",
+    "clsx": "^2.1.1",
+    "codemirror": "^6.0.2",
+    "entities": "^4.5.0",
+    "fflate": "^0.8.3",
+    "fuzzysort": "^4.0.2",
+    "htmlparser2": "^9.1.0",
+    "postcss": "^8.5.28",
+    "postcss-safe-parser": "^7.1.0",
+    "postcss-selector-parser": "^7.1.6",
+    "postcss-value-parser": "^4.2.0",
+    "prettier": "^3.9.9",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-resizable-panels": "^4.14.1",
+    "saxes": "^6.0.0",
+    "style-to-js": "^2.0.2",
+    "thememirror": "^2.0.1",
+    "zustand": "^5.0.15"
+  }
+}
