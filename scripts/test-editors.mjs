@@ -49,7 +49,7 @@ const bundle = await build({
 		Object.assign(root.children[0].children[1], { def: 1, frame: sub });
 		window.send = data => window.dispatchEvent(new MessageEvent('message', {data}));
 		setTimeout(() => {
-			window.send({type:'definitions', defs:[{id:'input', ns:'urn:test', realType:'input', parents:[], bases:[], properties:[{name:'label', category:'', order:0, description:'화면에 보이는 글자'}, {name:'disabled', category:'', order:0, description:'', options:['true', 'false']}], events:[{name:'onclick', signature:'onclick(e)', description:''}]}, {id:'wframe', ns:'urn:test', realType:'wframe', parents:[], bases:[], properties:[], events:[]}, {id:'gridView', ns:'urn:test', realType:'gridView', parents:[], bases:[], properties:[], events:[]}, {id:'select1', ns:'http://www.w3.org/2002/xforms', realType:'selectbox', display:'SelectBox', parents:[], bases:[], properties:[], events:[]}, {id:'select1', ns:'http://www.w3.org/2002/xforms', realType:'radio', display:'Radio', parents:[], bases:[], properties:[], events:[]}, {id:'select', ns:'http://www.w3.org/2002/xforms', realType:'checkbox', parents:[], bases:[], properties:[], events:[]}]});
+			window.testDefs = [{id:'input', ns:'urn:test', realType:'input', parents:[], bases:[], properties:[{name:'label', category:'', order:0, description:'화면에 보이는 글자'}, {name:'disabled', category:'', order:0, description:'', options:['true', 'false']}], events:[{name:'onclick', signature:'onclick(e)', description:''}]}, {id:'wframe', ns:'urn:test', realType:'wframe', parents:[], bases:[], properties:[], events:[]}, {id:'gridView', ns:'urn:test', realType:'gridView', parents:[], bases:[], properties:[], events:[]}, {id:'select1', ns:'http://www.w3.org/2002/xforms', realType:'selectbox', display:'SelectBox', parents:[], bases:[], properties:[], events:[]}, {id:'select1', ns:'http://www.w3.org/2002/xforms', realType:'radio', display:'Radio', parents:[], bases:[], properties:[], events:[]}, {id:'select', ns:'http://www.w3.org/2002/xforms', realType:'checkbox', parents:[], bases:[], properties:[], events:[]}]; window.send({type:'definitions', defs: window.testDefs});
 			window.send({type:'scriptApi', api:{'$p':[{name:'getComponentById', signature:'getComponentById(id)', description:'컴포넌트 조회'}], 'WebSquare.uiplugin.input':[{name:'setValue', signature:'setValue(value)', description:'값 설정'}]}});
 			window.send({type:'modules', files:[{path:'/js/common.js', text:'window.app = {};\\n/** 도구 */\\napp.util = {};\\n/**\\n * 값 형식 변환\\n * @param value 값\\n */\\napp.util.format = function(value, pattern) {};\\nvar lib = { VERSION: "1", win: {} };'}]});
 			window.send({type:'document', version:1, text, root, script:{text:'scwin.run = function() {};\\nset(value);\\nset(value);'}});
@@ -63,9 +63,9 @@ const assets = new Map(bundle.outputFiles.map(f => ['/' + path.basename(f.path),
 const html = `<!doctype html><html><head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-test'; style-src 'self' 'nonce-test'; font-src 'self'; img-src 'self' data:;">
 <link rel="stylesheet" href="/editor.css">
-<style nonce="test">body { --vscode-editor-font-family: Consolas, monospace; --vscode-editor-font-size:16px; --vscode-font-size:14px; --vscode-editor-selectionBackground:#264f78; --vscode-editor-lineHighlightBackground:#555555; --vscode-editorIndentGuide-background1:#404040; --vscode-editorIndentGuide-activeBackground1:#707070; --vscode-editor-background:#222; --vscode-sideBar-background:#333; --vscode-foreground:#ddd; --vscode-focusBorder:#007fd4; --vscode-symbolIcon-classForeground:#ee9d28; --vscode-symbolIcon-methodForeground:#b180d7; --vscode-button-foreground:#fff; } ::-webkit-scrollbar { width: 10px; height: 10px; }</style>
+<style nonce="test">body { --vscode-editor-font-family: Consolas, monospace; --vscode-editor-font-size:16px; --vscode-font-size:14px; --vscode-editor-selectionBackground:#264f78; --vscode-editor-lineHighlightBackground:#555555; --vscode-editorIndentGuide-background1:#404040; --vscode-editorIndentGuide-activeBackground1:#707070; --vscode-editor-background:#222; --vscode-sideBar-background:#333; --vscode-foreground:#ddd; --vscode-focusBorder:#007fd4; --vscode-symbolIcon-classForeground:#ee9d28; --vscode-symbolIcon-methodForeground:#b180d7; --vscode-button-foreground:#fff; --vscode-button-background:#0078d4; --vscode-input-background:#313131; --vscode-input-border:#3c3c3c; --vscode-input-foreground:#cccccc; --vscode-input-placeholderForeground:#989898; --vscode-panel-border:#2b2b2b; --vscode-descriptionForeground:#9d9d9d; --vscode-list-hoverBackground:#2a2d2e; --vscode-list-activeSelectionBackground:#04395e; --vscode-list-activeSelectionForeground:#ffffff; --vscode-dropdown-background:#313131; --vscode-dropdown-border:#3c3c3c; --vscode-widget-shadow:#0000005c; --vscode-checkbox-background:#313131; --vscode-checkbox-border:#3c3c3c; --vscode-toolbar-hoverBackground:#5a5d5e50; --vscode-badge-background:#616161; --vscode-badge-foreground:#f8f8f8; --vscode-textLink-foreground:#4daafc; } ::-webkit-scrollbar { width: 10px; height: 10px; }</style>
 </head><body class="vscode-dark"><div id="root"></div>
-<script nonce="test">window.leakedUndo=0; window.leakedSave=0; window.addEventListener('keydown',e=>{if(e.ctrlKey&&/^[zy]$/i.test(e.key)){window.leakedUndo++;} if(e.ctrlKey&&e.key==='s'){window.leakedSave++;}}); const versions={source:1,script:1}; window.addEventListener('message',e=>{if(e.data&&e.data.type==='document'){versions.source=versions.script=e.data.version;} if(e.data&&e.data.type==='linked'&&e.data.version){versions['link:'+e.data.kind]=e.data.version;}}); window.sent=[]; window.acquireVsCodeApi=()=>({postMessage(msg){window.sent.push(msg);if(msg.type==='setCode'){const ok=msg.version===versions[msg.target]; if(ok){versions[msg.target]++;} setTimeout(()=>window.send({type:'codeAck',target:msg.target,ok,version:versions[msg.target]}),5);}else if(msg.type==='findFiles'){if(window.mockFiles){setTimeout(()=>window.send({type:'files',kind:msg.kind,files:window.mockFiles}),5);}}else if(msg.type==='complete'){setTimeout(()=>window.send({type:'completions',id:msg.id,...(window.remoteItems?window.remoteItems(msg):{items:[]})}),5);}else if(msg.type==='format'){setTimeout(()=>window.send({type:'formatted',target:msg.target,text:window.formatResult??'formatted();'}),5);}}});</script>
+<script nonce="test">window.leakedUndo=0; window.leakedSave=0; window.addEventListener('keydown',e=>{if(e.ctrlKey&&/^[zy]$/i.test(e.key)){window.leakedUndo++;} if(e.ctrlKey&&e.key==='s'){window.leakedSave++;}}); const versions={source:1,script:1}; window.addEventListener('message',e=>{if(e.data&&e.data.type==='document'){versions.source=versions.script=e.data.version;} if(e.data&&e.data.type==='linked'&&e.data.version){versions['link:'+e.data.kind]=e.data.version;}}); window.sent=[]; window.acquireVsCodeApi=()=>({postMessage(msg){msg=JSON.parse(JSON.stringify(msg));window.sent.push(msg);if(msg.type==='setCode'){const ok=msg.version===versions[msg.target]; if(ok){versions[msg.target]++;} setTimeout(()=>window.send({type:'codeAck',target:msg.target,ok,version:versions[msg.target]}),5);}else if(msg.type==='findFiles'){if(window.mockFiles){setTimeout(()=>window.send({type:'files',kind:msg.kind,files:window.mockFiles}),5);}}else if(msg.type==='complete'){setTimeout(()=>window.send({type:'completions',id:msg.id,...(window.remoteItems?window.remoteItems(msg):{items:[]})}),5);if(window.remoteDetails){setTimeout(()=>window.send({type:'completionDetails',id:msg.id,items:window.remoteDetails(msg)}),300);}}else if(msg.type==='format'){setTimeout(()=>window.send({type:'formatted',target:msg.target,text:window.formatResult??'formatted();'}),5);}}});</script>
 <script nonce="test" src="/editor.js"></script></body></html>`;
 const server = createServer((req, res) => {
 	const asset = assets.get(req.url);
@@ -105,14 +105,14 @@ try {
 	assert.equal(await page.$eval('#submission-mode', input => input.value), 'asynchronous');
 	assert.equal(await page.$eval('#submission-media', input => input.value), 'application/json');
 	assert.deepEqual(await page.$$eval('.submission-handler button', bs => bs.map(b => b.disabled)), [true, true, true], '추가 팝업: 코드 버튼은 확인 전 비활성');
-	await page.$eval('.submission-actions button:first-child', button => button.click());
+	await page.$eval('.submission-actions button:last-child', button => button.click());
 	await page.waitForFunction(() => window.sent.some(m => m.type === 'addSubmission'));
 	assert.equal(await page.evaluate(() => window.sent.find(m => m.type === 'addSubmission').index), 5);
 	await page.evaluate(() => window.send({ type: 'popupAck', popup: window.sent.findLast(m => m.type === 'addSubmission' || m.type === 'editSubmission').popup, ok: true }));
 	await page.waitForFunction(() => !document.querySelector('.submission-editor'));
 	await submissionRoot.click({ count: 2 });
 	await page.waitForSelector('.submission-editor[open]');
-	await page.$eval('.submission-actions button:last-child', button => button.click());
+	await page.$eval('.submission-actions button:first-child', button => button.click());
 	const collection = await page.waitForSelector('.pane .tree-row .tag');
 	await collection.click({ button: 'right' });
 	await page.waitForSelector('.context-menu');
@@ -130,7 +130,7 @@ try {
 		await page.waitForSelector('.data-editor[open]');
 		assert.equal(await page.$('.data-editor-tabs'), null, 'Column/Data 탭 없음');
 		assert.equal(await page.$$('.popup-resize').then(handles => handles.length), 8, '8방향 크기 조절 손잡이');
-		assert.deepEqual(await page.$$eval('.data-editor-actions button', buttons => buttons.map(b => b.textContent)), ['확인', '닫기']);
+		assert.deepEqual(await page.$$eval('.data-editor-actions button', buttons => buttons.map(b => b.textContent)), ['닫기', '확인']);
 		const centered = await page.evaluate(() => {
 			const canvas = document.querySelector('.canvas-frame').getBoundingClientRect();
 			const popup = document.querySelector('.data-editor').getBoundingClientRect();
@@ -163,7 +163,7 @@ try {
 		await page.mouse.move(columnHandle.x, columnHandle.y); await page.mouse.down();
 		await page.mouse.move(columnHandle.x + 35, columnHandle.y, { steps: 5 }); await page.mouse.up();
 		assert.ok(await page.$eval('.data-editor th:nth-child(2)', (el, width) => el.getBoundingClientRect().width > width + 20, idWidth), '열 너비 조절');
-		await page.$eval('.data-editor-actions button:first-child', button => button.click());
+		await page.$eval('.data-editor-actions button:last-child', button => button.click());
 		await page.waitForFunction(() => window.sent.some(m => m.type === 'editDataFields'));
 		assert.deepEqual(await page.evaluate(() => window.sent.find(m => m.type === 'editDataFields').fields.map(f => f.id)), ['col1', 'customer']);
 		await page.evaluate(() => window.send({ type: 'popupAck', popup: window.sent.findLast(m => m.type === 'editDataFields').popup, ok: true }));
@@ -210,7 +210,7 @@ try {
 		await page.$eval('#submission-action', el => el.focus());
 		await page.keyboard.type('2');
 		// 수정 팝업 코드 버튼: 비어 있으면 scwin.{id}_{이벤트}. Script에 이미 정의가 있어 그리로 이동, 속성·입력칸은 그 이름으로
-		await page.click('.submission-editor button[aria-label="Submit-done Script"]');
+		await page.click('.submission-editor button[aria-label="submitdone Script"]');
 		await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr' && m.name === 'ev:submitdone' && m.value === 'scwin.sbm_sel1_submitdone'));
 		assert.equal(await page.$eval('#submission-submitdone', el => el.value), 'scwin.sbm_sel1_submitdone');
 		await page.screenshot({path:path.join(tmpdir(), 'ws5-submission-events.png')});
@@ -429,14 +429,31 @@ try {
 		});
 		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('.w2grid tbody td'));
 		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.w2grid tbody td').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
-		await page.waitForSelector('.kv select.choice[aria-label="id"]', {timeout: 3000}).catch(() => assert.fail('본문 셀 id가 select가 아님'));
-		assert.deepEqual(await page.$eval('.kv select.choice[aria-label="id"]', e => [...e.options].map(o => o.value)), ['nmae', '', 'name', 'age'], '지금 값(오타) + dataList 컬럼');
+		// 입력칸 + 목록(datalist): 직접 입력도, 목록에서 고르기도
+		const idValue = () => page.evaluateHandle(() => [...document.querySelectorAll('.kv tr')].find(tr => tr.querySelector('.key')?.textContent === 'id').querySelector('.value, input'));
+		await page.waitForFunction(() => [...document.querySelectorAll('.kv tr')].find(tr => tr.querySelector('.key')?.textContent === 'id')?.querySelector('.value.has-list'), {timeout: 3000})
+			.catch(() => assert.fail('본문 셀 id에 목록 표시 없음'));
+		await (await idValue()).click();
+		await page.waitForSelector('.kv input[role="combobox"]');
+		const comboItems = () => page.evaluate(() => [...document.querySelectorAll('.combo-list li')].map(l => l.textContent));
+		assert.deepEqual([await page.$eval('.kv input[role="combobox"]', i => i.value), ...await comboItems()], ['nmae', 'name', 'age'], '지금 값(오타)이 있어도 dataList 컬럼 전체 목록');
 		await page.evaluate(() => { window.sent.length = 0; });
-		await page.select('.kv select.choice[aria-label="id"]', 'name');
-		await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr' && m.name === 'id' && m.value === 'name'));
+		await page.$eval('.kv input[role="combobox"]', i => i.select());
+		await page.keyboard.type('a');
+		assert.deepEqual(await comboItems(), ['name', 'age'], '타이핑하면 그 글자를 포함하는 것만');
+		await page.keyboard.type('g');
+		assert.deepEqual(await comboItems(), ['age']);
+		await page.$eval('.kv input[role="combobox"]', i => i.select());
+		await page.keyboard.type('custom'); await page.keyboard.press('Enter');
+		await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr' && m.name === 'id' && m.value === 'custom'), {timeout: 3000}).catch(() => assert.fail('직접 입력'));
+		await (await idValue()).click();
+		await page.waitForSelector('.combo-list li');
+		await page.evaluate(() => [...document.querySelectorAll('.combo-list li')].find(l => l.textContent === 'age').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })));
+		await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr' && m.name === 'id' && m.value === 'age'), {timeout: 3000}).catch(() => assert.fail('목록에서 고르면 바로 반영'));
+		assert.equal(await page.$('.kv input[role="combobox"]'), null, '고르면 닫힘');
 		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.w2grid thead th:last-child').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
-		await page.waitForFunction(() => !document.querySelector('.kv select.choice[aria-label="id"]'));
-		console.log('Property: 바인딩된 그리드 셀 id → dataList 컬럼 select passed');
+		await page.waitForFunction(() => !document.querySelector('.kv .value.has-list'));
+		console.log('Property: 바인딩된 그리드 셀 id → 입력칸 + dataList 컬럼 목록 passed');
 		await page.evaluate(() => {
 			const text = '<html xmlns:w2="urn:test"><body><w2:input id="m1"/><w2:input id="m2"/></body></html>';
 			const root = window.parseXml(text);
@@ -480,7 +497,44 @@ try {
 		});
 		const outlinePaste = await page.evaluate(() => window.sent.find(m => m.type === 'paste'));
 		assert.equal(outlinePaste?.xml.length, 2, JSON.stringify(outlinePaste));
+		// 다른 화면 XML로: 복사하면 클립보드에도(확장 형식 + 글자), 붙여 넣을 때 클립보드의 것을 쓴다(다른 화면에서 복사한 것)
+		const clip = await page.evaluate(() => {
+			window.sent.length = 0;
+			const copied = new DataTransfer();
+			document.activeElement.dispatchEvent(new ClipboardEvent('copy', { bubbles: true, cancelable: true, clipboardData: copied }));
+			const other = new DataTransfer();
+			other.setData('application/x-websquare5-nodes', JSON.stringify(['<w2:input id="fromB"/>']));
+			document.activeElement.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: other }));
+			return { nodes: JSON.parse(copied.getData('application/x-websquare5-nodes')).length, text: copied.getData('text/plain'), pasted: window.sent.find(m => m.type === 'paste')?.xml };
+		});
+		assert.equal(clip.nodes, 2, '복사한 두 개가 클립보드에');
+		assert.ok(clip.text.startsWith('<'), `글자로도: ${clip.text}`);
+		assert.deepEqual(clip.pasted, ['<w2:input id="fromB"/>'], '다른 화면에서 복사한 것을 붙여 넣음');
 		console.log('Outline: 클릭·Ctrl+클릭 다중 선택·Delete·복사·붙여넣기 passed');
+		// F2: 고른 노드의 id를 트리에서 바로(Enter 반영, 형식·중복은 경고만, Esc 취소)
+		await page.mouse.click(o1.x, o1.y);
+		await page.evaluate(() => { window.sent.length = 0; });
+		await page.keyboard.press('F2');
+		await page.waitForSelector('.pane .tree-rename', {timeout: 3000}).catch(() => assert.fail('F2로 id 입력칸이 안 열림'));
+		assert.equal(await page.$eval('.pane .tree-rename', i => i.value), 'm1');
+		await page.$eval('.pane .tree-rename', i => i.select()); await page.keyboard.type('m9'); await page.keyboard.press('Enter');
+		assert.deepEqual(await page.evaluate(() => { const m = window.sent.find(m => m.type === 'setAttr'); return m && [m.name, m.value]; }), ['id', 'm9'], 'F2 → Enter: id 변경');
+		assert.equal(await page.$('.pane .tree-rename'), null, 'Enter로 닫힘');
+		await page.evaluate(() => { window.sent.length = 0; });
+		await page.keyboard.press('F2'); await page.waitForSelector('.pane .tree-rename');
+		await page.$eval('.pane .tree-rename', i => i.select()); await page.keyboard.type('m2'); await page.keyboard.press('Enter');
+		assert.deepEqual(await page.evaluate(() => window.sent.map(m => m.type)), ['warn'], '이미 있는 id는 경고만');
+		await page.keyboard.press('F2'); await page.waitForSelector('.pane .tree-rename');
+		await page.keyboard.type('x'); await page.keyboard.press('Escape');
+		assert.equal(await page.$('.pane .tree-rename'), null, 'Esc로 취소');
+		assert.equal(await page.evaluate(() => window.sent.filter(m => m.type === 'setAttr').length), 0);
+		// id가 없는 노드(body)도 F2로 새 id를 넣는다
+		await page.evaluate(() => [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.tag')?.textContent === 'body' && !r.querySelector('.id')).click());
+		await page.keyboard.press('F2'); await page.waitForSelector('.pane .tree-rename', {timeout: 3000}).catch(() => assert.fail('id 없는 노드에서 F2'));
+		assert.equal(await page.$eval('.pane .tree-rename', i => i.value), '', '빈 칸으로');
+		await page.keyboard.type('bodyMain'); await page.keyboard.press('Enter');
+		assert.deepEqual(await page.evaluate(() => { const m = window.sent.findLast(m => m.type === 'setAttr'); return m && [m.name, m.value]; }), ['id', 'bodyMain'], 'id 새로 넣기');
+		console.log('Outline: F2 id 바꾸기 passed');
 		// 캔버스를 꽉 채운 컴포넌트를 골라도 선택 박스·손잡이·칩이 스크롤을 만들지 않는다(겹침 층). 칩은 보이는 영역 안, 마우스를 올리면 흐려짐
 		await page.evaluate(() => {
 			const text = '<html xmlns:w2="urn:test"><body><w2:input id="top" class="a b" style="width:100%;height:100%;box-sizing:border-box"/></body></html>';
@@ -524,23 +578,42 @@ try {
 		await page.type('.choices-editor input[aria-label="2행 Label"]', '퇴직자');
 		await page.type('.choices-editor input[aria-label="2행 Value"]', '2');
 		await page.evaluate(() => [...document.querySelectorAll('.choices-editor .choices-check')].find(l => l.textContent.includes('All Option')).querySelector('input').click());
+		// 손잡이(⠿)로 2행을 1행 위로 끌어 놓기(DataList와 같은 방식)
+		await page.evaluate(() => {
+			const dt = new DataTransfer(), handle = document.querySelector('.choices-editor button[aria-label="2행 이동"]');
+			const first = document.querySelector('.choices-editor tbody tr'), r = first.getBoundingClientRect();
+			handle.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+			first.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: r.top + 2 }));
+			first.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: r.top + 2 }));
+			handle.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
+		});
+		assert.deepEqual(await page.$$eval('.choices-editor tbody input[aria-label$="Label"]', els => els.map(e => e.value)), ['퇴직자', '재직자'], '행 끌어 순서 변경');
 		await page.screenshot({path:path.join(tmpdir(), 'ws5-choices-selectbox.png')});
 		await page.click('.choices-editor .btn-primary');
 		await page.waitForFunction(() => window.sent.some(m => m.type === 'editChoices'));
 		assert.deepEqual(await page.evaluate(() => window.sent.find(m => m.type === 'editChoices').fields),
-			{ items: [{ label: '재직자', value: '1' }, { label: '퇴직자', value: '2' }], attrs: { ref: 'data:m.a', allOption: 'true' } });
+			{ items: [{ label: '퇴직자', value: '2' }, { label: '재직자', value: '1' }], attrs: { ref: 'data:m.a', allOption: 'true' } });
 		await page.evaluate(() => window.send({ type: 'popupAck', popup: window.sent.findLast(m => m.type === 'editChoices').popup, ok: true }));
 		await page.waitForFunction(() => !document.querySelector('.choices-editor'));
 		// radio: 데이터 바인딩(BindItemSet, 항목 표는 비활성) + 정렬 방향 cols → rows
 		await dblclick('rad');
 		await page.waitForSelector('.choices-editor[open]');
-		assert.deepEqual(await page.$$eval('#choices-direction, #choices-count', els => els.map(e => e.value)), ['cols', '2']);
-		await page.evaluate(() => [...document.querySelectorAll('.choices-editor .choices-check')].find(l => l.textContent.includes('BindItemSet')).querySelector('input').click());
+		assert.deepEqual(await page.$$eval('#choices-direction, #choices-count', els => els.map(e => e.value ?? e.dataset.value)), ['cols', '2']);
+		await page.evaluate(() => [...document.querySelectorAll('.choices-editor .choices-check')].find(l => l.textContent.includes('데이터에서 가져오기')).querySelector('input').click());
 		assert.ok(await page.$eval('.choices-editor button[aria-label="행 추가"]', b => b.disabled), '바인딩 중 항목 표 비활성');
-		await page.select('#choices-nodeset', 'data:dlt_code');
-		await page.select('#choices-label', 'name');
-		await page.select('#choices-value', 'code');
-		await page.select('#choices-direction', 'rows');
+		// NodeSet·Label·Value: 입력칸 + 목록(동적 dataList는 목록에 없어 직접 입력)
+		const pick = (v) => page.evaluate(v => [...document.querySelectorAll('.combo-list li')].find(l => l.textContent === v).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })), v);
+		await page.type('#choices-nodeset', 'data:dlt_dyn');
+		assert.equal(await page.$('.combo-list'), null, '목록에 없는 NodeSet도 입력');
+		await page.$eval('#choices-nodeset', el => el.select());
+		await page.type('#choices-nodeset', 'data:dlt_');
+		await page.waitForSelector('.combo-list li');
+		await pick('data:dlt_code');
+		await page.type('#choices-label', 'name');
+		await page.focus('#choices-value');
+		await page.waitForSelector('.combo-list li');
+		await pick('code');
+		await page.click('#choices-direction button:nth-child(3)');
 		await page.$eval('#choices-count', el => { el.focus(); el.select(); });
 		await page.keyboard.type('3');
 		await page.screenshot({path:path.join(tmpdir(), 'ws5-choices-radio.png')});
@@ -548,7 +621,7 @@ try {
 		await page.click('.choices-editor .btn-primary');
 		await page.waitForFunction(() => window.sent.some(m => m.type === 'editChoices'));
 		assert.deepEqual(await page.evaluate(() => window.sent.find(m => m.type === 'editChoices').fields),
-			{ items: [], itemset: { nodeset: 'data:dlt_code', label: 'name', value: 'code' }, attrs: { rows: '3' } });
+			{ items: [], itemset: { nodeset: 'data:dlt_code', label: 'name', value: 'code' }, attrs: { ref: null, cols: null, rows: '3' } }, '지울 속성은 null(JSON 메시지에서 undefined는 사라짐)');
 		await page.evaluate(() => window.send({ type: 'popupAck', popup: window.sent.findLast(m => m.type === 'editChoices').popup, ok: false, error: '문서가 바뀌었어. 팝업을 다시 열어 줘.' }));
 		await page.waitForFunction(() => document.querySelector('.choices-editor .error')?.textContent.includes('문서가 바뀌었어'));
 		await page.$eval('.choices-editor .popup-close', b => b.click());
@@ -559,7 +632,7 @@ try {
 		assert.deepEqual(await page.$$eval('.pane .tree-row .tag', tags => tags.map(t => `${t.textContent}|${t.title}`).filter(s => s.endsWith('select1'))), ['SelectBox|xf:select1', 'Radio|xf:select1']);
 		await page.evaluate(() => [...document.querySelectorAll('.pane .tree-row .tag')].find(t => t.textContent === 'Radio').closest('.tree-row').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
 		await page.waitForSelector('.choices-editor[open]');
-		assert.deepEqual(await page.$$eval('#choices-direction, #choices-count', els => els.map(e => e.value)), ['cols', '2'], 'Outline 더블클릭 → radio 팝업');
+		assert.deepEqual(await page.$$eval('#choices-direction, #choices-count', els => els.map(e => e.value ?? e.dataset.value)), ['cols', '2'], 'Outline 더블클릭 → radio 팝업');
 		await page.$eval('.choices-editor .popup-close', b => b.click());
 		await page.waitForFunction(() => !document.querySelector('.choices-editor'));
 		console.log('Design: selectbox·radio 선택 항목 팝업(항목·All Option·바인딩·정렬, Outline 이름·더블클릭) passed');
@@ -576,6 +649,67 @@ try {
 		await page.waitForFunction(() => document.querySelector('.pane .tree-row.selected .id')?.textContent === 'radio1');
 		assert.ok(await page.evaluate(() => window.sent.some(m => m.type === 'selection' && m.version === 97 && m.index === 3)), '새 선택도 확장에 알림');
 		console.log('Palette: 선택 알림·넣은 컴포넌트 선택 passed');
+		// 문구 편집(라벨 더블클릭) 중에는 선택 테두리·손잡이·표시 점(겹침 층)을 숨긴다: 페이지 위 층이라 편집 상자를 덮는다
+		await page.evaluate(() => {
+			const text = '<html xmlns:w2="urn:test"><body><w2:input id="btnLabel" label="취소"/></body></html>';
+			const root = window.parseXml(text);
+			root.children[0].children[0].def = 0;
+			window.send({ type: 'document', version: 97, text, root, script: { text: '' } });
+		});
+		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('#btnLabel'));
+		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#btnLabel').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
+		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit'), {timeout: 3000});
+		assert.equal(await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.wse-overlay').hidden), true, '문구 편집 중 겹침 층 숨김');
+		await page.keyboard.press('Escape');
+		await page.waitForFunction(() => !document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit'), {timeout: 3000});
+		assert.equal(await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.wse-overlay').hidden), false, '편집을 닫으면 다시 보임');
+		// 그리드 헤더 칸 더블클릭: 문구 상자 아래 너비(W)·높이(H). 칸으로 옮겨도 안 닫히고, Enter면 문구·width·style height를 한 편집으로
+		await page.evaluate(() => {
+			const text = '<html xmlns:w2="urn:test"><body><w2:gridView id="grdSize"><w2:header id="hd"><w2:row id="hr"><w2:column id="h1" value="이름" width="70" style="height:26px;"/></w2:row></w2:header><w2:gBody id="gb"><w2:row id="br"><w2:column id="b1"/></w2:row></w2:gBody></w2:gridView></body></html>';
+			const root = window.parseXml(text);
+			root.children[0].children[0].def = 2;
+			// 헤더 칸 문구 편집은 컬럼 정의(realType column)가 있어야 열린다
+			window.send({ type: 'definitions', defs: [...window.testDefs, { id: 'column', ns: 'urn:test', realType: 'column', parents: [], bases: [], events: [],
+				properties: [{ name: 'inputType', category: '', order: 0, description: '입력 방식', options: ['text', 'select', 'checkbox'] }] }] });
+			const grid = root.children[0].children[0];
+			grid.children[0].children[0].children[0].def = grid.children[1].children[0].children[0].def = window.testDefs.length;
+			window.sent.length = 0;
+			window.send({ type: 'document', version: 96, text, root, script: { text: '' } });
+		});
+		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('.w2grid thead th'));
+		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.w2grid thead th').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
+		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit-footer input'), {timeout: 3000});
+		assert.deepEqual(await page.evaluate(() => [...document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.edit-footer input')].slice(0, 2).map(i => i.value)), ['70', '26'], '지금 너비·높이');
+		const sizeInput = await page.evaluateHandle(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.edit-footer input')[0]);
+		await sizeInput.click(); await sizeInput.evaluate(i => i.select());
+		await page.keyboard.type('12x0');
+		assert.equal(await page.evaluate(() => !!document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit-footer')), true, '칸으로 옮겨도 열려 있음');
+		// 입력칸이 아닌 이름 글자를 눌러도 닫히지 않음(그 입력칸으로)
+		const nameLabel = await page.evaluateHandle(() => [...document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.edit-fields .name')].find(e => e.textContent === 'class'));
+		await nameLabel.click();
+		assert.equal(await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.activeElement?.getAttribute('aria-label')), 'class', '이름을 누르면 그 입력칸으로');
+		assert.equal(await page.evaluate(() => getSelection().toString()), '', '더블클릭 글자 선택이 남지 않음');
+		await sizeInput.click();
+		await page.keyboard.press('Enter');
+		assert.deepEqual(await page.evaluate(() => { const m = window.sent.find(m => m.type === 'setAttr'); return m && { name: m.name, value: m.value, also: m.also }; }),
+			{ name: 'value', value: '이름', also: [{ name: 'width', value: '120' }] }, '바뀐 너비만, 숫자만');
+		assert.equal(await page.evaluate(() => !!document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit-wrap')), false, 'Enter로 닫힘');
+		// 본문 셀 더블클릭: 자주 고치는 속성(정해진 값은 select, 숫자 칸은 숫자만)을 한 편집으로
+		await page.evaluate(() => { window.sent.length = 0; document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.w2grid tbody td').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })); });
+		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit-fields'), {timeout: 3000}).catch(() => assert.fail('본문 셀 속성 입력 없음'));
+		assert.deepEqual(await page.evaluate(() => [...document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.edit-fields .name')].map(e => e.textContent)),
+			['width', 'height', 'inputType', 'dataType', 'id', 'class', 'maxLength', 'maxByteLength', 'expression', 'colMerge']);
+		const cellField = name => page.evaluateHandle(name => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector(`.edit-fields [aria-label="${name}"]`), name);
+		assert.equal(await (await cellField('inputType')).evaluate(e => e.tagName), 'SELECT', '정해진 값은 select');
+		await (await cellField('inputType')).select('checkbox');
+		await (await cellField('class')).click(); await page.keyboard.type('num');
+		await (await cellField('maxLength')).click(); await page.keyboard.type('1a0');
+		await page.keyboard.press('Enter');
+		assert.deepEqual(await page.evaluate(() => window.sent.find(m => m.type === 'setAttr')?.also),
+			[{ name: 'inputType', value: 'checkbox' }, { name: 'class', value: 'num' }, { name: 'maxLength', value: '10' }], '바뀐 속성만 한 편집으로');
+		await page.evaluate(() => window.send({ type: 'definitions', defs: window.testDefs }));
+		console.log('Design: 그리드 헤더 칸 문구·너비·높이 편집 passed');
+		console.log('Design: 그리드 칸(헤더·본문 공통) 더블클릭 속성 입력 passed');
 		// 그리드 select 컬럼 칸 더블클릭 → 같은 팝업(Grid Select, All·Choose Option). text 컬럼 칸은 팝업 대신 문구 편집 그대로
 		await page.evaluate(() => {
 			const text = '<html xmlns:w2="urn:test"><body><w2:gridView id="grd"><w2:gBody id="b"><w2:row id="r"><w2:column id="stat" inputType="select"><w2:choices><w2:item><w2:label><![CDATA[미사용]]></w2:label><w2:value><![CDATA[F]]></w2:value></w2:item></w2:choices></w2:column><w2:column id="nm" inputType="text"/></w2:row></w2:gBody></w2:gridView></body></html>';
@@ -604,7 +738,7 @@ try {
 			const cell = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.w2grid tbody td');
 			return { sameNode: m.index === Number(cell.getAttribute('data-wse')), fields: m.fields };
 		});
-		assert.deepEqual(choicesMsg, { sameNode: true, fields: { items: [{ label: '미사용', value: 'F' }], attrs: { chooseOption: 'true', chooseOptionLabel: '-선택-' } } });
+		assert.deepEqual(choicesMsg, { sameNode: true, fields: { items: [{ label: '미사용', value: 'F' }], attrs: { ref: null, chooseOption: 'true', chooseOptionLabel: '-선택-' } } });
 		await page.evaluate(() => window.send({ type: 'popupAck', popup: window.sent.findLast(m => m.type === 'editChoices').popup, ok: true }));
 		await page.waitForFunction(() => !document.querySelector('.choices-editor'));
 		console.log('Design: 그리드 select 컬럼 선택 항목 팝업 passed');
@@ -619,9 +753,9 @@ try {
 		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('#chk'));
 		await dblclick('chk');
 		await page.waitForSelector('.choices-editor[open]');
-		assert.deepEqual(await page.$$eval('.choices-editor .popup-badge, .choices-editor tbody input:not([type="checkbox"]), #choices-ref, #choices-direction', els => els.map(e => e.value ?? e.textContent)),
+		assert.deepEqual(await page.$$eval('.choices-editor .popup-badge, .choices-editor tbody input:not([type="checkbox"]), #choices-ref, #choices-direction', els => els.map(e => e.value ?? e.dataset.value ?? e.textContent)),
 			['Checkbox', '7월', '1', 'data:dl.m07', 'none']);
-		await page.select('#choices-direction', 'cols');
+		await page.click('#choices-direction button:nth-child(2)');
 		await page.type('#choices-count', '4');
 		await page.click('.choices-editor .btn-primary');
 		await page.waitForFunction(() => window.sent.some(m => m.type === 'editChoices'));
@@ -646,6 +780,78 @@ try {
 		await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row .id')].some(e => e.textContent === 'u1'));
 		assert.ok(![...await page.$$eval('.pane .tree-row .id', es => es.map(e => e.textContent))].includes('c1'), 'Outline에도 모르는 태그 없음');
 		console.log('Design: 엔진이 모르는 태그 숨김(캔버스·Outline)·UDC 박스 passed');
+		// 자리 표시(wse-todo)였던 입력 컴포넌트: checkcombobox·multiselect·spinner·searchbox·output·calendar·multiupload
+		await page.evaluate(() => {
+			const WS = 'http://www.inswave.com/websquare', XF = 'http://www.w3.org/2002/xforms';
+			const def = (id, ns, realType) => ({ id, ns, realType, parents: [], bases: [], properties: [], events: [] });
+			window.send({ type: 'definitions', defs: [...window.testDefs, def('checkcombobox', XF, 'checkcombobox'), def('select', XF, 'multiselect'), def('spinner', WS, 'spinner'),
+				def('searchbox', WS, 'searchbox'), def('output', XF, 'output'), def('calendar', WS, 'calendar'), def('multiupload', WS, 'multiupload'), def('output', XF, 'output')] });
+			const text = `<html xmlns:w2="${WS}" xmlns:xf="${XF}"><body><xf:checkcombobox id="k1" style="width:148px;height:21px;"/><xf:select id="m1"><xf:choices><xf:item><xf:label>가</xf:label><xf:value>a</xf:value></xf:item><xf:item><xf:label>나</xf:label><xf:value>b</xf:value></xf:item></xf:choices></xf:select>`
+				+ '<w2:spinner id="s1" value="3"/><w2:searchbox id="q1"/><xf:output id="o1" label="출력"/><w2:calendar id="cal1"/><w2:multiupload id="mu1"/><xf:output id="o2"/></body></html>';
+			const root = window.parseXml(text);
+			root.children[0].children.forEach((n, i) => { n.def = window.testDefs.length + i; });
+			window.send({ type: 'document', version: 98, text, root, script: { text: '' } });
+		});
+		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('#mu1'));
+		assert.deepEqual(await page.evaluate(() => {
+			const s = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot;
+			return ['#k1', '#m1', '#s1', '#q1', '#o1', '#cal1', '#mu1'].map(id => s.querySelector(id).matches('.wse-todo'));
+		}), [false, false, false, false, false, false, false], '자리 표시 아님');
+		assert.deepEqual(await page.evaluate(() => {
+			const s = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot;
+			return [s.querySelector('#m1').textContent, s.querySelector('#s1 input').value, s.querySelector('#o1').textContent, s.querySelectorAll('#cal1 tbody td').length, s.querySelector('#k1').offsetWidth];
+		}), ['가나', '3', '출력', 42, 148]);
+		await page.screenshot({ path: path.join(tmpdir(), 'ws5-input-components.png') });
+		console.log('Design: checkcombobox·multiselect·spinner·searchbox·output·calendar·multiupload 그리기 passed');
+		// output: textbox처럼 더블클릭 → 문구(label) 편집
+		await page.evaluate(() => { window.sent.length = 0; document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#o2').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })); });
+		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit'), { timeout: 3000 });
+		await page.keyboard.type('결과');
+		await page.keyboard.press('Enter');
+		await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr'));
+		assert.deepEqual(await page.evaluate(() => { const m = window.sent.find(m => m.type === 'setAttr'); return [m.name, m.value]; }), ['label', '결과']);
+		console.log('Design: output 더블클릭 문구 편집 passed');
+		// multiupload 더블클릭 → 파라미터(Name·Value) 표만 있는 팝업
+		await page.evaluate(() => { window.sent.length = 0; document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#mu1').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })); });
+		await page.waitForSelector('.choices-editor[open]');
+		assert.deepEqual(await page.evaluate(() => [document.querySelector('.choices-editor .popup-badge').textContent, !!document.querySelector('#choices-nodeset'), !!document.querySelector('#choices-ref'),
+			[...document.querySelectorAll('.choices-editor thead th')].map(t => t.textContent).slice(2)]), ['Multiupload', false, false, ['Name', 'Value']]);
+		await page.click('.choices-editor button[aria-label="행 추가"]');
+		await page.type('.choices-editor input[aria-label="1행 Label"]', 'folder');
+		await page.type('.choices-editor input[aria-label="1행 Value"]', 'img');
+		await page.click('.choices-editor .btn-primary');
+		await page.waitForFunction(() => window.sent.some(m => m.type === 'editChoices'));
+		assert.deepEqual(await page.evaluate(() => window.sent.find(m => m.type === 'editChoices').fields.items), [{ label: 'folder', value: 'img' }]);
+		await page.evaluate(() => window.send({ type: 'popupAck', popup: window.sent.findLast(m => m.type === 'editChoices').popup, ok: true }));
+		await page.waitForFunction(() => !document.querySelector('.choices-editor'));
+		console.log('Design: multiupload 파라미터 팝업 passed');
+		// checkcombobox 더블클릭 → selectbox와 같은 선택 항목 팝업(All·Choose Option 포함)
+		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#k1').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
+		await page.waitForSelector('.choices-editor[open]');
+		assert.deepEqual(await page.evaluate(() => [document.querySelector('.choices-editor .popup-badge').textContent, !!document.querySelector('.choices-editor .choices-options'), !!document.querySelector('#choices-direction')]),
+			['CheckComboBox', true, false]);
+		await page.click('.choices-editor .btn-secondary');
+		await page.waitForFunction(() => !document.querySelector('.choices-editor'));
+		// multiselect: 같은 팝업, All·Choose Option 영역 없음
+		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#m1').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
+		await page.waitForSelector('.choices-editor[open]');
+		assert.deepEqual(await page.evaluate(() => [document.querySelector('.choices-editor .popup-badge').textContent, !!document.querySelector('.choices-editor .choices-options'), !!document.querySelector('#choices-direction'),
+			[...document.querySelectorAll('.choices-editor tbody input[aria-label$="Label"]')].map(e => e.value)]), ['MultiSelect', false, false, ['가', '나']]);
+		await page.evaluate(() => { window.sent.length = 0; });
+		await page.$eval('#choices-ref', el => el.focus());
+		await page.keyboard.type('data:m.b');
+		await page.click('.choices-editor .btn-primary');
+		await page.waitForFunction(() => window.sent.some(m => m.type === 'editChoices'));
+		assert.deepEqual(await page.evaluate(() => window.sent.find(m => m.type === 'editChoices').fields.attrs), { ref: 'data:m.b' }, 'multiselect는 ref만');
+		await page.evaluate(() => window.send({ type: 'popupAck', popup: window.sent.findLast(m => m.type === 'editChoices').popup, ok: true }));
+		await page.waitForFunction(() => !document.querySelector('.choices-editor'));
+		// Outline 더블클릭도 같은 팝업
+		await page.evaluate(() => [...document.querySelectorAll('.pane .tree-row .id')].find(t => t.textContent === 'k1').closest('.tree-row').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
+		await page.waitForSelector('.choices-editor[open]');
+		assert.equal(await page.$eval('.choices-editor .popup-badge', b => b.textContent), 'CheckComboBox', 'Outline 더블클릭 → checkcombobox 팝업');
+		await page.click('.choices-editor .btn-secondary');
+		await page.waitForFunction(() => !document.querySelector('.choices-editor'));
+		console.log('Design: checkcombobox·multiselect 선택 항목 팝업(캔버스·Outline 더블클릭) passed');
 		// 실제 VS Code처럼 문서 버전은 올라가기만 한다(편집기는 더 높은 버전만 받는다)
 		await page.evaluate(() => window.send({ ...window.initialDocument, version: 200 }));
 		console.log('Data: 생성 직후 팝업·행 추가·확인·다중 팝업 동시 표시·배경 상호작용 passed');
@@ -925,6 +1131,31 @@ try {
 	await new Promise(resolve => setTimeout(resolve, 100));
 	await page.keyboard.press('Enter');
 	assert.equal(await content(), 'import java.math.BigDecimal;\n' + javaText + 'BigDecimal', '고른 항목 + 자동 import');
+	// 목록은 풀지 않고 바로, 자동 import는 항목을 푼 결과(늦게 옴): 먼저 고르면 넣고, 오면 그때 import
+	await page.evaluate(() => {
+		window.remoteItems = msg => ({ from: { line: msg.line, ch: msg.ch - 3 }, items: [{ label: 'BigDecimal', type: 'class', insert: 'BigDecimal', sort: 'a' }] });
+		window.remoteDetails = () => [{ label: 'BigDecimal', info: 'Immutable decimal', edits: [{ fromLine: 0, fromCh: 0, toLine: 0, toCh: 0, insert: 'import java.math.BigDecimal;\n' }] }];
+	});
+	await reset(javaText); await page.keyboard.type('Big', {delay: 25});
+	await page.waitForFunction(() => [...document.querySelectorAll('.cm-completionLabel')].some(e => e.textContent === 'BigDecimal'), {timeout: 3000});
+	await new Promise(resolve => setTimeout(resolve, 100));
+	await page.keyboard.press('Enter');
+	assert.equal(await content(), javaText + 'BigDecimal', '고르면 바로 넣음(푼 결과 전)');
+	await page.waitForFunction(text => window.editor().state.doc.toString() === text, {timeout: 3000}, 'import java.math.BigDecimal;\n' + javaText + 'BigDecimal').catch(() => assert.fail('늦게 온 자동 import'));
+	await page.evaluate(() => { window.remoteDetails = undefined; });
+	// 설명은 마크다운으로(언어 서버 MarkdownString): 굵게·인라인 코드·코드 블록·목록·이스케이프, HTML은 글자로
+	await page.evaluate(() => {
+		const fence = '`'.repeat(3);
+		const info = ['Returns a stream of `int`.', '**Specified by:** chars() in <b>CharSequence</b>', '', '* **Returns:**', '* an IntStream', '', fence + 'java', 'int x = 1;', fence, 'surrogate \\* point'].join('\n');
+		window.remoteItems = () => ({ items: [{ label: 'chars', type: 'method', insert: 'chars()', info }] });
+	});
+	await reset('s.'); await page.keyboard.type('cha', {delay: 25});
+	await page.waitForSelector('.cm-completionInfo .md', {timeout: 3000}).catch(() => assert.fail('설명 마크다운'));
+	assert.deepEqual(await page.$eval('.cm-completionInfo .md', md => ({
+		code: [...md.querySelectorAll('p > code')].map(c => c.textContent), strong: [...md.querySelectorAll('strong')].map(b => b.textContent),
+		items: [...md.querySelectorAll('li')].map(l => l.textContent), pre: md.querySelector('pre code')?.textContent, html: !!md.querySelector('b'), escaped: md.textContent.includes('surrogate * point'),
+	})), { code: ['int'], strong: ['Specified by:', 'Returns:'], items: ['Returns:', 'an IntStream'], pre: 'int x = 1;', html: false, escaped: true });
+	await page.keyboard.press('Escape');
 	await page.evaluate(() => { window.remoteItems = () => ({ items: [{ label: 'forEach', type: 'method', insert: 'forEach(${1:action})$0', snippet: true }] }); });
 	await reset('list.'); await page.keyboard.type('forE', {delay: 25});
 	await page.waitForFunction(() => [...document.querySelectorAll('.cm-completionLabel')].some(e => e.textContent === 'forEach'), {timeout: 3000});
@@ -986,6 +1217,19 @@ try {
 	await page.waitForFunction(() => window.tab('Controller').classList.contains('dirty'));
 	assert.equal(await page.evaluate(() => getComputedStyle(window.tab('Controller'), '::after').visibility), 'visible', '● 표시');
 	assert.equal(await page.evaluate(() => window.tab('Controller').getBoundingClientRect().width), cleanWidth, '● 표시가 생겨도 탭 너비 그대로');
+	// 탭 줄 위치: 기본 위, 맨 앞 화살표로 아래·위(확장에 저장 요청, 다른 화면이 보낸 위치도 따름)
+	const barAt = () => page.evaluate(() => { const f = document.querySelector('.canvas-frame'); return f.firstElementChild.classList.contains('tab-bar') ? 'top' : f.lastElementChild.classList.contains('tab-bar') ? 'bottom' : '?'; });
+	assert.equal(await barAt(), 'top', '탭 줄 기본 위');
+	assert.equal(await page.$eval('.canvas-frame .tab-bar > :first-child', b => b.title), '탭을 아래로', '화살표는 탭 줄 맨 앞');
+	await page.click('.canvas-frame .tab-move');
+	await page.waitForFunction(() => document.querySelector('.canvas-frame').lastElementChild.classList.contains('tab-bar'));
+	assert.equal((await lastSent('setTabPosition')).position, 'bottom', '위치 저장 요청');
+	await page.evaluate(() => window.send({ type: 'tabPosition', position: 'top' }));
+	await page.waitForFunction(() => document.querySelector('.canvas-frame').firstElementChild.classList.contains('tab-bar'));
+	await page.click('.canvas-frame .tab-move');
+	await page.waitForFunction(() => document.querySelector('.canvas-frame').lastElementChild.classList.contains('tab-bar'));
+	assert.equal(await page.$eval('.canvas-frame .tab-move', b => b.title), '탭을 위로');
+	console.log('Tabs: 탭 줄 위·아래 전환(기본 위) passed');
 	const menuOf = async name => {
 		const box = await (await tabButton(name)).boundingBox();
 		await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: 'right' });
@@ -1089,13 +1333,26 @@ try {
 	await reset('a { '); await page.keyboard.type('backgr', {delay: 25});
 	await page.waitForFunction(() => [...document.querySelectorAll('.cm-completionLabel')].some(e => e.textContent === 'background'), {timeout: 6000}).catch(() => assert.fail('CSS 속성 자동완성'));
 	await page.keyboard.press('Escape');
-	await linkAs('web/a.js', '// j', 502);
-	await reset("import a from 'b';\nexport const c = a;\n");
-	await new Promise(resolve => setTimeout(resolve, 900));
-	assert.deepEqual(await page.evaluate(() => window.diagnostics()), [], 'JS: ES 모듈은 오류 아님');
-	await reset('const = 1;');
-	await page.waitForFunction(() => window.diagnostics().length, {timeout: 3000}).catch(() => assert.fail('JS 문법 오류 밑줄'));
-	console.log('Link: HTML·CSS·JS 파일 언어(자동 닫기·자동완성·문법 검사) passed');
+	// 연결 탭 문법 검사 = VS Code가 그 파일에 낸 문제(JS 내장 검사·Java 언어 서버 등). 편집기 버전과 같은 결과를 그 줄·글자에
+	await linkAs('web/a.js', 'const = 1;\nok();', 502);
+	await new Promise(resolve => setTimeout(resolve, 700));
+	assert.deepEqual(await page.evaluate(() => window.diagnostics()), [], 'JS: 편집기가 직접 검사하지 않음(VS Code 결과만)');
+	await page.evaluate(() => window.send({ type: 'diagnostics', target: 'link:service', version: 502, items: [{ fromLine: 0, fromCh: 6, toLine: 0, toCh: 7, severity: 'error', message: "Variable declaration expected.", source: 'ts' }] }));
+	await page.waitForFunction(() => window.diagnostics().length === 1, { timeout: 3000 }).catch(() => assert.fail('VS Code 문제 밑줄'));
+	assert.deepEqual(await page.evaluate(() => window.diagnostics()), [{ from: 6, message: 'Variable declaration expected.' }]);
+	// 확장은 연결 내용 바로 뒤에 문제를 보낸다: 새 파일 편집기가 뜨기 전에 온 문제도 표시
+	await page.evaluate(() => {
+		window.send({ type: 'linked', kind: 'service', path: 'src/B.java', text: 'class B {\n    void f() {\n        if( ) {}\n    }\n}\n', version: 503 });
+		window.send({ type: 'diagnostics', target: 'link:service', version: 503, items: [{ fromLine: 2, fromCh: 11, toLine: 2, toCh: 12, severity: 'error', message: 'Syntax error on token "(", Expression expected after this token', source: 'Java' }, { fromLine: 99, fromCh: 0, toLine: 99, toCh: 3, severity: 'warning', message: '끝 밖', source: 'Java' }] });
+	});
+	await page.waitForFunction(() => window.diagnostics().length === 2, { timeout: 3000 }).catch(() => assert.fail('Java 언어 서버 문제 밑줄'));
+	const javaProblems = await page.evaluate(() => window.diagnostics());
+	assert.equal(javaProblems[0].from, 'class B {\n    void f() {\n        if( ) {}'.indexOf('( )') + 1, 'Java: 줄·글자 위치');
+	assert.equal(javaProblems[1].from, await page.evaluate(() => window.editor().state.doc.length), '문서 밖 위치는 끝으로');
+	assert.ok(await page.$('.tab-body:not([hidden]) .cm-lint-marker-error'), 'Java: 줄 번호 옆 표시');
+	await page.evaluate(() => window.send({ type: 'diagnostics', target: 'link:service', version: 503, items: [] }));
+	await page.waitForFunction(() => window.diagnostics().length === 0, { timeout: 3000 }).catch(() => assert.fail('고치면(문제 없음) 밑줄 사라짐'));
+	console.log('Link: HTML·CSS·JS·Java 파일 언어(자동 닫기·자동완성), 문법 검사는 VS Code 문제 그대로 passed');
 	// 문서 주석: /** 뒤 Enter → 아래 함수의 @param·@return 틀(커서는 설명 줄), 주석 안 Enter → * 이어짐, 주석 안 . 은 자동완성 없음
 	const javaMethod = '\n    @RequestMapping("/a")\n    public Map<String, Object> list(HttpServletRequest request, @RequestParam Map<String, Object> param) {\n    }';
 	await linkAs('src/C.java', 'class C {' + javaMethod + '\n}', 510);
@@ -1186,20 +1443,38 @@ try {
 		await page.mouse.up();
 	};
 	await dragTab('Mybatis', 'Design', false);
-	await page.waitForFunction(() => document.querySelector('.canvas-frame .tab-bar button')?.textContent === 'Mybatis');
+	await page.waitForFunction(() => document.querySelector('.canvas-frame .tab-bar button[role="tab"]')?.textContent === 'Mybatis');
 	assert.deepEqual(await tabNames(), ['Mybatis', 'Design', 'Script', 'Source', 'Controller', 'Service', 'Mapper']);
 	assert.deepEqual((await lastSent('setTabOrder')).order, await tabNames());
 	await dragTab('Design', 'Source', true);
 	assert.deepEqual(await tabNames(), ['Mybatis', 'Script', 'Source', 'Design', 'Controller', 'Service', 'Mapper']);
 	// 다른 화면에서 바꾼 순서(확장이 보냄)
 	await page.evaluate(() => window.send({ type: 'tabOrder', order: ['Design', 'Script', 'Source', 'Controller', 'Service', 'Mapper', 'Mybatis'] }));
-	await page.waitForFunction(() => document.querySelector('.canvas-frame .tab-bar button')?.textContent === 'Design');
+	await page.waitForFunction(() => document.querySelector('.canvas-frame .tab-bar button[role="tab"]')?.textContent === 'Design');
 	await clickTab('Script');
 	await page.waitForFunction(() => document.querySelector('.canvas-frame .tab-bar button.active')?.textContent === 'Script');
 	await page.evaluate(() => window.editor().focus());
 	await modifiedKey('Control', 's');
 	assert.equal(await page.evaluate(() => window.leakedSave), 1, 'Script 탭의 Ctrl+S는 그대로 VS Code(화면 XML 저장)');
 	console.log('Tabs: 끌어서 순서 바꾸기·저장된 순서 반영 passed');
+	// 옆 패널 탭(Property/Event, Outline/Data)도 끌어서 순서 변경. 한 목록에 저장하되 다른 탭 줄의 순서는 그대로
+	const anyTab = name => page.evaluateHandle(name => [...document.querySelectorAll('.tab-bar button[role="tab"]')].find(b => b.textContent === name), name);
+	const barNames = name => page.evaluate(name => [...[...document.querySelectorAll('.tab-bar button[role="tab"]')].find(b => b.textContent === name).closest('.tab-bar').querySelectorAll('button[role="tab"]')].map(b => b.textContent), name);
+	const activeTabs = await page.evaluate(() => [...document.querySelectorAll('.tab-bar button[role="tab"].active')].map(b => b.textContent));
+	for (const [name, target] of [['Event', 'Property'], ['Data', 'Outline']]) {
+		const from = await (await anyTab(name)).boundingBox(), to = await (await anyTab(target)).boundingBox();
+		await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await page.mouse.down();
+		await page.mouse.move(to.x + 4, to.y + to.height / 2, { steps: 10 }); await page.mouse.up();
+		await page.waitForFunction(([name, target]) => { const b = [...document.querySelectorAll('.tab-bar button[role="tab"]')].find(x => x.textContent === target); return b.closest('.tab-bar').querySelector('button[role="tab"]').textContent === name; }, { timeout: 3000 }, [name, target])
+			.catch(() => assert.fail(`${name} → ${target} 앞으로 안 옮겨짐`));
+	}
+	assert.deepEqual([await barNames('Property'), await barNames('Outline')], [['Event', 'Property'], ['Data', 'Outline']]);
+	const savedOrder = (await lastSent('setTabOrder')).order;
+	assert.ok(savedOrder.indexOf('Event') < savedOrder.indexOf('Property') && savedOrder.indexOf('Data') < savedOrder.indexOf('Outline') && savedOrder.includes('Design'), `다른 탭 줄 순서도 그대로 저장: ${savedOrder}`);
+	await page.evaluate(() => window.send({ type: 'tabOrder', order: ['Design', 'Script', 'Source', 'Controller', 'Service', 'Mapper', 'Mybatis'] }));
+	await page.waitForFunction(() => [...document.querySelectorAll('.tab-bar button[role="tab"]')].find(b => b.textContent === 'Property').closest('.tab-bar').querySelector('button[role="tab"]').textContent === 'Property');
+	for (const name of activeTabs.filter(n => ['Property', 'Event', 'Outline', 'Data'].includes(n))) { await (await anyTab(name)).click(); }
+	console.log('Tabs: Property/Event·Outline/Data 끌어서 순서 바꾸기 passed');
 	// + 로 탭 추가(이름은 확장이 받음) → 확장이 새 목록과 select를 보내면 그 탭으로. 우클릭 → 탭 삭제
 	await page.click('.canvas-frame .tab-add');
 	await page.waitForFunction(() => window.sent.some(m => m.type === 'addTab'), {timeout: 2000}).catch(() => assert.fail('+ 클릭 → addTab 요청 없음'));
@@ -1278,6 +1553,99 @@ try {
 	assert.equal(await hoverText('<w2:input disabled="true"/>', 'disabled'), undefined, 'Source hover: 설명 없는 속성은 안 뜸');
 	console.log('Hover: Script API·컴포넌트 메서드, Source 속성 설명 passed');
 	await clickTab('Script');
+	// 셀 병합: 그리드 컬럼·group(th·td) 셀을 Ctrl+클릭으로 둘 이상 골라 우클릭 메뉴·Outline 메뉴·Ctrl+M으로. 붙어 있을 때만
+	await clickTab('Design');
+	const WS = 'http://www.inswave.com/websquare', XF = 'http://www.w3.org/2002/xforms';
+	const mergeDoc = await page.evaluate((WS, XF) => {
+		const text = `<html xmlns:w2="${WS}" xmlns:xf="${XF}"><body><w2:gridView id="grd"><w2:header id="h"><w2:row id="r1"><w2:column id="c1" value="A"/><w2:column id="c2" value="B"/><w2:column id="c3" value="C"/></w2:row></w2:header></w2:gridView>`
+			+ '<xf:group tagname="table" id="t"><xf:group tagname="tbody"><xf:group tagname="tr" id="tr1"><xf:group tagname="th" id="th1"/><xf:group tagname="td" id="td1"/></xf:group></xf:group></xf:group></body></html>';
+		const root = window.parseXml(text), first = window.testDefs.length;
+		window.send({ type: 'definitions', defs: [...window.testDefs, { id: 'gridView', ns: WS, realType: 'gridView', parents: [], bases: [], properties: [], events: [] }, { id: 'group', ns: XF, realType: 'group', parents: [], bases: [], properties: [], events: [] }] });
+		const walk = n => { n.def = n.tag === 'w2:gridView' ? first : n.tag === 'xf:group' ? first + 1 : n.def; n.children.forEach(walk); };
+		walk(root);
+		window.send({ type: 'document', version: 900, text, root, script: { text: '' } });
+		const ids = {}; const index = n => { if (n.attrs.id) { ids[n.attrs.id] = n.index; } n.children.forEach(index); };
+		index(root);
+		return ids;
+	}, WS, XF);
+	await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('[data-wse]'), { timeout: 5000 });
+	const cell = id => page.evaluateHandle(i => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector(`[data-wse="${i}"]`), mergeDoc[id]);
+	const row = id => page.evaluateHandle(i => [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.id')?.textContent === i), id);
+	const clickRow = async (id, options) => (await row(id)).asElement().click(options);
+	const ctrlClick = async handle => { await page.keyboard.down('Control'); await (await handle.asElement()).click(); await page.keyboard.up('Control'); };
+	const menuItems = () => page.$$eval('.context-menu button', bs => bs.map(b => ({ text: b.textContent, disabled: b.disabled })));
+	const lastMerge = () => page.evaluate(() => window.sent.findLast(m => m.type === 'mergeCells'));
+	// 그리드: 붙은 두 컬럼 → 병합 켜짐 → 요청
+	await (await (await cell('c1')).asElement()).click();
+	await ctrlClick(await cell('c2'));
+	await (await (await cell('c2')).asElement()).click({ button: 'right' });
+	await page.waitForSelector('.context-menu');
+	const gridMenu = await menuItems();
+	assert.deepEqual(gridMenu.at(-1), { text: '병합Ctrl+M', disabled: false }, '그리드 우클릭: 붙은 셀 → 병합 켜짐');
+	assert.ok(gridMenu.length > 2, '그리드 메뉴(컬럼·행 추가 등)는 그대로');
+	await page.evaluate(() => { window.sent.length = 0; });
+	await page.$$eval('.context-menu button', bs => bs.at(-1).click());
+	assert.deepEqual(await lastMerge(), { type: 'mergeCells', version: 900, index: mergeDoc.c1, more: [mergeDoc.c2] }, '병합 요청(왼쪽 위 셀이 대표)');
+	// 떨어진 두 컬럼 → 병합 꺼짐(요청 없음)
+	await (await (await cell('c1')).asElement()).click();
+	await ctrlClick(await cell('c3'));
+	await (await (await cell('c3')).asElement()).click({ button: 'right' });
+	await page.waitForSelector('.context-menu');
+	assert.deepEqual((await menuItems()).at(-1), { text: '병합Ctrl+M', disabled: true }, '그리드 우클릭: 떨어진 셀 → 병합 꺼짐');
+	await page.keyboard.press('Escape');
+	await page.waitForFunction(() => !document.querySelector('.context-menu'));
+	console.log('Design: 그리드 셀 병합(붙은 셀만) passed');
+	// group 표의 th·td: Design 우클릭 → 병합만 있는 메뉴, Outline 우클릭·Ctrl+M도 같은 요청
+	await (await (await cell('th1')).asElement()).click();
+	await ctrlClick(await cell('td1'));
+	await (await (await cell('td1')).asElement()).click({ button: 'right' });
+	await page.waitForSelector('.context-menu');
+	assert.deepEqual(await menuItems(), [{ text: '병합Ctrl+M', disabled: false }], 'group th·td 우클릭: 병합 메뉴');
+	await page.evaluate(() => { window.sent.length = 0; });
+	await page.$eval('.context-menu button', b => b.click());
+	assert.deepEqual(await lastMerge(), { type: 'mergeCells', version: 900, index: mergeDoc.th1, more: [mergeDoc.td1] }, 'group 셀 병합 요청');
+	await page.evaluate(() => { window.sent.length = 0; });
+	await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row')].some(r => r.querySelector('.id')?.textContent === 'th1'));
+	await clickRow('th1');
+	await page.keyboard.down('Control'); await clickRow('td1'); await page.keyboard.up('Control');
+	await clickRow('td1', { button: 'right' });
+	await page.waitForSelector('.context-menu');
+	assert.deepEqual(await menuItems(), [{ text: '병합Ctrl+M', disabled: false }], 'Outline 우클릭: 병합 메뉴');
+	await page.$eval('.context-menu button', b => b.click());
+	assert.deepEqual(await lastMerge(), { type: 'mergeCells', version: 900, index: mergeDoc.th1, more: [mergeDoc.td1] }, 'Outline 병합 요청');
+	await page.evaluate(() => { window.sent.length = 0; });
+	await clickRow('th1');
+	await page.keyboard.down('Control'); await clickRow('td1'); await page.keyboard.up('Control');
+	await page.keyboard.down('Control'); await page.keyboard.press('m'); await page.keyboard.up('Control');
+	assert.deepEqual(await lastMerge(), { type: 'mergeCells', version: 900, index: mergeDoc.th1, more: [mergeDoc.td1] }, 'Ctrl+M 병합 요청');
+	console.log('Design·Outline: group th·td 병합(우클릭 메뉴·Ctrl+M) passed');
+	// Data 트리 끌어 옮기기: submission끼리·dataMap/dataList끼리만, 루트에 놓으면 맨 뒤, 다른 종류에는 못 놓음
+	const dataIds = await page.evaluate(() => {
+		const text = '<html xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms"><head><xf:model><w2:dataCollection baseNode="map"><w2:dataMap id="dm1"/><w2:dataList id="dl1"/></w2:dataCollection><xf:submission id="s1"/><xf:submission id="s2"/></xf:model></head><body/></html>';
+		const root = window.parseXml(text);
+		window.send({ type: 'document', version: 950, text, root, script: { text: '' } });
+		const ids = {}; const walk = n => { ids[n.attrs.id ?? n.tag] = n.index; n.children.forEach(walk); }; walk(root); return ids;
+	});
+	await page.evaluate(() => window.tab('Data', '.pane').click());
+	await page.evaluate(() => [...document.querySelectorAll('.pane .codicon-expand-all')].at(-1)?.click());
+	await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row .id')].some(e => e.textContent === 's2'));
+	const dragTo = (from, to, where) => page.evaluate((from, to, where) => {
+		const row = id => [...document.querySelectorAll('.pane .tree-row')].find(r => (r.querySelector('.id')?.textContent ?? r.querySelector('.tag')?.textContent) === id);
+		const a = row(from), b = row(to), dt = new DataTransfer(), r = b.getBoundingClientRect();
+		const y = r.top + r.height * (where === 'before' ? 0.2 : 0.8);
+		a.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+		const over = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: y });
+		b.dispatchEvent(over);
+		window.sent.length = 0;
+		return new Promise(res => setTimeout(() => { b.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: y })); a.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt })); res({ accepted: over.defaultPrevented, sent: window.sent.find(m => m.type === 'move') ?? null }); }, 50));
+	}, from, to, where);
+	assert.deepEqual(await dragTo('s2', 's1', 'before'), { accepted: true, sent: { type: 'move', version: 950, dragged: dataIds.s2, target: dataIds.s1, position: 'before' } }, 'submission끼리 앞으로');
+	assert.deepEqual(await dragTo('dm1', 'dl1', 'after'), { accepted: true, sent: { type: 'move', version: 950, dragged: dataIds.dm1, target: dataIds.dl1, position: 'after' } }, 'dataMap → dataList 뒤');
+	assert.deepEqual(await dragTo('s1', 'Submission', 'after'), { accepted: true, sent: { type: 'move', version: 950, dragged: dataIds.s1, target: dataIds['xf:model'], position: 'inside' } }, 'Submission 루트 → model 맨 뒤');
+	assert.deepEqual(await dragTo('s1', 'dm1', 'before'), { accepted: false, sent: null }, '다른 종류에는 못 놓음');
+	await page.evaluate(() => window.tab('Outline', '.pane').click());
+	console.log('Data: 트리 끌어 옮기기 passed');
+	await clickTab('Script');
 	const marks = () => page.evaluate(() => {
 		const body = document.querySelector('.tab-body:not([hidden])');
 		const gutter = [...body.querySelectorAll('.cm-changes-gutter .cm-gutterElement')].flatMap(e => {
@@ -1306,7 +1674,7 @@ try {
 		return Math.abs(mark.top - line.top) < 8;
 	}), '띠 표시 위치 = 줄 위치');
 	await page.evaluate(() => { const v = window.editor(); v.dispatch({ changes: { from: 0, to: 1, insert: 'A' } }); });
-	await page.waitForFunction(() => document.querySelectorAll('.tab-body:not([hidden]) .cm-change-ruler .cm-change-mark').length === 2 && document.querySelector('.tab-body:not([hidden]) .cm-change-ruler .cm-change-mark').getBoundingClientRect().top <= document.querySelector('.tab-body:not([hidden]) .cm-change-ruler').getBoundingClientRect().top + 1);
+	await page.waitForFunction(() => document.querySelectorAll('.tab-body:not([hidden]) .cm-change-ruler .cm-change-mark').length === 2 && Math.abs(document.querySelector('.tab-body:not([hidden]) .cm-change-ruler .cm-change-mark').getBoundingClientRect().top - window.editor().coordsAtPos(0).top) < 8);
 	await marksAre({ gutter: ['1:modified', '2:modified', '4:added'], ruler: ['modified', 'added'] }, '입력이 멈추면 다시 비교');
 	await reset('a\nc');
 	await marksAre({ gutter: ['2:deleted'], ruler: ['deleted'] }, '지운 줄은 그 아래 줄에 표시');

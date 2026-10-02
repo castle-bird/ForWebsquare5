@@ -1,7 +1,8 @@
-import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 import { DATA_TYPES, type DataField } from '../../core/data';
 import { VALID_ID, type XmlNode } from '../../core/xmlModel';
 import { PopupTitle, usePopupWindow } from './popupWindow';
+import { useRowDrag } from './rowDrag';
 
 type Row = DataField & { uid: number; ord?: number };
 
@@ -22,11 +23,10 @@ export function DataEditor({ node, externalError, offsetIndex = 0, onApply, onCl
 	const [selected, setSelected] = useState<number>();
 	const [error, setError] = useState('');
 	const [columnWidths, setColumnWidths] = useState(COLUMN_WIDTHS);
-	const [drop, setDrop] = useState<{ uid: number; after: boolean }>();
 	const nextUid = useRef(rows.length);
 	const { titleProps, resizeHandles, popupProps } = usePopupWindow({ initialOffset: offsetIndex, onClose });
 	const columnDrag = useRef<{ index: number; startX: number; width: number } | undefined>(undefined);
-	const rowDrag = useRef<number | undefined>(undefined);
+	const { handleProps, rowProps, dropClass } = useRowDrag(setRows, setSelected);
 	const update = (uid: number, change: Partial<Row>) => setRows(current => current.map(r => r.uid === uid ? { ...r, ...change } : r));
 	const insert = () => {
 		let number = 1;
@@ -55,32 +55,6 @@ export function DataEditor({ node, externalError, offsetIndex = 0, onApply, onCl
 		const target = tableRows[rowIndex + direction[0]]?.cells[cell.cellIndex + direction[1]]?.querySelector<HTMLElement>('input, select, button');
 		if (target) { e.preventDefault(); target.focus(); setSelected(rows[rowIndex + direction[0]].uid); }
 	};
-	const dragOver = (e: DragEvent<HTMLTableRowElement>, uid: number) => {
-		if (rowDrag.current === undefined || rowDrag.current === uid) { return; }
-		e.preventDefault();
-		const rect = e.currentTarget.getBoundingClientRect();
-		const after = e.clientY > rect.top + rect.height / 2;
-		setDrop(current => current?.uid === uid && current.after === after ? current : { uid, after });
-	};
-	const dropRow = (e: DragEvent<HTMLTableRowElement>, uid: number) => {
-		e.preventDefault();
-		const dragged = rowDrag.current;
-		if (dragged === undefined) { return; }
-		const rect = e.currentTarget.getBoundingClientRect();
-		const after = e.clientY > rect.top + rect.height / 2;
-		setRows(current => {
-			const from = current.findIndex(r => r.uid === dragged);
-			const to = current.findIndex(r => r.uid === uid);
-			if (from < 0 || to < 0 || from === to) { return current; }
-			const next = [...current];
-			const [item] = next.splice(from, 1);
-			next.splice(to + (after ? 1 : 0) - (from < to ? 1 : 0), 0, item);
-			return next;
-		});
-		setSelected(dragged);
-		rowDrag.current = undefined;
-		setDrop(undefined);
-	};
 	const apply = () => {
 		if (!VALID_ID.test(id)) { setError(`ID를 확인해 줘: ${id || '(비어 있음)'}`); return; }
 		const ids = new Set<string>();
@@ -95,11 +69,13 @@ export function DataEditor({ node, externalError, offsetIndex = 0, onApply, onCl
 	return <dialog {...popupProps} className="popup data-editor" aria-label={`${node.attrs.id ?? node.tag} 편집`}>
 		<PopupTitle titleProps={titleProps} badge={map ? 'DataMap' : 'DataList'} onClose={onClose}>
 			<input className="data-editor-id" aria-label="ID" value={id} onChange={e => setId(e.target.value)} onPointerDown={e => e.stopPropagation()} />
+			<span className="popup-meta">· {map ? '키' : '컬럼'} {rows.length}</span>
 		</PopupTitle>
 		<div className="data-editor-body">
 			<div className="data-editor-tools">
-				<button type="button" className="btn-icon" onClick={insert} title="행 삽입" aria-label="행 삽입"><span className="codicon codicon-add" /></button>
-				<button type="button" className="btn-icon" onClick={remove} disabled={selected === undefined} title="행 삭제" aria-label="행 삭제"><span className="codicon codicon-remove" /></button>
+				<button type="button" className="btn-tool accent" onClick={insert} title="고른 행 아래에 추가" aria-label="행 삽입"><span className="codicon codicon-add" />{map ? '키 추가' : '컬럼 추가'}</button>
+				<button type="button" className="btn-tool" onClick={remove} disabled={selected === undefined} title="고른 행 삭제" aria-label="행 삭제"><span className="codicon codicon-trash" />삭제</button>
+				<span className="tools-gap" />
 				<button type="button" className="btn-icon" onClick={() => move(-1)} disabled={selected === undefined} title="위로 이동" aria-label="위로 이동"><span className="codicon codicon-arrow-up" /></button>
 				<button type="button" className="btn-icon" onClick={() => move(1)} disabled={selected === undefined} title="아래로 이동" aria-label="아래로 이동"><span className="codicon codicon-arrow-down" /></button>
 			</div>
@@ -116,24 +92,23 @@ export function DataEditor({ node, externalError, offsetIndex = 0, onApply, onCl
 							const drag = columnDrag.current;
 							if (drag?.index === index) { setColumnWidths(current => current.map((width, i) => i === index ? Math.max(42, drag.width + e.clientX - drag.startX) : width)); }
 						}} onPointerUp={() => columnDrag.current = undefined} onPointerCancel={() => columnDrag.current = undefined} />}</th>)}</tr></thead><tbody>
-					{rows.map((row, i) => <tr key={row.uid} className={`${selected === row.uid ? 'selected' : ''} ${drop?.uid === row.uid ? drop.after ? 'drop-after' : 'drop-before' : ''}`}
-						onClick={() => setSelected(row.uid)} onDragOver={e => dragOver(e, row.uid)} onDrop={e => dropRow(e, row.uid)}>
-						<td><button className="data-row-handle" draggable title="끌어서 행 이동" aria-label={`${i + 1}행 이동`}
-							onDragStart={e => { rowDrag.current = row.uid; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(row.uid)); }}
-							onDragEnd={() => { rowDrag.current = undefined; setDrop(undefined); }}>⠿ {i + 1}</button></td>
-						<td><input aria-label={`${i + 1}행 id`} value={row.id} onChange={e => update(row.uid, { id: e.target.value })} /></td>
+					{rows.map((row, i) => <tr key={row.uid} className={`${selected === row.uid ? 'selected' : ''} ${dropClass(row.uid)}`}
+						onClick={() => setSelected(row.uid)} {...rowProps(row.uid)}>
+						<td><button className="data-row-handle" title="끌어서 행 이동" aria-label={`${i + 1}행 이동`} {...handleProps(row.uid)}>⠿ {i + 1}</button></td>
+						<td><input className="mono" aria-label={`${i + 1}행 id`} value={row.id} onChange={e => update(row.uid, { id: e.target.value })} /></td>
 						<td><input aria-label={`${i + 1}행 name`} value={row.name} onChange={e => update(row.uid, { name: e.target.value })} /></td>
 						<td><select aria-label={`${i + 1}행 dataType`} value={row.dataType} onChange={e => update(row.uid, { dataType: e.target.value })}>{DATA_TYPES.map(type => <option key={type}>{type}</option>)}</select></td>
 						<td><input aria-label={`${i + 1}행 length`} inputMode="numeric" value={row.length} onChange={e => update(row.uid, { length: e.target.value })} /></td>
-						<td><input aria-label={`${i + 1}행 encYN`} type="checkbox" checked={row.encYN} onChange={e => update(row.uid, { encYN: e.target.checked })} /></td>
+						<td><input className="switch" aria-label={`${i + 1}행 encYN`} type="checkbox" checked={row.encYN} onChange={e => update(row.uid, { encYN: e.target.checked })} /></td>
 					</tr>)}
 				</tbody></table>
 			</div>
 		</div>
 		{(error || externalError) && <p className="error" role="alert">{error || externalError}</p>}
 		<div className="data-editor-actions">
-			<button type="button" className="btn btn-primary" onClick={apply}>확인</button>
+			<span className="actions-hint">행을 끌어 순서 변경 · 화살표로 칸 이동</span>
 			<button type="button" className="btn btn-secondary" onClick={onClose}>닫기</button>
+			<button type="button" className="btn btn-primary" onClick={apply}>확인</button>
 		</div>
 		{resizeHandles}
 	</dialog>;

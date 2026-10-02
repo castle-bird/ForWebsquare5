@@ -15,7 +15,7 @@ import { convert, publish, readWpackConfig } from './project/wpack';
 import { offerSetup, registerSetup, resolvePath, type SetupKey } from './vscode/setup';
 import { applyCodeEdit, applyNodeEdit, formatCode } from './vscode/documentEdit';
 import { LinkedFiles, registerLinks } from './vscode/links';
-import { saveTabOrder, tabOrder } from './vscode/linkTabs';
+import { saveTabOrder, saveTabPosition, tabOrder, tabPosition } from './vscode/linkTabs';
 import { linkIdOf } from './core/links';
 import { codeTheme, registerCodeTheme } from './vscode/codeTheme';
 import { affectsCodeOptions, codeOptions } from './vscode/codeOptions';
@@ -85,6 +85,35 @@ async function wpackOnSave(doc: vscode.TextDocument): Promise<void> {
 	}).catch(e => void vscode.window.showErrorMessage(`wpack 변환 실패 (${name}): ${errorMessage(e)}`));
 }
 
+/** 모든 화면 공통 설정(탭 순서·위치)을 바꾼 화면 말고 다른 화면에 */
+function broadcast(from: vscode.WebviewPanel, msg: ToWebview) {
+	panels.forEach(p => p !== from && void p.webview.postMessage(msg));
+}
+
+/** 웹뷰로 보낼 화면 XML: 노드 트리(정의 표시·연결 화면·이미지 주소)와 Script 본문. 읽지 못하면 이유를 담는다 */
+async function documentMessage(document: vscode.TextDocument, webview: vscode.Webview, webRoot: string, defs: ComponentDef[], udcs: Set<string>): Promise<ToWebview> {
+	const base = { type: 'document', version: document.version, text: document.getText() } as const;
+	try {
+		const root = parseXml(base.text);
+		const body = root ? scriptBody(base.text, root) : 'XML을 읽지 못했습니다.';
+		const script = typeof body === 'string' ? { text: '', note: body } : { text: body.text };
+		if (root) {
+			annotate(root, defs, udcs);
+			await attachFrames(root, document.uri.fsPath, webRoot, defs, udcs);
+			const images = (n: XmlNode) => {
+				if (defOf(n, defs)?.realType === 'image' && n.attrs.src && !/^[a-z]+:/i.test(n.attrs.src)) {
+					n.url = webview.asWebviewUri(vscode.Uri.file(fromWebPath(webRoot, n.attrs.src, ENGINE_PAGE))).toString();
+				}
+				[...n.children, ...n.frame ? [n.frame] : []].forEach(images);
+			};
+			images(root);
+		}
+		return { ...base, root, script };
+	} catch (e) {
+		return { ...base, error: String(e), script: { text: '', note: String(e) } };
+	}
+}
+
 class DesignerProvider implements vscode.CustomTextEditorProvider {
 	constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -125,28 +154,8 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		let latest = 0;
 		const sendDocument = async () => {
 			const request = ++latest;
-			const send = (msg: ToWebview) => request === latest && post(msg);
-			const base = { type: 'document', version: document.version, text: document.getText() } as const;
-			try {
-				const root = parseXml(base.text);
-				const body = root ? scriptBody(base.text, root) : 'XML을 읽지 못했습니다.';
-				const script = typeof body === 'string' ? { text: '', note: body } : { text: body.text };
-				const { defs } = await definitions;
-				if (root) {
-					annotate(root, defs, await udcs);
-					await attachFrames(root, document.uri.fsPath, webRoot, defs, await udcs);
-					const images = (n: XmlNode) => {
-						if (defOf(n, defs)?.realType === 'image' && n.attrs.src && !/^[a-z]+:/i.test(n.attrs.src)) {
-							n.url = panel.webview.asWebviewUri(vscode.Uri.file(fromWebPath(webRoot, n.attrs.src, ENGINE_PAGE))).toString();
-						}
-						[...n.children, ...n.frame ? [n.frame] : []].forEach(images);
-					};
-					images(root);
-				}
-				send({ ...base, root, script });
-			} catch (e) {
-				send({ ...base, error: String(e), script: { text: '', note: String(e) } });
-			}
+			const msg = await documentMessage(document, panel.webview, webRoot, (await definitions).defs, await udcs);
+			if (request === latest) { await post(msg); }
 		};
 
 		let timer: NodeJS.Timeout | undefined;
@@ -227,6 +236,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			panel.webview.onDidReceiveMessage((msg: ToExtension) => {
 				if (msg.type === 'ready') {
 					void post({ type: 'tabOrder', order: tabOrder() ?? [] });
+					void post({ type: 'tabPosition', position: tabPosition() });
 					void post({ type: 'codeTheme', theme: codeTheme() });
 					void post({ type: 'codeOptions', ...codeOptions() });
 					bases = {};
@@ -263,7 +273,10 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 					// 연결 탭(연결·해제·열기·저장·탭 추가/이름/삭제·자동완성)
 				} else if (msg.type === 'setTabOrder') {
 					void saveTabOrder(msg.order);
-					panels.forEach(p => p !== panel && void p.webview.postMessage({ type: 'tabOrder', order: msg.order } satisfies ToWebview));
+					broadcast(panel, { type: 'tabOrder', order: msg.order });
+				} else if (msg.type === 'setTabPosition') {
+					void saveTabPosition(msg.position);
+					broadcast(panel, { type: 'tabPosition', position: msg.position });
 				} else if (msg.type === 'editDataFields' || msg.type === 'addSubmission' || msg.type === 'editSubmission' || msg.type === 'editChoices') {
 					const apply = msg.version === document.version ? applyNodeEdit(document, msg) : Promise.resolve(false);
 					void apply.then(async ok => {

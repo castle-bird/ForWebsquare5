@@ -9,7 +9,7 @@ import { loadDefaultStyles } from '../project/components';
 import { resolvePath } from './setup';
 import { applyTextEdits } from './documentEdit';
 
-export const PALETTE_VIEW = 'websquare5-editor.palette';
+const PALETTE_VIEW = 'websquare5-editor.palette';
 const INSERT_COMMAND = 'websquare5-editor.insertComponent';
 const SEARCH_COMMAND = 'websquare5-editor.searchPalette';
 const CLEAR_COMMAND = 'websquare5-editor.clearPaletteSearch';

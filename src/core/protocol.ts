@@ -21,13 +21,19 @@ export type ToWebview =
 	| { type: 'modules'; files: { path: string; text: string }[]; error?: string }
 	| LinkState
 	| { type: 'tabOrder'; order: string[] }
+	| { type: 'tabPosition'; position: TabPosition }
 	| { type: 'linkTabs'; tabs: LinkTab[]; exts: string[]; select?: string } // select: 이 탭으로 넘어간다(방금 추가한 탭). exts: 연결할 수 있는 확장자
 	| { type: 'xmlSchema'; kind: string; elements?: XmlElementSpec[]; source?: string } // 연결한 XML의 DTD 스키마(없으면 기본 MyBatis 목록)
 	| { type: 'codeTheme'; theme: CodeThemeId }
 	| ({ type: 'codeOptions' } & CodeOptions) // 줄바꿈(VS Code editor.wordWrap)·SQL 방언(설정)
+	| { type: 'diagnostics'; target: CodeTarget; version: number; items: RemoteDiagnostic[] } // VS Code가 그 파일에 낸 문제(문제 탭과 같은 것). version: 연결 파일 버전
 	| { type: 'gitBase'; target: CodeTarget; text?: string } // 변경 표시 기준(Git 스테이지 내용). 없으면 표시 안 함
 	| ({ type: 'completions'; id: number } & Partial<RemoteCompletions>)
+	| { type: 'completionDetails'; id: number; items: RemoteCompletionDetail[] } // 같은 요청의 앞쪽 항목을 푼 결과(늦게 옴)
 	| { type: 'files'; kind: string; files: string[] }; // 연결할 수 있는 파일(작업 폴더 기준 경로)
+
+/** Design·Script·Source·연결 탭 줄 위치 */
+export type TabPosition = 'top' | 'bottom';
 
 /** VS Code 언어 확장의 자동완성(연결 탭). 위치는 0부터 줄·글자 */
 export interface RemoteCompletions {
@@ -50,13 +56,19 @@ export interface RemoteCompletion {
 	edits?: CodeChange[];
 }
 
+/** 언어 확장이 항목을 풀어야 주는 것(Java: 자동 import·설명) */
+export type RemoteCompletionDetail = Pick<RemoteCompletion, 'label' | 'info' | 'edits'>;
+
+/** VS Code 문제 하나. 위치는 0부터 줄·글자 */
+export interface RemoteDiagnostic { fromLine: number; fromCh: number; toLine: number; toCh: number; severity: 'error' | 'warning' | 'info' | 'hint'; message: string; source?: string }
+
 /** 연결 파일 상태(kind = 탭 id). path 없음 = 연결 안 됨, text 없음 = 파일을 찾지 못함 */
 export interface LinkState { type: 'linked'; kind: string; path?: string; text?: string; version?: number; dirty?: boolean }
 
 /** 자동완성용 XML 요소(lang-xml ElementSpec과 같은 모양) */
 export interface XmlElementSpec { name: string; top?: boolean; children?: string[]; attributes?: ({ name: string; values?: string[] })[] }
 
-export interface ScriptInfo { text: string; note?: string }
+interface ScriptInfo { text: string; note?: string }
 
 export interface ApiParam {
 	name: string;
@@ -92,10 +104,12 @@ export type ToExtension =
 	| { type: 'setCode'; target: CodeTarget; version: number; changes: CodeChange[] }
 	| { type: 'format'; target: CodeTarget; version: number }
 	// more: 함께 바꿀 다른 노드(여러 개 선택)와 그 노드에 넣을 값
-	| { type: 'setAttr'; version: number; index: number; name: string; value?: string; more?: { index: number; value?: string }[] }
+	// also: 같은 노드의 다른 속성도 함께(한 번에 반영해야 버전이 엇갈리지 않는다)
+	| { type: 'setAttr'; version: number; index: number; name: string; value?: string; more?: { index: number; value?: string }[]; also?: { name: string; value?: string }[] }
 	| { type: 'setText'; version: number; index: number; value: string }
 	| { type: 'paste'; version: number; index: number; xml: string | string[] }
 	| { type: 'delete'; version: number; index: number; more?: number[] }
+	| { type: 'mergeCells'; version: number; index: number; more: number[] } // 고른 셀(index 포함)을 하나로 병합
 	| { type: 'move'; version: number; dragged: number; target: number; position: DropPosition; more?: number[] }
 	| { type: 'addData'; version: number; index: number; kind: DataKind }
 	| { type: 'editDataFields'; version: number; index: number; popup: string; fields: DataField[]; id?: string }
@@ -114,10 +128,11 @@ export type ToExtension =
 	| { type: 'complete'; target: CodeTarget; id: number; version: number; line: number; ch: number; trigger?: string }
 	| { type: 'removeTab'; kind: string }
 	| { type: 'renameTab'; kind: string }
-	| { type: 'setTabOrder'; order: string[] };
+	| { type: 'setTabOrder'; order: string[] }
+	| { type: 'setTabPosition'; position: TabPosition };
 
-export interface PropertyDef { name: string; category: string; order: number; description: string; options?: string[] }
-export interface EventDef { name: string; signature: string; description: string }
+interface PropertyDef { name: string; category: string; order: number; description: string; options?: string[] }
+interface EventDef { name: string; signature: string; description: string }
 export interface ComponentDef {
 	id: string;
 	ns: string;

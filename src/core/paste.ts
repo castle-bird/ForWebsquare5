@@ -1,7 +1,15 @@
 import { applyEdits, eolOf, leadOf, setAttribute, startTagEnd, type TextEdit } from './edit';
-import { localName, parseXml, uniqueId, usedIds, type XmlNode } from './xmlModel';
+import { EV, findNode, localName, parseXml, pathTo, uniqueId, usedIds, WEBSQUARE_NS, XFORMS_NS, type XmlNode } from './xmlModel';
+import { DATA_KINDS } from './data';
 
-const EV = 'ev:';
+/** 이벤트 종류를 정하는 속성(`xf:action ev:event`)은 컴포넌트의 핸들러(`ev:onclick`)와 달리 지우면 동작이 사라진다 */
+const EVENT_KIND = 'ev:event';
+/** 화면 구조(복사·붙여넣기 대상이 아님): 하나뿐이라 복사하면 중복된다 */
+const STRUCTURE = new Set(['html', 'head', 'body', 'model']);
+export const isStructure = (n: XmlNode) => STRUCTURE.has(localName(n.tag));
+/** 데이터 필드 이름(dataMap key·dataList/그리드 column): 컴포넌트 id가 아니라 복사해도 바꾸지 않는다(바인딩이 깨진다) */
+// (붙여 넣을 조각만 따로 읽어 네임스페이스를 모르므로 태그 이름으로)
+const isField = (n: XmlNode) => /:(key|column)$/.test(n.tag);
 
 const CONTAINERS = new Set(['body', 'group', 'content', 'generator']);
 export const isContainer = (n: XmlNode) => CONTAINERS.has(localName(n.tag));
@@ -55,15 +63,44 @@ export function insertNode(text: string, target: XmlNode, position: InsertPositi
 	return { start: lineStart, end: lineStart, replacement: childIndent + reindent(childIndent) + eol };
 }
 
+/** 붙여 넣을 조각의 집: submission은 xf:model, 데이터(dataMap·dataList 등)는 w2:dataCollection. 컴포넌트는 없음 */
+function homeOf(root: XmlNode, tags: string[]): XmlNode | undefined {
+	const kinds = new Set(tags.map(tag => tag.endsWith(':submission') ? 'model' : DATA_KINDS.some(k => tag.endsWith(`:${k}`)) ? 'collection' : ''));
+	if (kinds.size > 1) {
+		throw new Error('데이터(submission·dataMap·dataList)와 컴포넌트는 함께 붙여 넣을 수 없습니다.');
+	}
+	const [kind] = kinds;
+	if (!kind) {
+		return undefined;
+	}
+	const home = findNode(root, n => kind === 'model' ? n.ns === XFORMS_NS && localName(n.tag) === 'model' : n.ns === WEBSQUARE_NS && localName(n.tag) === 'dataCollection');
+	if (!home) {
+		throw new Error(kind === 'model' ? '붙여 넣을 xf:model이 없습니다.' : '붙여 넣을 DataCollection이 없습니다.');
+	}
+	return home;
+}
+
 export function pasteNode(text: string, root: XmlNode, target: XmlNode, xml: string | string[]): TextEdit {
 	const items = typeof xml === 'string' ? [xml] : xml;
 	if (!items.length) { throw new Error('복사한 내용이 없습니다.'); }
+	const tags = items.map(item => parseXml(item.trim())?.tag ?? '');
+	if (items.some(item => { const n = parseXml(item.trim()); return n && isStructure(n); })) {
+		throw new Error('화면 구조(html·head·body·xf:model)는 복사해 붙여 넣을 수 없습니다.');
+	}
+	// 데이터는 자기 집(model·dataCollection) 안으로: 고른 곳이 그 안이면 바로 뒤, 아니면(화면 컴포넌트 등) 맨 뒤. 컴포넌트는 데이터 영역에 못 넣는다
+	const home = homeOf(root, tags);
+	if (!home && pathTo(root, target.index)?.some(n => n.ns === XFORMS_NS && localName(n.tag) === 'model')) {
+		throw new Error('데이터 영역(xf:model)에는 컴포넌트를 붙여 넣을 수 없습니다. 화면의 컴포넌트를 고른 뒤 붙여 넣어 주세요.');
+	}
 	const used = usedIds(root);
 	const first = /^[ \t]*/.exec(items[0])![0];
 	const joined = items.map(item => {
 		const indent = /^[ \t]*/.exec(item)![0];
 		return reindentLines(rename(item.slice(indent.length), used), indent, first);
 	}).join(eolOf(text) + first);
+	if (home) {
+		return home.children.some(c => c.index === target.index) ? insertNode(text, target, 'after', first + joined) : insertNode(text, home, 'inside', first + joined);
+	}
 	return insertNode(text, target, isContainer(target) ? 'inside' : 'after', first + joined);
 }
 
@@ -74,10 +111,10 @@ function rename(snippet: string, used: Set<string>): string {
 	}
 	const edits: TextEdit[] = [];
 	const walk = (n: XmlNode) => {
-		for (const name of Object.keys(n.attrs).filter(k => k.startsWith(EV))) {
+		for (const name of Object.keys(n.attrs).filter(k => k.startsWith(EV) && k !== EVENT_KIND)) {
 			edits.push(setAttribute(snippet, n, name, undefined)!);
 		}
-		if (n.attrs.id) {
+		if (n.attrs.id && !isField(n)) {
 			edits.push(setAttribute(snippet, n, 'id', uniqueId(used, `${n.attrs.id.replace(/_copy\d+$/, '')}_copy`))!);
 		}
 		n.children.forEach(walk);

@@ -4,7 +4,7 @@ import { Group, Panel, Separator } from 'react-resizable-panels';
 import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import type { ToExtension, ToWebview } from '../core/protocol';
 import { defOf, findNode, findTag, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
-import { DATA_KINDS, type DataField, type DataKind } from '../core/data';
+import { DATA_KINDS, type DataKind } from '../core/data';
 import { newSubmissionFields, submissionFields, type SubmissionFields } from '../core/submission';
 import { Canvas } from './design/canvas';
 import { PropertyPane } from './ui/properties';
@@ -20,8 +20,11 @@ import { Tabs } from './ui/tabs';
 import { Menu } from './ui/menu';
 import { useLinkTabs } from './ui/linkedFile';
 import { FIXED_TABS } from '../core/links';
-import { dropZone, TreeItem, useFold, type DragData, type Fold } from './ui/tree';
-import { post, useEditorStore } from './store';
+import { dropZone, TreeItem, useDataReorder, useFold, useTreeRename, type DragData, type Fold } from './ui/tree';
+import { useEventHandler } from './eventHandler';
+import { canMerge, post, useEditorStore } from './store';
+import { isMergeCell } from '../core/merge';
+import { isModKey } from './keys';
 import '@vscode/codicons/dist/codicon.css';
 import './style.css';
 
@@ -51,13 +54,16 @@ function useComponentShortcuts() {
 				return;
 			}
 			const { copy, cut, paste } = useEditorStore.getState();
-			const done = e.type === 'copy' ? copy() : e.type === 'cut' ? cut() : paste();
+			const done = e.type === 'copy' ? copy(e.clipboardData) : e.type === 'cut' ? cut(e.clipboardData) : paste(e.clipboardData);
 			if (done) {
 				e.preventDefault();
 			}
 		};
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === 'Delete' && !inEditable(e) && useEditorStore.getState().del()) {
+				e.preventDefault();
+			} else if (isModKey(e, 'm') && !inEditable(e) && useEditorStore.getState().merge()) {
+				// 셀 병합(Ctrl+M)
 				e.preventDefault();
 			}
 		};
@@ -91,9 +97,13 @@ function App() {
 	const move = useEditorStore(s => s.move);
 	const tabOrder = useEditorStore(s => s.tabOrder);
 	const setTabOrder = useEditorStore(s => s.setTabOrder);
+	const tabPosition = useEditorStore(s => s.tabPosition);
+	const setTabPosition = useEditorStore(s => s.setTabPosition);
+	const otherSide = tabPosition === 'top' ? 'bottom' : 'top';
 	const events = api?.events;
 	const [activeTab, setActiveTab] = useState('Design');
-	const [dataMenu, setDataMenu] = useState<{ x: number; y: number; index: number; grid?: { hasFooter: boolean; at: number; onColumn: boolean } }>();
+	/** merge: 병합 메뉴를 보이고(값은 켜짐 여부). mergeOnly: 그 메뉴만(Outline·group 셀) */
+	const [dataMenu, setDataMenu] = useState<{ x: number; y: number; index: number; grid?: { hasFooter: boolean; at: number; onColumn: boolean }; merge?: boolean; mergeOnly?: boolean }>();
 	const [popups, setPopups] = useState<Popup[]>([]);
 	const [gridBind, setGridBind] = useState<{ grid: number; list: number }>();
 	const linkTabs = useLinkTabs(activeTab, LOADING);
@@ -260,68 +270,33 @@ function App() {
 		const n = root && (p.id ? findNode(root, c => c.attrs.id === p.id && choicesKind(c, defOf(c, defs?.defs)) === p.choices) : nodeAt(root, p.index));
 		return n && choicesKind(n, defOf(n, defs?.defs)) === p.choices ? n : undefined;
 	};
+	// 고른 셀들이 여럿(Ctrl+클릭)이면 그 안에서 연 메뉴는 선택을 그대로 둬야 병합할 수 있다
+	const keepsSelection = (index: number) => extra.length > 0 && (selected === index || extra.includes(index));
 	const canvasContext = (index: number, x: number, y: number) => {
-		const grid = body && pathTo(body, index)?.filter(n => n.tag.endsWith(':gridView')).at(-1);
-		if (!grid) { return; }
-		setSelected(grid.index);
-		setDataMenu({ x, y, index: grid.index,
-			grid: { hasFooter: grid.children.some(c => c.tag.endsWith(':footer')), at: index, onColumn: !!nodeAt(body, index)?.tag.endsWith(':column') } });
+		const path = body && pathTo(body, index);
+		const grid = path?.filter(n => n.tag.endsWith(':gridView')).at(-1), cell = path?.filter(isMergeCell).at(-1);
+		if (!grid && !cell) { return; }
+		if (!(cell && keepsSelection(cell.index))) { setSelected(grid ? grid.index : cell!.index); }
+		setDataMenu({ x, y, index: (grid ?? cell)!.index, merge: cell ? canMerge() : undefined, mergeOnly: !grid,
+			...grid && { grid: { hasFooter: grid.children.some(c => c.tag.endsWith(':footer')), at: index, onColumn: !!path?.at(-1)?.tag.endsWith(':column') } } });
 	};
+	const outlineContext = (e: MouseEvent<HTMLDivElement>, n: XmlNode) => {
+		if (!isMergeCell(n)) { return; }
+		e.preventDefault();
+		if (!keepsSelection(n.index)) { setSelected(n.index); }
+		setDataMenu({ x: e.clientX, y: e.clientY, index: n.index, merge: canMerge(), mergeOnly: true });
+	};
+	const dataReorder = useDataReorder(doc?.version, model, dataCollection);
+	const rename = useTreeRename(root, selected, (id, index) => editAttr('id', id, index));
 	const tree = (tops: XmlNode[], fold: Fold, interactive?: boolean) => tops.length
-		? <div role="tree">{tops.map(top => <TreeItem key={top.index} node={top} depth={0} selected={selected} extra={extra} onSelect={setSelected} onContextMenu={interactive ? undefined : dataContext} onDoubleClick={interactive ? (n => openEditor(n.index)) : openDataEditor} fold={fold} defs={defs?.defs} interactive={interactive} bindRef={interactive ? undefined : refOf} />)}</div>
+		? <div role="tree">{tops.map(top => <TreeItem key={top.index} node={top} depth={0} selected={selected} extra={extra} onSelect={setSelected} onContextMenu={interactive ? outlineContext : dataContext} onDoubleClick={interactive ? (n => openEditor(n.index)) : openDataEditor} fold={fold} defs={defs?.defs} interactive={interactive} bindRef={interactive ? undefined : refOf} reorder={interactive ? undefined : dataReorder} rename={rename} />)}</div>
 		: <p className="empty">없음</p>;
 	const foldButtons = (fold: Fold) => <>
 		<button className="icon codicon codicon-expand-all" title="모두 펼치기" onClick={() => fold.setAll(true)} />
 		<button className="icon codicon codicon-collapse-all" title="모두 접기" onClick={() => fold.setAll(false)} />
 	</>;
 
-	// editAttr(ev:*)로 만든 문서 버전이 이 Script 편집기에 반영된 뒤에야 그 위에 안전하게 이어서 넣을 수 있다.
-	// 바로 이어서 넣으면 이 편집기가 들고 있는 옛 버전으로 보내 "원본이 다른 곳에서 바뀜" 충돌이 난다.
-	const pendingScaffold = useRef<{ text: string; cursorOffset: number } | null>(null);
-	useEffect(() => {
-		const p = pendingScaffold.current;
-		if (p) {
-			pendingScaffold.current = null;
-			requestAnimationFrame(() => scriptRef.current?.appendAndFocus(p.text, p.cursorOffset));
-		}
-	}, [doc?.version]);
-
-	const openEventHandler = (target: XmlNode, eventName: string, current = target.attrs[`ev:${eventName}`]): string | undefined => {
-		const handler = current?.trim() || (target.attrs.id && `scwin.${target.attrs.id}_${eventName}`);
-		if (!handler) {
-			post({ type: 'warn', message: 'ID부터 입력해주세요. (Script 함수 이름이 scwin.{ID}_{이벤트})' });
-			return undefined;
-		}
-		if (!doc || doc.script.note) {
-			return undefined;
-		}
-		setActiveTab('Script');
-		const attr = `ev:${eventName}`, attrChanges = target.attrs[attr] !== handler;
-		const text = doc.script.text;
-		const defined = text.search(new RegExp(`(?<![\\w$.])${handler.replace(/[.$]/g, '\\$&')}\\s*=(?!=)`));
-		if (defined >= 0 || !/^[\w$]+(\.[\w$]+)*$/.test(handler)) {
-			const at = defined >= 0 ? defined : text.indexOf(handler);
-			if (at >= 0) {
-				requestAnimationFrame(() => scriptRef.current?.focusRange(at, at + handler.length));
-			}
-			if (attrChanges) { editAttr(attr, handler, target.index); }
-			return handler;
-		}
-		const def = defOf(target, defs?.defs);
-		const fromDoc = def && events?.[`WebSquare.uiplugin.${def.realType}`]?.find(e => e.name === eventName)?.params?.map(p => p.name);
-		const fromDef = def?.events.find(e => e.name === eventName)?.signature.match(/\(([^)]*)\)/)?.[1];
-		const params = fromDoc ?? fromDef?.split(',').map(s => s.trim()).filter(Boolean) ?? [];
-		const head = `${handler} = function(${params.join(', ')}) {\n\t`;
-		const lead = text.length ? '\n' : '';
-		const scaffold = { text: `${lead}${head}\n};\n`, cursorOffset: lead.length + head.length };
-		if (attrChanges) {
-			pendingScaffold.current = scaffold;
-			editAttr(attr, handler, target.index);
-		} else {
-			requestAnimationFrame(() => scriptRef.current?.appendAndFocus(scaffold.text, scaffold.cursorOffset));
-		}
-		return handler;
-	};
+	const openEventHandler = useEventHandler({ doc, defs: defs?.defs, events, scriptRef, editAttr, showScript: () => setActiveTab('Script') });
 
 	const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor));
 	const handleDragEnd = (e: DragEndEvent) => {
@@ -336,12 +311,14 @@ function App() {
 		<Group orientation="horizontal" className="shell">
 			<Panel minSize={200}>
 				<div className="canvas-frame">
-					<Tabs position="bottom" keepMounted={['Script', 'Source', ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={setActiveTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
+					<Tabs position={tabPosition} start={<button className={`tab-move codicon codicon-arrow-${otherSide === 'top' ? 'up' : 'down'}`}
+						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} />} keepMounted={['Script', 'Source', ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={setActiveTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
 						Design: doc?.error ? <p className="error">{doc.error}</p>
 							: body && defs ? <>
 								{styles?.error && <p className="warning" title={styles.error}>{styles.error}</p>}
 								<Canvas body={body} defs={defs.defs} sheets={styles?.css} selected={selected} extra={extra} onSelect={setSelected} onEditText={editText}
-									onEditAttr={editAttr} onOpenFrame={openFrame} onOpenEditor={openEditor} onBindRef={bindRefTo} onContextMenu={canvasContext} />
+									onEditAttr={editAttr} onOpenFrame={openFrame} onOpenEditor={openEditor} onBindRef={bindRefTo} onContextMenu={canvasContext}
+									idChoices={i => { const at = root && pathTo(root, i); return at && boundColumnIds(root, at); }} />
 							</>
 								: LOADING,
 						Script: doc ? <CodeEditor ref={scriptRef} target="script" lang={scriptLanguage} complete={jsTools.complete} hover={jsTools.hover} lint="js" text={doc.script.text} version={doc.version}
@@ -360,7 +337,7 @@ function App() {
 					<Separator className="resizer" />
 					<Panel defaultSize="45%" minSize={120}>
 						<div className="pane">
-							<Tabs items={{
+							<Tabs order={tabOrder} onReorder={setTabOrder} items={{
 								Outline: <DndContext sensors={sensors} onDragEnd={handleDragEnd}>{tree(body ? [body] : [], outline, true)}</DndContext>,
 								Data: tree(dataRoots, data),
 							}}
@@ -371,12 +348,16 @@ function App() {
 			</Panel>
 		</Group>
 		{dataMenu && <Menu key={`${dataMenu.x},${dataMenu.y}`} x={dataMenu.x} y={dataMenu.y} onClose={() => setDataMenu(undefined)}>
-				{dataMenu.grid ? (Object.keys(GRID_MENU) as (keyof typeof GRID_MENU)[]).filter(part => part !== 'columnLeft' || dataMenu.grid!.onColumn).map(part => <button key={part} role="menuitem" disabled={part === 'footer' && dataMenu.grid!.hasFooter}
+				{dataMenu.mergeOnly ? null : dataMenu.grid ? (Object.keys(GRID_MENU) as (keyof typeof GRID_MENU)[]).filter(part => part !== 'columnLeft' || dataMenu.grid!.onColumn).map(part => <button key={part} role="menuitem" disabled={part === 'footer' && dataMenu.grid!.hasFooter}
 					onClick={() => { if (doc) { post({ type: 'addGridPart', version: doc.version, index: dataMenu.index, part, at: dataMenu.grid!.at }); } setDataMenu(undefined); }}>
 					{part === 'column' && dataMenu.grid!.onColumn ? '오른쪽에 Column 추가' : GRID_MENU[part]}</button>)
 				: dataMenu.index === -1
 					? <button role="menuitem" onClick={() => { setDataMenu(undefined); openSubmissionEditor(); }}>Submission 추가</button>
 					: DATA_KINDS.map(kind => <button key={kind} role="menuitem" onClick={() => addData(kind)}>{kind[0].toUpperCase() + kind.slice(1)} 추가</button>)}
+				{dataMenu.merge !== undefined && <>
+					{!dataMenu.mergeOnly && <div className="menu-separator" role="separator" />}
+					<button role="menuitem" disabled={!dataMenu.merge} onClick={() => { setDataMenu(undefined); useEditorStore.getState().merge(); }}>병합<kbd>Ctrl+M</kbd></button>
+				</>}
 			</Menu>}
 		{linkTabs.menu}
 		{popups.map((p, offsetIndex) => {

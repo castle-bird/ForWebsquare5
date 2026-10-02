@@ -32,7 +32,7 @@ export function sourceChange(before: string, after: string): TextEdit | undefine
 	return { start, end: before.length - end, replacement: after.slice(start, after.length - end) };
 }
 
-export interface ScriptBody { start: number; end: number; text: string; cdata: boolean }
+interface ScriptBody { start: number; end: number; text: string; cdata: boolean }
 
 export function scriptBody(text: string, root: XmlNode): ScriptBody | string {
 	const node = findNode(root, n => n.tag.replace(/^.*:/, '') === 'script' && !('src' in n.attrs));

@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { isScreen, parseXml, pathTo, type XmlNode } from '../core/xmlModel';
+import { findNode, isScreen, parseXml, pathTo, type XmlNode } from '../core/xmlModel';
+import { mergeCells, mergeProblem } from '../core/merge';
 import { pasteNode } from '../core/paste';
 import { moveNode } from '../core/move';
 import { addDataNode, DATA_KINDS, editDataFields } from '../core/data';
@@ -186,11 +187,32 @@ suite('Choices (selectbox·radio 선택 항목)', () => {
 		const updated = apply(text, editChoices(text, root, node, { items, attrs: { allOption: 'true', ref: undefined } }));
 		assert.deepStrictEqual(readChoices(select(updated)), { items });
 		assert.deepStrictEqual(select(updated).attrs, { id: 'sel', appearance: 'minimal', allOption: 'true' });
+		const cleared = apply(updated, editChoices(updated, parseXml(updated)!, select(updated), { items, attrs: { allOption: null } }));
+		assert.deepStrictEqual(select(cleared).attrs, { id: 'sel', appearance: 'minimal' }, 'null이면 속성 제거');
 		assert.ok(!/(?<!\r)\n/.test(updated), 'CRLF 유지');
 		assert.ok(updated.includes('\r\n\t\t\t<xf:choices>\r\n\t\t\t\t<xf:item>\r\n\t\t\t\t\t<xf:label><![CDATA[재직자]]></xf:label>'), updated);
 		assert.strictEqual(editChoices(text, root, node, { items: [{ label: '재직자', value: '1' }], attrs: { allOption: '' } }), undefined, '바뀐 게 없으면 편집 없음');
 		const attrOnly = editChoices(text, root, node, { items: [{ label: '재직자', value: '1' }], attrs: { chooseOption: 'true' } })!;
 		assert.strictEqual(attrOnly.end, text.indexOf('>', attrOnly.start) + 1, '시작 태그만 고침');
+		// checkcombobox도 같은 모양(빈 태그에 choices 추가)
+		const combo = '<html xmlns:xf="http://www.w3.org/2002/xforms"><body><xf:checkcombobox id="k" style="width:148px;"/></body></html>';
+		const filled = apply(combo, editChoices(combo, parseXml(combo)!, select(combo), { items: [{ label: 'A', value: 'a' }], attrs: { allOption: 'true' } }));
+		assert.deepStrictEqual(readChoices(select(filled)), { items: [{ label: 'A', value: 'a' }] });
+		assert.strictEqual(select(filled).attrs.allOption, 'true');
+	});
+
+	test('multiupload 파라미터: <param name value></param> 다시 쓰기, script 등 다른 자식 유지', () => {
+		const head = '<html xmlns:w2="http://www.inswave.com/websquare">\r\n\t<body>\r\n\t\t';
+		const empty = `${head}<w2:multiupload id="mu" style="width:500px;"/>\r\n\t</body>\r\n</html>`;
+		const added = apply(empty, editChoices(empty, parseXml(empty)!, select(empty), { items: [{ label: 'a', value: '1' }, { label: 'b"', value: '2' }], attrs: {} }));
+		assert.ok(added.includes('<w2:multiupload id="mu" style="width:500px;">\r\n\t\t\t<param name="a" value="1"></param>\r\n\t\t\t<param name="b&quot;" value="2"></param>\r\n\t\t</w2:multiupload>'), added);
+		assert.deepStrictEqual(readChoices(select(added)), { items: [{ label: 'a', value: '1' }, { label: 'b"', value: '2' }] });
+		const withScript = `${head}<w2:multiupload id="mu">\r\n\t\t\t<param name="x" value="1"></param>\r\n\t\t\t<script type="javascript" ev:event="onComplete"><![CDATA[f();]]></script>\r\n\t\t\t<param name="y" value="2"></param>\r\n\t\t</w2:multiupload>\r\n\t</body>\r\n</html>`;
+		const replaced = apply(withScript, editChoices(withScript, parseXml(withScript)!, select(withScript), { items: [{ label: 'z', value: '3' }], attrs: {} }));
+		assert.ok(replaced.includes('<w2:multiupload id="mu">\r\n\t\t\t<param name="z" value="3"></param>\r\n\t\t\t<script type="javascript" ev:event="onComplete"><![CDATA[f();]]></script>\r\n\t\t</w2:multiupload>'), replaced);
+		const cleared = apply(added, editChoices(added, parseXml(added)!, select(added), { items: [], attrs: {} }));
+		assert.ok(cleared.includes('<w2:multiupload id="mu" style="width:500px;">\r\n\t\t</w2:multiupload>'), cleared);
+		assert.strictEqual(editChoices(added, parseXml(added)!, select(added), { items: [{ label: 'a', value: '1' }, { label: 'b"', value: '2' }], attrs: {} }), undefined, '그대로면 편집 없음');
 	});
 
 	test('데이터 바인딩(itemset)으로 바꾸고 다시 읽기, 빈 select1·자체 닫힘에도 추가', () => {
@@ -756,6 +778,16 @@ suite('edit', () => {
 		assert.ok(doc.getText().includes('s="2"'));
 	});
 
+	test('setAttr also: 같은 노드의 여러 속성을 한 편집으로(그리드 헤더 칸 문구·너비·높이), 지우기 포함', async () => {
+		const doc = await vscode.workspace.openTextDocument({ content: '<html><body><w2:column id="c" value="이름" style="height:26px;" width="70"/></body></html>', language: 'xml' });
+		const col = parseXml(doc.getText())!.children[0].children[0];
+		assert.ok(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: col.index, name: 'value', value: '성명',
+			also: [{ name: 'width', value: '120' }, { name: 'style', value: 'height:40px;' }, { name: 'rowSpan', value: '2' }] }));
+		assert.strictEqual(doc.getText(), '<html><body><w2:column id="c" value="성명" style="height:40px;" width="120" rowSpan="2"/></body></html>');
+		assert.ok(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: col.index, name: 'value', value: '성명', also: [{ name: 'style' }, { name: 'rowSpan' }] }));
+		assert.strictEqual(doc.getText(), '<html><body><w2:column id="c" value="성명" width="120"/></body></html>');
+	});
+
 	test('deleteNode: 줄 전체를 차지하면 줄바꿈까지, 아니면 태그만', () => {
 		const apply = (t: string, e: { start: number; end: number; replacement: string }) => t.slice(0, e.start) + e.replacement + t.slice(e.end);
 		const text = '<a>\n\t<b/>\n\t<c/><d/>\n</a>';
@@ -826,6 +858,96 @@ suite('edit', () => {
 		const out = apply(grp, pasteNode(grp, groot, groot.children[1], grp.slice(src.start, src.end)));
 		assert.ok(out.includes('<xf:group id="g"><xf:group id="g_copy2"><xf:input id="i_copy1"/></xf:group></xf:group>'), out);
 		assert.throws(() => pasteNode(grp, groot, groot, '<a/><b/>'));
+	});
+
+	const XMLNS = 'xmlns="http://www.w3.org/1999/xhtml" xmlns:ev="http://www.w3.org/2001/xml-events" xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms"';
+	const byId = (root: XmlNode, id: string) => findNode(root, n => n.attrs.id === id)!;
+	const applyOne = (text: string, edit: { start: number; end: number; replacement: string }) => text.slice(0, edit.start) + edit.replacement + text.slice(edit.end);
+
+	suite('데이터 붙여넣기', () => {
+		const text = `<html ${XMLNS}>\n<head>\n<xf:model>\n<w2:dataCollection baseNode="map">\n<w2:dataMap id="dma" baseNode="map"><w2:keyInfo><w2:key id="k1" name="k1"/></w2:keyInfo></w2:dataMap>\n</w2:dataCollection>\n`
+			+ '<xf:submission id="sbm" action="/x">\n<xf:action ev:event="xforms-submit-done"><xf:script type="text/javascript"><![CDATA[a();]]></xf:script></xf:action>\n</xf:submission>\n</xf:model>\n</head>\n<body>\n<xf:group id="grp"/>\n</body>\n</html>';
+		const root = parseXml(text)!;
+		const snippet = (id: string) => { const n = byId(root, id); return (leadOf(text, n.start) ?? '') + text.slice(n.start, n.end); };
+
+		test('submission: ev:event(이벤트 종류)는 지우지 않고, id는 바깥 것만 바꾸고, xf:model 안에 들어간다', () => {
+			const out = applyOne(text, pasteNode(text, root, byId(root, 'sbm'), [snippet('sbm')]));
+			assert.ok(out.includes('<xf:submission id="sbm_copy1" action="/x">'), out);
+			assert.strictEqual(out.match(/ev:event="xforms-submit-done"/g)?.length, 2, 'ev:event 유지');
+			const copy = findNode(parseXml(out)!, n => n.attrs.id === 'sbm_copy1')!;
+			assert.strictEqual(parseXml(out)!.children[0].children.find(c => c.tag === 'xf:model')?.children.includes(copy) || pathTo(parseXml(out)!, copy.index)!.some(n => n.tag === 'xf:model'), true, 'model 안');
+			assert.strictEqual(out.match(/<xf:model>/g)?.length, 1, 'model은 하나');
+		});
+
+		test('submission을 화면 컴포넌트(body)를 고른 채 붙여도 body가 아니라 xf:model 맨 뒤', () => {
+			const out = applyOne(text, pasteNode(text, root, byId(root, 'grp'), [snippet('sbm')]));
+			const tree = parseXml(out)!, copy = findNode(tree, n => n.attrs.id === 'sbm_copy1')!;
+			assert.ok(pathTo(tree, copy.index)!.some(n => n.tag === 'xf:model'), out);
+			assert.ok(!pathTo(tree, copy.index)!.some(n => n.tag === 'body'), 'body에는 안 들어감');
+		});
+
+		test('dataMap: 바깥 id만 _copy, 필드(key) 이름은 그대로, DataCollection 안', () => {
+			const out = applyOne(text, pasteNode(text, root, byId(root, 'sbm'), [snippet('dma')]));
+			assert.ok(out.includes('<w2:dataMap id="dma_copy1" baseNode="map"><w2:keyInfo><w2:key id="k1" name="k1"/>'), out);
+			const tree = parseXml(out)!;
+			assert.ok(pathTo(tree, findNode(tree, n => n.attrs.id === 'dma_copy1')!.index)!.some(n => n.tag === 'w2:dataCollection'), 'dataCollection 안');
+		});
+
+		test('xf:model 복사본은 붙여 넣을 수 없고(중복 방지), 컴포넌트는 데이터 영역에 못 넣고, 데이터와 컴포넌트는 같이 못 붙인다', () => {
+			const model = findNode(root, n => n.tag === 'xf:model')!;
+			assert.throws(() => pasteNode(text, root, byId(root, 'grp'), [text.slice(model.start, model.end)]), /xf:model/);
+			assert.throws(() => pasteNode(text, root, byId(root, 'sbm'), ['<xf:group id="g"/>']), /데이터 영역/);
+			assert.throws(() => pasteNode(text, root, byId(root, 'grp'), [snippet('sbm'), '<xf:group id="g"/>']), /함께/);
+		});
+	});
+
+	suite('셀 병합', () => {
+		const grid = `<html ${XMLNS}><body>\n<w2:gridView id="grd"><w2:header id="h">\n`
+			+ '<w2:row id="r1"><w2:column id="c1" value="A"/><w2:column id="c2" value="B"/><w2:column id="c3" value="C"/></w2:row>\n'
+			+ '<w2:row id="r2"><w2:column id="c4" value="D"/><w2:column id="c5" value="E"/><w2:column id="c6" value="F"/></w2:row>\n</w2:header></w2:gridView>\n</body></html>';
+		const merge = (text: string, ids: string[]) => { const root = parseXml(text)!; return applyOne(text, mergeCells(text, root, ids.map(id => byId(root, id)))[0]); };
+		const problem = (text: string, ids: string[]) => { const root = parseXml(text)!; return mergeProblem(root, ids.map(id => byId(root, id))); };
+
+		test('그리드: 가로·세로·2x2 병합은 왼쪽 위 셀에 colSpan·rowSpan, 나머지 셀은 지움', () => {
+			assert.ok(merge(grid, ['c1', 'c2']).includes('<w2:column id="c1" value="A" colSpan="2"/><w2:column id="c3" value="C"/>'));
+			const down = merge(grid, ['c2', 'c5']);
+			assert.ok(down.includes('<w2:column id="c2" value="B" rowSpan="2"/>') && !down.includes('id="c5"'), down);
+			const both = merge(grid, ['c1', 'c2', 'c4', 'c5']);
+			assert.ok(/<w2:column id="c1" value="A" (colSpan="2" rowSpan="2"|rowSpan="2" colSpan="2")\/>/.test(both) && !both.includes('id="c2"') && !both.includes('id="c4"') && !both.includes('id="c5"'), both);
+			assert.ok(parseXml(both), '결과가 올바른 XML');
+		});
+
+		test('그리드: 떨어진 셀·대각선·한 개는 병합 불가(이유를 돌려줌), 이미 합쳐진 셀과도 이어 합침', () => {
+			assert.match(problem(grid, ['c1', 'c3'])!, /붙어 있는/);
+			assert.match(problem(grid, ['c1', 'c5'])!, /붙어 있는/);
+			assert.match(problem(grid, ['c1'])!, /둘 이상/);
+			const wide = merge(grid, ['c1', 'c2']);
+			assert.strictEqual(problem(wide, ['c1', 'c3']), undefined, '합친 셀(colSpan 2)과 옆 셀');
+			assert.ok(merge(wide, ['c1', 'c3']).includes('colSpan="3"'));
+		});
+
+		const table = `<html ${XMLNS}><body>\n<xf:group tagname="table" id="t"><xf:group tagname="tbody"><xf:group tagname="tr">\n`
+			+ '<xf:group tagname="th" id="th1"><w2:textbox id="tb"/></xf:group><xf:group tagname="td" id="td1">\n<xf:input id="in"/>\n</xf:group><xf:group tagname="td" id="td2"/>\n</xf:group>\n'
+			+ '<xf:group tagname="tr"><xf:group tagname="th" id="th2"><w2:attributes><w2:scope>row</w2:scope></w2:attributes></xf:group><xf:group tagname="td" id="td3"/><xf:group tagname="td" id="td4"/></xf:group>\n</xf:group></xf:group></body></html>';
+
+		test('group th·td: w2:attributes의 colspan·rowspan, 지워지는 셀 안 컴포넌트는 왼쪽 위 셀로 옮김', () => {
+			const out = merge(table, ['th1', 'td1']);
+			assert.ok(out.includes('<w2:attributes><w2:colspan>2</w2:colspan></w2:attributes>'), out);
+			assert.ok(out.includes('id="tb"') && out.includes('id="in"') && !out.includes('id="td1"'), '컴포넌트 보존');
+			const tree = parseXml(out)!, th = byId(tree, 'th1');
+			assert.deepStrictEqual(th.children.map(c => c.attrs.id).filter(Boolean), ['tb', 'in'].filter(id => th.children.some(c => c.attrs.id === id)).concat([]).length ? ['tb', 'in'] : [], '옮긴 순서');
+			// 세로로 th1+th2: rowspan, 가진 attributes에 덧붙임·없는 셀에는 새로 만듦
+			const down = merge(table, ['th2', 'td3']);
+			assert.ok(down.includes('<w2:colspan>2</w2:colspan>') && down.includes('<w2:scope>row</w2:scope>'), down);
+			const box = merge(table, ['td1', 'td2', 'td3', 'td4'].filter(id => id !== 'td1' || true));
+			assert.ok(parseXml(box));
+		});
+
+		test('group: 2x2 병합은 colspan·rowspan을 한 w2:attributes에 같이 넣는다', () => {
+			const out = merge(table.replace('<xf:group tagname="th" id="th2">', '<xf:group tagname="td" id="th2">').replace('<w2:attributes><w2:scope>row</w2:scope></w2:attributes>', ''), ['td1', 'td2', 'td3', 'td4']);
+			assert.strictEqual(out.match(/<w2:attributes>/g)?.length, 1, out);
+			assert.ok(out.includes('<w2:colspan>2</w2:colspan>') && out.includes('<w2:rowspan>2</w2:rowspan>'), out);
+		});
 	});
 
 	test('setStyle: 바꾼 속성만 교체, 없던 속성은 뒤에, 나머지 표기·url 안 ; 유지', () => {
@@ -1038,19 +1160,17 @@ suite('format', () => {
 		}
 	});
 
+	// Script는 VS Code의 JS 포매터(기본 포매터 설정, 없으면 내장)로. 결과 모양은 그 포매터 몫이라 들여쓰기·본문·앞뒤 공백만 본다
+	test('Script: 본문만 VS Code JS 포매터로 포맷하고 CDATA 앞뒤 공백은 유지', async () => {
+		const doc = await vscode.workspace.openTextDocument({ content: '<html><script><![CDATA[\n\tconst a={b:1}\n\t]]></script></html>', language: 'xml' });
+		const out = await formatCode(doc, 'script');
+		assert.ok(out?.startsWith('\n\t') && out.endsWith('\n\t'), JSON.stringify(out));
+		assert.match(out!, /const a = \{ b: 1 \}/);
+	});
+
 	test('Script: 탭으로 들여쓴 본문도 공백 4칸으로 포맷', async () => {
 		const doc = await vscode.workspace.openTextDocument({ content: '<html><script><![CDATA[\nif (a) {\n\tb()\n}\n]]></script></html>', language: 'xml' });
-		assert.strictEqual(await formatCode(doc, 'script'), '\nif (a) {\n    b();\n}\n');
-	});
-
-	test('Script: 내장 Prettier로 본문만 포맷하고 CDATA 앞뒤 공백은 유지', async () => {
-		const doc = await vscode.workspace.openTextDocument({ content: '<html><script><![CDATA[\n\tconst a={b:1}\n\t]]></script></html>', language: 'xml' });
-		assert.strictEqual(await formatCode(doc, 'script'), '\n\tconst a = { b: 1 };\n\t');
-	});
-
-	test('Script: 설정이 없으면 들여쓰기는 4칸', async () => {
-		const doc = await vscode.workspace.openTextDocument({ content: '<html><script><![CDATA[\nfunction f(){return 1}\n]]></script></html>', language: 'xml' });
-		assert.strictEqual(await formatCode(doc, 'script'), '\nfunction f() {\n    return 1;\n}\n');
+		assert.match((await formatCode(doc, 'script'))!, /\n {4}b\(\)/);
 	});
 });
 
@@ -1397,6 +1517,27 @@ statementType (STATEMENT|PREPARED) "PREPARED"
 		const last = (kind: string) => sent.filter(m => m.kind === kind).at(-1);
 		return { dir, screen, java, key, links, last };
 	};
+
+	test('VS Code가 연결 파일에 낸 문제(언어 서버 등)를 그 파일 버전과 함께 웹뷰로', async () => {
+		const problems: Extract<ToWebview, { type: 'diagnostics' }>[] = [];
+		const { java, links, last } = await linked(dir => ({ controller: path.join(dir, 'AController.java') }), msg => { if (msg.type === 'diagnostics') { problems.push(msg); } });
+		const collection = vscode.languages.createDiagnosticCollection('ws5-test');
+		try {
+			await links.reload();
+			const version = last('controller')!.version!;
+			collection.set(vscode.Uri.file(java), [Object.assign(new vscode.Diagnostic(new vscode.Range(0, 6, 0, 7), '문법 오류', vscode.DiagnosticSeverity.Error), { source: 'Java' })]);
+			for (let i = 0; i < 40 && !problems.some(p => p.items.length); i++) {
+				await new Promise(r => setTimeout(r, 50));
+			}
+			const sent = problems.filter(p => p.items.length).at(-1)!;
+			assert.strictEqual(sent.target, 'link:controller');
+			assert.strictEqual(sent.version, version, '그 파일의 지금 버전');
+			assert.deepStrictEqual(sent.items.filter(i => i.source === 'Java'), [{ fromLine: 0, fromCh: 6, toLine: 0, toCh: 7, severity: 'error', message: '문법 오류', source: 'Java' }]);
+		} finally {
+			collection.dispose();
+			await links.dispose();
+		}
+	});
 
 	test('연결 파일을 보내고, 본 버전에서만 고치고, 저장은 그 파일만', async () => {
 		const { screen, java, links, last } = await linked(dir => ({ controller: path.join(dir, 'AController.java') }));

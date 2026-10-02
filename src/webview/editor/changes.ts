@@ -14,7 +14,7 @@ const DIFF = { timeout: 300 };
  * 줄 단위 비교(VS Code 줄 옆 변경 표시처럼): 내용이 같은 줄은 같은 글자로 바꿔 두 문자열을 비교한다.
  * 서로 다른 줄이 한 글자 범위(서로게이트 제외 약 6만 3천 개)를 넘으면 표시하지 않는다
  */
-export function lineChanges(base: Text, doc: Text): Range[] {
+function lineChanges(base: Text, doc: Text): Range[] {
 	const ids = new Map<string, number>();
 	const encode = (text: Text) => {
 		const out: string[] = [];
@@ -119,19 +119,28 @@ const overviewRuler = ViewPlugin.fromClass(class {
 		}
 	}
 	draw(view: EditorView) {
-		// 띠 전체 = 스크롤 영역 전체. 내용이 편집기보다 짧으면 편집기 높이(줄 위치와 띠 위치가 맞게)
-		const height = Math.max(view.contentHeight, view.scrollDOM.clientHeight), doc = view.state.doc;
-		const marks = changedRanges(view.state).map(({ from, to, kind }) => {
-			const top = view.lineBlockAt(doc.line(from).from).top, bottom = view.lineBlockAt(doc.line(to).from).bottom;
-			const mark = document.createElement('div');
-			mark.className = `cm-change-mark cm-change-${kind}`;
-			mark.style.top = `${top / height * 100}%`;
-			if (kind !== 'deleted') {
-				mark.style.height = `${(bottom - top) / height * 100}%`;
-			}
-			return mark;
+		// 레이아웃은 측정 단계에서 읽고 쓰기 단계에서 그린다(CodeMirror 규칙)
+		view.requestMeasure({
+			read: v => {
+				// 띠 전체 = 스크롤 영역 전체. 내용이 편집기보다 짧으면 편집기 높이(줄 위치와 띠 위치가 맞게).
+				// 줄 위치는 문서 기준이라 첫 줄 위 여백(padding 등)만큼 더한다
+				const offset = v.documentTop - v.dom.getBoundingClientRect().top + v.scrollDOM.scrollTop;
+				const height = Math.max(v.contentHeight, v.scrollDOM.clientHeight), doc = v.state.doc;
+				return changedRanges(v.state).map(({ from, to, kind }) => {
+					const top = offset + v.lineBlockAt(doc.line(from).from).top, bottom = offset + v.lineBlockAt(doc.line(to).from).bottom;
+					return { kind, top: top / height * 100, height: (bottom - top) / height * 100 };
+				});
+			},
+			write: marks => this.dom.replaceChildren(...marks.map(m => {
+				const mark = document.createElement('div');
+				mark.className = `cm-change-mark cm-change-${m.kind}`;
+				mark.style.top = `${m.top}%`;
+				if (m.kind !== 'deleted') {
+					mark.style.height = `${m.height}%`;
+				}
+				return mark;
+			})),
 		});
-		this.dom.replaceChildren(...marks);
 	}
 	destroy() {
 		this.dom.remove();

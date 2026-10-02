@@ -11,6 +11,11 @@ import miscIcon from '@vscode/codicons/src/icons/symbol-misc.svg';
 import unfoldIcon from '@vscode/codicons/src/icons/unfold.svg';
 import checklistIcon from '@vscode/codicons/src/icons/checklist.svg';
 import searchIcon from '@vscode/codicons/src/icons/search.svg';
+import upIcon from '@vscode/codicons/src/icons/chevron-up.svg';
+import downIcon from '@vscode/codicons/src/icons/chevron-down.svg';
+import leftIcon from '@vscode/codicons/src/icons/chevron-left.svg';
+import rightIcon from '@vscode/codicons/src/icons/chevron-right.svg';
+import uploadIcon from '@vscode/codicons/src/icons/cloud-upload.svg';
 import type { ComponentDef } from '../../core/protocol';
 import { defOf, kid, kids, localName, WEBSQUARE_NS, XFORMS_NS, type XmlNode } from '../../core/xmlModel';
 import { columnLayout } from '../../core/grid';
@@ -38,6 +43,17 @@ const RENDERERS: Record<string, Renderer> = {
 	textbox: (n, c) => el(n, tagname(n), c, labelOf(n), attributes(n)),
 	selectbox: (n, c) => combo(n, c, 'w2selectbox'),
 	autoComplete: (n, c) => combo(n, c, 'w2autoComplete'),
+	checkcombobox: (n, c) => combo(n, c, 'w2checkcombobox'),
+	// 아래는 엔진 DOM을 따르지 않은 자체 모양(wse-*): 크기·자리만 맞춘다
+	multiselect: (n, c) => el(n, 'div', clsx(c, 'wse-listbox'), items(n).map((item, i) => <div key={i}>{item.label}</div>)),
+	spinner: (n, c) => el(n, 'div', clsx(c, 'wse-spinner'), <>
+		<input value={n.attrs.value ?? ''} readOnly tabIndex={-1} />
+		<span><img src={upIcon} alt="" /><img src={downIcon} alt="" /></span>
+	</>),
+	searchbox: (n, c) => el(n, 'div', clsx(c, 'wse-searchbox'), <><input readOnly tabIndex={-1} /><img src={searchIcon} alt="" /></>),
+	output: text('span'),
+	calendar: monthCalendar,
+	multiupload: (n, c) => el(n, 'div', clsx(c, 'wse-image-empty wse-multiupload'), <span><img src={uploadIcon} alt="" />Multiupload</span>),
 	radio: (n, c) => choices(n, c, 'radio'),
 	checkbox: (n, c) => choices(n, c, 'checkbox'),
 	inputCalendar: calendar,
@@ -111,6 +127,22 @@ function calendar(n: XmlNode) {
 			<input className="w2inputCalendar_divInput" style={{ width: 'calc(100% - 2px)', height: 'calc(100% - 2px)' }} value="" readOnly tabIndex={-1} />
 		</div>
 		<div className="w2inputCalendar_div_img"><button className="w2inputCalendar_button" type="button" tabIndex={-1}>달력에서 선택</button></div>
+	</>);
+}
+
+/** 펼쳐진 달력: 이번 달, 앞뒤 달 날짜는 흐리게 */
+function monthCalendar(n: XmlNode, className: string) {
+	const now = new Date(), y = now.getFullYear(), m = now.getMonth();
+	const first = new Date(y, m, 1).getDay(), last = new Date(y, m + 1, 0).getDate();
+	const week = (w: number) => Array.from({ length: 7 }, (_, i) => w * 7 + i - first + 1);
+	return el(n, 'div', clsx(className, 'wse-calendar'), <>
+		<div className="wse-calendar-head"><img src={leftIcon} alt="" /><span>{y}.{String(m + 1).padStart(2, '0')}</span><img src={rightIcon} alt="" /></div>
+		<table>
+			<thead><tr>{[...'일월화수목금토'].map(d => <th key={d}>{d}</th>)}</tr></thead>
+			<tbody>{[0, 1, 2, 3, 4, 5].map(w => <tr key={w}>{week(w).map(d => (
+				<td key={d} className={clsx({ out: d < 1 || d > last, today: d === now.getDate() })}>{new Date(y, m, d).getDate()}</td>
+			))}</tr>)}</tbody>
+		</table>
 	</>);
 }
 
@@ -360,7 +392,7 @@ function style(text?: string): CSSProperties | undefined {
 
 export interface TextTarget { index: number; attr?: string; value?: string }
 
-const LABELED = new Set(['textbox', 'span', 'anchor', 'tabs']);
+const LABELED = new Set(['textbox', 'span', 'anchor', 'tabs', 'output']);
 
 export function textTarget(node: XmlNode, def?: ComponentDef): TextTarget | undefined {
 	const type = def?.realType;
@@ -389,7 +421,7 @@ export function outlineChildren(node: XmlNode, defs: ComponentDef[]): XmlNode[] 
 	return node.children.filter(c => !['attributes', 'choices'].includes(localName(c.tag)) && c !== caption && !engineIgnores(c, defs));
 }
 
-export const engineIgnores = (n: XmlNode, defs: ComponentDef[]) =>
+const engineIgnores = (n: XmlNode, defs: ComponentDef[]) =>
 	n.def === undefined && !n.udc && defs.length > 0 && (n.ns === WEBSQUARE_NS || n.ns === XFORMS_NS);
 
 export function outlineIcon(node: XmlNode, defs: ComponentDef[]): string {

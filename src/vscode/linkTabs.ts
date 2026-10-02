@@ -1,8 +1,10 @@
 // 연결 탭 목록·순서(모든 화면 공통, globalState)와 추가·이름 변경·삭제. 연결한 파일은 links.ts가 다룬다
 import * as vscode from 'vscode';
 import { newTabId, readLinkExts, readLinkTabs, tabNameProblem, type LinkTab } from '../core/links';
+import type { TabPosition } from '../core/protocol';
 
 const TAB_ORDER = 'websquare5-editor.tabOrder';
+const TAB_POSITION = 'websquare5-editor.tabPosition';
 const LINK_TABS = 'websquare5-editor.linkTabs';
 
 let globalState: vscode.Memento;
@@ -18,6 +20,9 @@ export function registerLinkTabs(context: vscode.ExtensionContext): void {
 /** Design·Script·Source·연결 탭 순서(탭 이름). 모든 화면 공통 */
 export const tabOrder = () => globalState.get<string[]>(TAB_ORDER);
 export const saveTabOrder = (order: string[]) => globalState.update(TAB_ORDER, order);
+/** 탭 줄 위치. 모든 화면 공통, 기본 위 */
+export const tabPosition = (): TabPosition => globalState.get<TabPosition>(TAB_POSITION) ?? 'top';
+export const saveTabPosition = (position: TabPosition) => globalState.update(TAB_POSITION, position);
 
 export const linkTabs = () => readLinkTabs(globalState.get(LINK_TABS));
 /** 연결할 수 있는 확장자(설정 websquare5-editor.linkFileExtensions) */

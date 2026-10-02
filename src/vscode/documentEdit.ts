@@ -1,15 +1,19 @@
 import * as vscode from 'vscode';
+import { promises as fs } from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { nodeAt, parseXml, pathTo, type XmlNode } from '../core/xmlModel';
 import { applyEdits, applyLineChanges, deleteNode, editableScript, encodeScript, setAttribute, setText, sourceChange, type TextEdit } from '../core/edit';
 import { pasteNode } from '../core/paste';
 import { moveNode } from '../core/move';
+import { mergeCells } from '../core/merge';
 import { addDataNode, editDataFields } from '../core/data';
 import { addSubmissionNode, editSubmissionNode } from '../core/submission';
 import { editChoices } from '../core/choices';
 import { addGridColumn, addGridPart, addGridRow, bindGridView } from '../core/grid';
 import type { CodeChange, CodeTarget, ToExtension } from '../core/protocol';
 
-type NodeEdit = Extract<ToExtension, { type: 'setAttr' | 'setText' | 'paste' | 'delete' | 'move' | 'addData' | 'editDataFields' | 'addSubmission' | 'editSubmission' | 'editChoices' | 'bindGrid' | 'addGridPart' }>;
+type NodeEdit = Extract<ToExtension, { type: 'setAttr' | 'setText' | 'paste' | 'delete' | 'move' | 'addData' | 'editDataFields' | 'addSubmission' | 'editSubmission' | 'editChoices' | 'bindGrid' | 'addGridPart' | 'mergeCells' }>;
 
 export async function applyNodeEdit(document: vscode.TextDocument, msg: NodeEdit): Promise<boolean> {
 	const text = document.getText();
@@ -41,6 +45,10 @@ function nodeChanges(text: string, root: XmlNode, msg: NodeEdit): TextEdit[] | u
 		const dragged = all([msg.dragged, ...msg.more ?? []]), target = find(msg.target);
 		return dragged && target && moveNode(text, dragged, target, msg.position);
 	}
+	if (msg.type === 'mergeCells') {
+		const cells = [msg.index, ...msg.more].map(find);
+		return cells.every(c => c) ? mergeCells(text, root, cells as XmlNode[]) : undefined;
+	}
 	const path = pathTo(root, msg.index), node = path?.at(-1);
 	if (!path || !node) {
 		return undefined;
@@ -59,6 +67,16 @@ function nodeChanges(text: string, root: XmlNode, msg: NodeEdit): TextEdit[] | u
 		case 'editSubmission': return one(editSubmissionNode(text, root, node, msg.fields));
 		case 'editChoices': return one(editChoices(text, root, node, msg.fields));
 		case 'setAttr': {
+			if (msg.also?.length) {
+				// 같은 시작 태그를 여러 번 고치므로 차례로 적용한 뒤 바뀐 범위 하나로
+				let next = text;
+				for (const a of [{ name: msg.name, value: msg.value }, ...msg.also]) {
+					const at = pathTo(parseXml(next) ?? root, msg.index);
+					const change = at && setAttribute(next, at.at(-1)!, a.name, a.value, at.slice(0, -1));
+					next = change ? applyEdits(next, [change]) : next;
+				}
+				return one(sourceChange(text, next));
+			}
 			// 같은 노드가 두 번 오면 같은 범위를 두 번 고쳐 원문이 깨지므로 처음 것만
 			const targets = [{ index: msg.index, value: msg.value }, ...msg.more ?? []]
 				.filter((t, i, all) => all.findIndex(o => o.index === t.index) === i).map(t => ({ ...t, path: pathTo(root, t.index) }));
@@ -90,9 +108,9 @@ export async function applyCodeEdit(document: vscode.TextDocument, target: CodeT
 /** 포맷 들여쓰기는 파일·VS Code 설정과 상관없이 공백 4칸(편집기 들여쓰기 단위와 같음) */
 const INDENT: vscode.FormattingOptions = { tabSize: 4, insertSpaces: true };
 
-/** 이 언어를 다루는 확장(내장 제외)이 설치돼 있는지: 언어 서버가 아직 준비 안 됐을 수 있다 */
-export function languageExtensionInstalled(languageId: string): boolean {
-	return vscode.extensions.all.some(ext => {
+/** 이 언어를 다루는 확장(내장 제외): 언어 서버가 아직 준비 안 됐을 수 있다 */
+function languageExtensions(languageId: string) {
+	return vscode.extensions.all.filter(ext => {
 		const pkg = ext.packageJSON as { name?: string; isBuiltin?: boolean; activationEvents?: string[]; contributes?: { languages?: { id: string }[] } } | undefined;
 		// 이 확장도 onLanguage:xml을 걸고 있어서, 빼지 않으면 XML 포매터가 없을 때 늘 서버를 기다린다
 		return !!pkg && !pkg.isBuiltin && !ext.id.startsWith('vscode.') && pkg.name !== 'websquare5-editor'
@@ -100,14 +118,34 @@ export function languageExtensionInstalled(languageId: string): boolean {
 	});
 }
 
+/**
+ * 언어 서버가 다 떴다는 신호(redhat.java API의 serverReady 같은). Java는 프로젝트를 다 불러와야 포매터가 생기는데
+ * 프로젝트가 커서 오래 걸리면 정해진 시간으로는 모자라서, 이 신호가 오기 전에는 포기하지 않는다
+ */
+async function serverReady(extensions: vscode.Extension<unknown>[]): Promise<{ ready: Promise<unknown> } | undefined> {
+	for (const ext of extensions) {
+		const api = await Promise.resolve(ext.isActive ? ext.exports : ext.activate()).catch(() => undefined) as { serverReady?: () => Promise<unknown> } | undefined;
+		if (typeof api?.serverReady === 'function') {
+			// 감싸서 돌려준다(async 함수가 그대로 돌려주면 준비될 때까지 기다려 버림)
+			return { ready: api.serverReady() };
+		}
+	}
+	return undefined;
+}
+
 /** 기다려도 포매터가 없던 언어 → 그때 설치된 확장 수. 확장을 새로 설치하면 다시 기다린다 */
 const noFormatter = new Map<string, number>();
 
-/** 결과가 나올 때까지 1초마다 다시(최대 60초, 알림에서 취소 가능) */
-async function waitFor<T>(title: string, attempt: () => Thenable<T | undefined>): Promise<T | undefined> {
+/**
+ * 결과가 나올 때까지 0.3초마다 다시(알림에서 취소 가능). ready가 있으면 그게 끝난 뒤 5초까지, 없으면 60초까지.
+ * 포매터는 ready보다 먼저 등록되기도 해서(Java: 4.6초 vs 10초) ready만 기다리지 않고 계속 물어본다
+ */
+async function waitFor<T>(title: string, attempt: () => Thenable<T | undefined>, ready?: Promise<unknown>): Promise<T | undefined> {
 	return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title, cancellable: true }, async (_progress, token) => {
-		for (let i = 0; i < 60 && !token.isCancellationRequested; i++) {
-			await new Promise(r => setTimeout(r, 1000));
+		let deadline = ready ? Infinity : Date.now() + 60_000;
+		void ready?.then(() => { deadline = Date.now() + 5_000; }, () => { deadline = Date.now(); });
+		while (Date.now() < deadline && !token.isCancellationRequested) {
+			await new Promise(r => setTimeout(r, 300));
 			const result = await attempt();
 			if (result !== undefined) {
 				return result;
@@ -117,39 +155,43 @@ async function waitFor<T>(title: string, attempt: () => Thenable<T | undefined>)
 	});
 }
 
+/**
+ * 포맷: 그 사용자의 VS Code 포매터(언어별 기본 포매터 설정, 없으면 VS Code 내장)를 그대로 쓴다.
+ * Script는 화면 XML 안 JS라 VS Code가 JS로 보지 않으므로, 임시 .js 파일로 꺼내 JS 포매터로 포맷하고 본문만 돌려준다(CDATA 앞뒤 공백 유지)
+ */
 export async function formatCode(document: vscode.TextDocument, target: CodeTarget): Promise<string | undefined> {
-	if (target === 'script') {
-		const source = editableScript(document.getText())?.text;
-		if (source === undefined) {
-			return undefined;
-		}
-		if (!source.trim()) {
-			return source;
-		}
-		const prettier = await import('prettier');
-		const known = new Set((await prettier.getSupportInfo()).options.map(o => o.name));
-		// Prettier 확장이 기여하는 기본값(tabWidth 2 등)이 아래 기본 tabWidth 4를 덮지 않게, 사용자가 직접 설정한 값만 쓴다
-		const config = vscode.workspace.getConfiguration('prettier', document.uri);
-		const settings = Object.fromEntries([...known].flatMap(k => {
-			if (!k) {
-				return [];
-			}
-			const i = config.inspect(k);
-			const value = i?.workspaceFolderValue ?? i?.workspaceValue ?? i?.globalValue;
-			return value === undefined ? [] : [[k, value]];
-		}));
-		const options = await prettier.resolveConfig(document.uri.fsPath, { editorconfig: true }) ?? settings;
-		// 프로젝트 설정(.prettierrc·.editorconfig)이 없으면 공백 4칸
-		const formatted = await prettier.format(source, { tabWidth: 4, useTabs: false, ...options, parser: 'babel' });
-		return source.match(/^\s*/)![0] + formatted.trim() + source.match(/\s*$/)![0];
+	if (target !== 'script') {
+		return formatDocument(document);
 	}
+	const source = editableScript(document.getText())?.text;
+	if (source === undefined || !source.trim()) {
+		return source;
+	}
+	const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ws5-script-'));
+	const file = vscode.Uri.file(path.join(dir, 'script.js'));
+	try {
+		await fs.writeFile(file.fsPath, source);
+		const formatted = await formatDocument(await vscode.workspace.openTextDocument(file), true);
+		return formatted === undefined ? undefined : source.match(/^\s*/)![0] + formatted.trim() + source.match(/\s*$/)![0];
+	} finally {
+		await fs.rm(dir, { recursive: true, force: true });
+	}
+}
+
+/** 문서를 VS Code 포매터로 포맷한 결과(문서는 그대로). builtIn: VS Code 내장 언어 기능(JS 등)이라 처음 부르면 켜지는 동안 잠깐 다시 묻는다 */
+async function formatDocument(document: vscode.TextDocument, builtIn = false): Promise<string | undefined> {
 	const run = () => vscode.commands.executeCommand<vscode.TextEdit[] | undefined>('vscode.executeFormatDocumentProvider', document.uri, INDENT);
 	// Java 등 언어 서버 확장은 서버가 다 뜬 뒤에야 포매터를 등록한다 → 설치돼 있으면 준비될 때까지 기다린다
 	// 한 번 기다려도 없었던 언어(포매터 없는 확장)는 다시 기다리지 않는다
 	const lang = document.languageId;
 	let edits = await run();
-	if (!edits && noFormatter.get(lang) !== vscode.extensions.all.length && languageExtensionInstalled(lang)) {
-		edits = await waitFor(`'${lang}' 포매터 준비 중… (언어 서버 시작)`, run);
+	for (let i = 0; builtIn && !edits && i < 10; i++) {
+		await new Promise(r => setTimeout(r, 300));
+		edits = await run();
+	}
+	const extensions = !edits && noFormatter.get(lang) !== vscode.extensions.all.length ? languageExtensions(lang) : [];
+	if (extensions.length) {
+		edits = await waitFor(`'${lang}' 포매터 준비 중… (언어 서버 시작)`, run, (await serverReady(extensions))?.ready);
 		if (!edits) {
 			noFormatter.set(lang, vscode.extensions.all.length);
 		}

@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { clsx } from 'clsx';
 import type { ComponentDef } from '../../core/protocol';
-import type { XmlNode } from '../../core/xmlModel';
+import { EV, type XmlNode } from '../../core/xmlModel';
 import { EditBox } from './editBox';
 import { ChoiceSelect } from './choiceSelect';
 import { Tabs } from './tabs';
 import { useFloating } from './floating';
+import { useEditorStore } from '../store';
 
-interface Row { name: string; attr: string; value?: string; description?: string; display?: string; options?: string[] }
+/** options: 정해진 값만(select). suggestions: 고를 값이 있지만 직접 입력도(입력칸 + 목록) */
+interface Row { name: string; attr: string; value?: string; description?: string; display?: string; options?: string[]; suggestions?: string[] }
 type Edit = (attr: string, value: string | undefined) => void;
 interface RowGroup { category: string; order: number; rows: Row[] }
-const EV = 'ev:';
 
-/** choices: 속성별로 고를 값 목록(정의의 정해진 값 대신. 예: 바인딩된 그리드 셀의 id → dataList 컬럼 id) */
+/** choices: 속성별로 고를 값 목록(정의의 정해진 값 대신, 직접 입력도 됨. 예: 바인딩된 그리드 셀의 id → dataList 컬럼 id) */
 function propertyGroups(node: XmlNode, def?: ComponentDef, choices: Record<string, string[]> = {}): RowGroup[] {
 	const groups = new Map<string, RowGroup>();
 	const add = (category: string, order: number, row: Row) => {
@@ -24,12 +25,12 @@ function propertyGroups(node: XmlNode, def?: ComponentDef, choices: Record<strin
 	for (const p of def?.properties ?? []) {
 		if (!known.has(p.name)) {
 			known.add(p.name);
-			add(p.category, p.order, { name: p.name, attr: p.name, value: node.attrs[p.name], description: p.description, options: choices[p.name] ?? p.options });
+			add(p.category, p.order, { name: p.name, attr: p.name, value: node.attrs[p.name], description: p.description, ...choices[p.name] ? { suggestions: choices[p.name] } : { options: p.options } });
 		}
 	}
 	for (const [k, v] of Object.entries(node.attrs)) {
 		if (!known.has(k) && k !== 'xmlns' && !k.startsWith('xmlns:') && !k.startsWith(EV)) {
-			add('기타', 1000, { name: k, attr: k, value: v, options: choices[k] });
+			add('기타', 1000, { name: k, attr: k, value: v, suggestions: choices[k] });
 		}
 	}
 	return sortGroups(groups);
@@ -84,6 +85,8 @@ function SearchBar({ search, onChange }: { search: Search; onChange(s: Search): 
 export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: {
 	node?: XmlNode; def?: ComponentDef; choices?: Record<string, string[]>; warning?: string; onEdit: Edit; onScript?(eventName: string): void;
 }) {
+	const tabOrder = useEditorStore(s => s.tabOrder);
+	const setTabOrder = useEditorStore(s => s.setTabOrder);
 	const [help, setHelp] = useState<Help>();
 	const [keyWidth, setKeyWidth] = useState<number>();
 	const [search, setSearch] = useState<Search>({ field: 'name', text: '' });
@@ -139,7 +142,7 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 				setFading(false);
 			}}>
 			{warning && <p className="warning" title={warning}>{warning}</p>}
-			<Tabs items={{
+			<Tabs order={tabOrder} onReorder={setTabOrder} items={{
 				Property: node && <PropertyTable groups={propertyGroups(node, def, choices)} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} />,
 				Event: node && <PropertyTable groups={eventGroups(node, def)} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} isEvent onScript={onScript} />,
 			}} />
@@ -198,7 +201,7 @@ function PropertyTable({ groups: all, search, onSearch, keyWidth, onKeyWidth, on
 										</div>
 										: r.options
 											? <ChoiceSelect className="choice" aria-label={r.name} value={r.value ?? ''} options={['', ...r.options]} onChange={e => onEdit(r.attr, e.target.value || undefined)} />
-											: <Editable value={r.value} onCommit={v => onEdit(r.attr, v)} multiline={false} />}
+											: <Editable value={r.value} onCommit={v => onEdit(r.attr, v)} multiline={false} suggestions={r.suggestions} />}
 								</td>
 							</tr>
 						))}
@@ -227,8 +230,8 @@ function ColumnResizer({ onResize }: { onResize(width: number): void }) {
 		onPointerUp={() => drag.current = undefined} />;
 }
 
-function Editable({ value, onCommit, className, disabled, multiline, enterNewline }: {
-	value?: string; onCommit(v: string | undefined): void; className?: string; disabled?: boolean; multiline?: boolean; enterNewline?: boolean;
+function Editable({ value, onCommit, className, disabled, multiline, enterNewline, suggestions }: {
+	value?: string; onCommit(v: string | undefined): void; className?: string; disabled?: boolean; multiline?: boolean; enterNewline?: boolean; suggestions?: string[];
 }) {
 	const [editing, setEditing] = useState(false);
 	const [initialHeight, setInitialHeight] = useState<number>();
@@ -242,9 +245,9 @@ function Editable({ value, onCommit, className, disabled, multiline, enterNewlin
 	};
 
 	if (editing) {
-		return <EditBox value={value ?? ''} className={className} multiline={multiline} enterNewline={enterNewline} initialHeight={initialHeight} onCommit={v => onCommit(v === '' ? undefined : v)} onClose={() => setEditing(false)} />;
+		return <EditBox value={value ?? ''} className={className} multiline={multiline} enterNewline={enterNewline} initialHeight={initialHeight} suggestions={suggestions} onCommit={v => onCommit(v === '' ? undefined : v)} onClose={() => setEditing(false)} />;
 	}
-	return <div ref={divRef} className={clsx('value', className)} title={value}
+	return <div ref={divRef} className={clsx('value', className, suggestions && 'has-list')} title={value}
 		onClick={() => !disabled && startEditing()}>{value}</div>;
 }
 

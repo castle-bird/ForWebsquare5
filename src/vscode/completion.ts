@@ -14,15 +14,15 @@ const TYPES = new Map<vscode.CompletionItemKind, string>([
 /** 결과가 아주 많아도 웹뷰로는 이만큼만(언어 서버가 정한 순서대로) */
 const MAX_ITEMS = 500;
 /** 앞쪽 항목은 VS Code가 미리 풀어 둔다(설명·자동 import 같은 추가 편집) */
-const RESOLVE = 20;
+export const RESOLVE = 20;
 
 const toChange = (e: vscode.TextEdit): CodeChange => ({ fromLine: e.range.start.line, fromCh: e.range.start.character, toLine: e.range.end.line, toCh: e.range.end.character, insert: e.newText });
 const labelOf = (item: vscode.CompletionItem) => typeof item.label === 'string' ? item.label : item.label.label;
 const text = (doc: string | vscode.MarkdownString | undefined) => typeof doc === 'string' ? doc : doc?.value;
 
-export async function remoteCompletions(document: vscode.TextDocument, line: number, ch: number, trigger?: string): Promise<RemoteCompletions | undefined> {
+export async function remoteCompletions(document: vscode.TextDocument, line: number, ch: number, trigger?: string, resolve = RESOLVE): Promise<RemoteCompletions | undefined> {
 	const list = await vscode.commands.executeCommand<vscode.CompletionList | undefined>('vscode.executeCompletionItemProvider',
-		document.uri, new vscode.Position(line, ch), trigger, RESOLVE);
+		document.uri, new vscode.Position(line, ch), trigger, resolve);
 	const own = document.getText();
 	// VS Code 단어 자동완성(editor.wordBasedSuggestions, 종류 Text)은 같은 언어로 열린 다른 문서의 단어도 준다
 	// (화면 XML의 dataList가 MyBatis 탭에 뜸). 이 파일에 있는 단어만 남긴다

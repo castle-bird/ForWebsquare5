@@ -1,6 +1,6 @@
 import { startTagEnd, withAttrs, type TextEdit } from './edit';
 import { insertNode } from './paste';
-import { pathTo, uniqueId, usedIds, VALID_ID, XFORMS_NS, type XmlNode } from './xmlModel';
+import { EV, pathTo, uniqueId, usedIds, VALID_ID, XFORMS_NS, type XmlNode } from './xmlModel';
 
 export const SUBMISSION_EVENTS = ['submit', 'submitdone', 'submiterror'] as const;
 const EVENT_ATTRS = SUBMISSION_EVENTS.map(e => `ev:${e}` as const);
@@ -40,6 +40,6 @@ export function addSubmissionNode(text: string, root: XmlNode, model: XmlNode, f
 	if (!VALID_ID.test(fields.id)) { throw new Error('올바른 Submission ID를 입력해 줘.'); }
 	if (usedIds(root).has(fields.id)) { throw new Error(`이미 사용 중인 ID야: ${fields.id}`); }
 	if (!SUBMISSION_METHODS.includes(fields.method) || !SUBMISSION_MODES.includes(fields.mode) || !SUBMISSION_MEDIA_TYPES.includes(fields.mediatype)) { throw new Error('지원하지 않는 Submission 옵션이야.'); }
-	const attrs = Object.entries(fields).filter(([name, value]) => value || !name.startsWith('ev:'));
+	const attrs = Object.entries(fields).filter(([name, value]) => value || !name.startsWith(EV));
 	return insertNode(text, model, 'inside', withAttrs('<xf:submission/>', attrs, pathTo(root, model.index)));
 }

@@ -15,23 +15,29 @@ export function GridBindDialog({ gridId, listId, columnCount, hasContent, onConf
 	return <dialog {...popupProps} className="popup submission-editor grid-bind" aria-label="그리드 바인딩">
 		<form onSubmit={submit}>
 			<PopupTitle titleProps={titleProps} badge="GridView" onClose={onClose}><span>{gridId || '(id 없음)'} ← {listId}</span></PopupTitle>
-			<div className="submission-fields">
-				<label htmlFor="grid-bind-mode">Option</label>
-				<select id="grid-bind-mode" value={mode} onChange={e => setMode(e.target.value as GridBindMode)} autoFocus>
-					{Object.entries(GRID_BIND_MODES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-				</select>
-				<label>column count</label>
-				<span className="grid-bind-count">{columnCount}</span>
-			</div>
-			<div className="grid-bind-parts">
-				{check('header', mode === 'new' || mode === 'header' || mode === 'all')}
-				{check('body', mode === 'new' || mode === 'body' || mode === 'all')}
-				{check('subTotal', !!extras.subTotal, v => setExtras(c => ({ ...c, subTotal: v })))}
-				{check('footer', !!extras.footer, v => setExtras(c => ({ ...c, footer: v })))}
+			<div className="form-sections">
+				<section>
+					<div className="form-grid">
+						<label className="field"><span>Option</span>
+							<select id="grid-bind-mode" value={mode} onChange={e => setMode(e.target.value as GridBindMode)} autoFocus>
+								{Object.entries(GRID_BIND_MODES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+							</select></label>
+						<div className="field"><span>column count</span><span className="grid-bind-count">{columnCount}</span></div>
+					</div>
+				</section>
+				<section>
+					<h3>만들 부분</h3>
+					<div className="grid-bind-parts">
+						{check('header', mode === 'new' || mode === 'header' || mode === 'all')}
+						{check('body', mode === 'new' || mode === 'body' || mode === 'all')}
+						{check('subTotal', !!extras.subTotal, v => setExtras(c => ({ ...c, subTotal: v })))}
+						{check('footer', !!extras.footer, v => setExtras(c => ({ ...c, footer: v })))}
+					</div>
+				</section>
 			</div>
 			<div className="submission-actions">
-				<button type="submit" className="btn btn-primary">확인</button>
 				<button type="button" className="btn btn-secondary" onClick={onClose}>닫기</button>
+				<button type="submit" className="btn btn-primary">확인</button>
 			</div>
 		</form>
 		{resizeHandles}

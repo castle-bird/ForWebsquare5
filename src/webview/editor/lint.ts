@@ -1,27 +1,19 @@
 import { parse } from 'acorn';
 import { SaxesParser } from 'saxes';
-import { linter, lintGutter, type Diagnostic } from '@codemirror/lint';
-import type { Extension, Text } from '@codemirror/state';
+import { linter, lintGutter, type Diagnostic, type LintSource } from '@codemirror/lint';
+import type { RemoteDiagnostic } from '../../core/protocol';
+import { StateEffect, type Extension, type Text } from '@codemirror/state';
 
 const DELAY = 500;
 
-const parsesAs = (text: string, sourceType: 'script' | 'module') => {
-	try {
-		parse(text, { ecmaVersion: 'latest', sourceType });
-		return true;
-	} catch {
-		return false;
-	}
-};
-
-/** JS 문법 오류(첫 오류 하나, 일반 스크립트 기준). offset: text가 문서 안에서 시작하는 위치. module이면 ES 모듈로 읽혀도 오류 아님(import·export 파일) */
-export function jsProblems(text: string, offset = 0, module = false): Diagnostic[] {
+/** JS 문법 오류(첫 오류 하나, 일반 스크립트 기준). offset: text가 문서 안에서 시작하는 위치 */
+function jsProblems(text: string, offset = 0): Diagnostic[] {
 	try {
 		parse(text, { ecmaVersion: 'latest', sourceType: 'script' });
 		return [];
 	} catch (e) {
 		const pos = (e as { pos?: unknown }).pos;
-		if (!(e instanceof SyntaxError) || typeof pos !== 'number' || module && parsesAs(text, 'module')) {
+		if (!(e instanceof SyntaxError) || typeof pos !== 'number') {
 			return [];
 		}
 		const from = Math.max(0, Math.min(pos, text.length - 1));
@@ -32,7 +24,7 @@ export function jsProblems(text: string, offset = 0, module = false): Diagnostic
 const SCRIPT_CDATA = /<(?:[\w.-]+:)?script\b(?![^>]*\ssrc\s*=)[^>]*>\s*<!\[CDATA\[([\s\S]*?)\]\]>/;
 
 /** XML 형식 오류(엄격 파서, 첫 오류 하나). 형식이 맞으면 첫 인라인 script CDATA의 JS 문법 오류 */
-export function xmlProblems(doc: Text): Diagnostic[] {
+function xmlProblems(doc: Text): Diagnostic[] {
 	const text = doc.toString();
 	if (!text.trim()) {
 		return [];
@@ -59,11 +51,33 @@ export function xmlProblems(doc: Text): Diagnostic[] {
 	return jsProblems(script[1], script.index + script[0].length - 3 - script[1].length);
 }
 
-/** js: 화면 Script, jsFile: 연결한 .js(ES 모듈도), xml: Source·연결한 XML */
-export type LintMode = 'js' | 'jsFile' | 'xml';
+/** js: 화면 Script, xml: Source·연결한 XML(VS Code 기본 설치에는 XML 검사가 없다) */
+export type LintMode = 'js' | 'xml';
 
-/** 편집기 문법 검사(JS: Script, XML: Source·연결한 XML): 입력을 멈추고 잠시 뒤 검사, 밑줄 + 줄 번호 옆 표시. 없으면 검사 안 함(Java) */
-export const lintFor = (mode?: LintMode): Extension => mode ? [
-	linter(view => mode === 'xml' ? xmlProblems(view.state.doc) : jsProblems(view.state.doc.toString(), 0, mode === 'jsFile'), { delay: DELAY }),
+/** VS Code가 새 문제를 보냄: 연결 탭 검사를 다시 */
+export const remoteProblemsChanged = StateEffect.define<null>();
+
+/** VS Code 쪽 줄·글자(0부터) → 이 문서 위치. 문서가 그사이 짧아졌으면 그 줄·문서 끝으로 */
+export function posAt(doc: Text, line: number, ch: number): number {
+	const l = doc.line(Math.min(line + 1, doc.lines));
+	return Math.min(l.from + ch, l.to);
+}
+
+/** VS Code가 낸 문제(줄·글자) → 이 문서 위치 */
+export function fromRemote(doc: Text, items: RemoteDiagnostic[]): Diagnostic[] {
+	const at = (line: number, ch: number) => posAt(doc, line, ch);
+	return items.map(d => {
+		const from = at(d.fromLine, d.fromCh);
+		return { from, to: Math.max(from, at(d.toLine, d.toCh)), severity: d.severity, message: d.message, source: d.source };
+	});
+}
+
+/**
+ * 편집기 문법 검사: 입력을 멈추고 잠시 뒤 검사, 밑줄 + 줄 번호 옆 표시.
+ * mode: 이 편집기가 직접 검사(Script JS·XML). remote: VS Code가 그 파일에 낸 문제(연결 탭, Java 언어 서버 등)
+ */
+export const lintFor = (mode?: LintMode, remote?: LintSource): Extension => mode || remote ? [
+	mode ? linter(view => mode === 'xml' ? xmlProblems(view.state.doc) : jsProblems(view.state.doc.toString()), { delay: DELAY }) : [],
+	remote ? linter(remote, { delay: DELAY, needsRefresh: u => u.transactions.some(tr => tr.effects.some(e => e.is(remoteProblemsChanged))) }) : [],
 	lintGutter(),
 ] : [];

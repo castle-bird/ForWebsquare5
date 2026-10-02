@@ -31,10 +31,57 @@
 .wse-image-empty { display: inline-block; vertical-align: baseline; overflow: hidden; box-sizing: border-box; background: #ebebeb; color: #888; font: 600 13px sans-serif; }
 .wse-image-empty > span { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 100%; }
 .wse-image-empty img { width: 40%; max-width: 48px; opacity: .45; }
+.wse-multiupload { width: 400px; height: 50px; font-size: 12px; }
+.wse-multiupload img { width: 20px; }
+.wse-multiupload > span { flex-direction: row; }
+
+/* 자체 모양 입력 컴포넌트(renderers.tsx). 크기는 화면 style이 있으면 그걸 따른다 */
+.wse-page :is(.wse-spinner, .wse-searchbox) { display: inline-flex; vertical-align: middle; box-sizing: border-box; width: 120px; height: 22px; border: 1px solid #b5b5b5; background: #fff; }
+.wse-page :is(.wse-spinner, .wse-searchbox) input { flex: 1; min-width: 0; height: 100%; box-sizing: border-box; margin: 0; padding: 0 4px; border: 0; outline: none; font: 12px sans-serif; background: transparent; }
+.wse-page :is(.wse-spinner, .wse-searchbox) img { width: 14px; opacity: .55; }
+.wse-page .wse-searchbox img { align-self: center; margin: 0 4px; }
+.wse-page .wse-spinner > span { display: flex; flex-direction: column; justify-content: center; border-left: 1px solid #d0d0d0; }
+.wse-page .wse-spinner > span img { height: 9px; padding: 0 2px; object-fit: cover; }
+.wse-page .wse-listbox { display: inline-block; vertical-align: middle; box-sizing: border-box; width: 120px; height: 80px; overflow: hidden; border: 1px solid #b5b5b5; background: #fff; font: 12px/20px sans-serif; }
+.wse-page .wse-listbox > div { padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wse-page .wse-calendar { display: flex; flex-direction: column; box-sizing: border-box; width: 220px; height: 200px; border: 1px solid #c8c8c8; background: #fff; font: 12px sans-serif; color: #333; }
+.wse-page .wse-calendar-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px; font-weight: 600; }
+.wse-page .wse-calendar-head img { width: 14px; opacity: .55; }
+.wse-page .wse-calendar table { flex: 1; width: 100%; border-collapse: collapse; table-layout: fixed; text-align: center; }
+.wse-page .wse-calendar th { font-weight: 400; color: #888; }
+.wse-page .wse-calendar :is(th, td):first-child { color: #d33; }
+.wse-page .wse-calendar :is(th, td):last-child { color: #2a6bd1; }
+.wse-page .wse-calendar td.out { opacity: .35; }
+.wse-page .wse-calendar td.today { font-weight: 700; outline: 1px solid #7aa7e0; outline-offset: -2px; border-radius: 3px; }
+/* 글자 칸 + 아래 입력 줄(그리드 헤더 칸 너비·높이) */
+.wse-page .edit-wrap { position: absolute; z-index: 2147483647; display: flex; flex-direction: column; min-width: 190px; box-shadow: 0 3px 12px rgba(0, 0, 0, .22); }
+.wse-page .edit-wrap > .edit { position: static; width: 100%; }
+.wse-page .edit-footer { user-select: none; padding: 6px 8px; background: #f6f6f6; border: 2px solid var(--vscode-focusBorder); border-top: none; font: 12px sans-serif; color: #666; }
+.wse-page .edit-fields label { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.wse-page .edit-fields .name { color: #555; white-space: nowrap; }
+.wse-page .edit-fields label.set .name { color: #111; font-weight: 600; }
+.wse-page .edit-fields :is(input, select) { box-sizing: border-box; height: 22px; padding: 1px 5px; border: 1px solid #c8c8c8; border-radius: 3px; font: 12px sans-serif; color: #000; background: #fff; outline: none; }
+.wse-page .edit-fields :is(input, select):focus { border-color: var(--vscode-focusBorder); box-shadow: 0 0 0 1px var(--vscode-focusBorder); }
+.wse-page .edit-fields input::placeholder { color: #aaa; }
+/* 속성 이름 | 값 두 쌍씩, 이름 칸 너비를 맞춰 세로로 줄 맞춤. 단위(px)는 값 칸 안 오른쪽 */
+.wse-page .edit-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 14px; }
+.wse-page .edit-fields label { display: grid; grid-template-columns: 92px minmax(0, 1fr); position: relative; cursor: default; }
+.wse-page .edit-fields .name { overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.wse-page .edit-fields :is(input, select) { width: 100%; user-select: text; }
+.wse-page .edit-fields .unit { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); color: #999; pointer-events: none; }
+.wse-page .edit-fields label:has(.unit) input { padding-right: 24px; text-align: right; }
 .wse-page .edit { resize: none; position: absolute; z-index: 2147483647; box-sizing: border-box; padding: 2px 4px; font: 13px/18px sans-serif; color: #000; background: #fff; border: 2px solid var(--vscode-focusBorder); outline: none; }
 .wse-badges { position: absolute; display: flex; gap: 2px; padding: 1px; }
 .wse-badges > span { width: 5px; height: 5px; border-radius: 50%; box-shadow: 0 0 0 1px #fff; }
 .wse-badges > .bind { background: #8fd19e; }
 .wse-badges > .event { background: #f4a09a; }
-.wse-chip { position: absolute; max-width: 100%; box-sizing: border-box; padding: 0 6px; border-radius: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px/16px var(--vscode-font-family, sans-serif); color: var(--vscode-button-foreground, #fff); background: var(--vscode-focusBorder); transition: opacity .12s; }
+.wse-chip { position: absolute; max-width: 100%; box-sizing: border-box; padding: 0 8px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/20px var(--vscode-font-family, sans-serif); color: var(--vscode-button-foreground, #fff); background: var(--vscode-focusBorder); transition: opacity .12s; }
 .wse-chip.faded { opacity: .15; }
+
+/* 입력칸 + 고를 값 목록(ui/combo.tsx) */
+.combo-list { position: fixed; z-index: 2147483647; max-height: 220px; overflow-y: auto; margin: 0; padding: 3px; list-style: none; box-sizing: border-box; border-radius: 4px; font: inherit;
+	background: var(--vscode-editorSuggestWidget-background, var(--vscode-dropdown-background, #fff)); color: var(--vscode-editorSuggestWidget-foreground, var(--vscode-dropdown-foreground, #000));
+	border: 1px solid var(--vscode-editorSuggestWidget-border, var(--vscode-focusBorder)); box-shadow: 0 3px 10px var(--vscode-widget-shadow, rgba(0, 0, 0, .25)); }
+.combo-list li { padding: 2px 8px; border-radius: 3px; cursor: pointer; white-space: nowrap; }
+.combo-list li.current { font-weight: 600; }
+.combo-list li[aria-selected="true"], .combo-list li:hover { background: var(--vscode-list-activeSelectionBackground, #0060c0); color: var(--vscode-list-activeSelectionForeground, #fff); }

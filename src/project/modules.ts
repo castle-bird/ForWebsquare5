@@ -3,7 +3,7 @@ import { DomUtils } from 'htmlparser2';
 import { readWebConfig } from './config';
 import { ENGINE_PAGE, fromWebPath } from './paths';
 
-export interface ModuleFile { path: string; text: string }
+interface ModuleFile { path: string; text: string }
 
 export async function udcNames(webRoot: string): Promise<Set<string>> {
 	const udc = DomUtils.findOne(e => e.name === 'udc', (await readWebConfig(webRoot)).children);

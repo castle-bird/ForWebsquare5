@@ -89,6 +89,8 @@ export const defOf = <T>(node: XmlNode, defs: readonly T[] | undefined): T | und
 
 export const WEBSQUARE_NS = 'http://www.inswave.com/websquare';
 export const XFORMS_NS = 'http://www.w3.org/2002/xforms';
+/** 이벤트 핸들러 속성 접두어(ev:onclick) */
+export const EV = 'ev:';
 
 export const isScreen = (root: XmlNode | undefined) => root?.tag === 'html'
 	&& Object.entries(root.attrs).some(([k, v]) => (k === 'xmlns' || k.startsWith('xmlns:')) && v === WEBSQUARE_NS);

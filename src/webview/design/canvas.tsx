@@ -3,31 +3,35 @@ import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { autoUpdate } from '@floating-ui/dom';
 import type { ComponentDef } from '../../core/protocol';
-import { defOf, localName, nodeAt, type XmlNode } from '../../core/xmlModel';
+import { defOf, EV, localName, nodeAt, pathTo, type XmlNode } from '../../core/xmlModel';
 import { setStyle } from '../../core/style';
 import { EditBox } from '../ui/editBox';
+import { cellForm, FORM_HEIGHT, formAttrs, FormFields, type Form } from './cellForm';
 import { render, textTarget, type TextTarget } from './renderers';
 import { classLabel, REF_MIME } from '../ui/tree';
 import canvasCss from './canvas.css';
 
 let renders = 0;
 
-export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onEditText, onEditAttr, onOpenFrame, onOpenEditor, onBindRef, onContextMenu }: {
+export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onEditText, onEditAttr, onOpenFrame, onOpenEditor, onBindRef, onContextMenu, idChoices }: {
 	body: XmlNode; defs: ComponentDef[]; sheets?: string[]; selected?: number;
 	extra?: number[];
-	onSelect(i: number, additive?: boolean): void; onEditText(target: TextTarget, value: string): void;
+	onSelect(i: number, additive?: boolean): void; onEditText(target: TextTarget, value: string, also?: { name: string; value?: string }[]): void;
 	onEditAttr(name: string, value: string | undefined): void; onOpenFrame(index: number): void;
 	onOpenEditor?(index: number): boolean;
 	onBindRef?(index: number, value: string): void;
 	onContextMenu?(index: number, x: number, y: number): void;
+	/** 이 노드의 id로 고를 값(바인딩된 그리드 본문 셀 → dataList 컬럼 id) */
+	idChoices?(index: number): string[] | undefined;
 }) {
 	const host = useRef<HTMLDivElement>(null);
 	const page = useRef<HTMLDivElement>(null);
 	const [shadow, setShadow] = useState<ShadowRoot>();
 	const [hover, setHover] = useState<number>();
-	const [editing, setEditing] = useState<{ target: TextTarget; rect: CSSProperties }>();
-	const colDrag = useRef<{ index: number; col?: HTMLElement; table?: HTMLElement; tableWidth?: number; startX: number; width: number; scale: number }>(undefined);
-	const dragWidth = (d: NonNullable<typeof colDrag.current>, x: number) => Math.max(20, Math.round(d.width + (x - d.startX) / d.scale));
+	// form: 그리드 칸이면 문구 아래 입력(헤더: 너비·높이, 본문: 자주 고치는 속성). draft: 그 입력 값
+	const [editing, setEditing] = useState<{ target: TextTarget; rect: CSSProperties; form?: Form }>();
+	const [draft, setDraft] = useState<Record<string, string>>({});
+	const columnResize = useColumnResize((index, width) => { onSelect(index); onEditAttr('width', String(width)); });
 	useEffect(() => setShadow(host.current!.shadowRoot ?? host.current!.attachShadow({ mode: 'open' })), []);
 	// CSP상 <style> 태그는 막혀 있어서 생성한 스타일시트(adoptedStyleSheets)로 붙인다.
 	useEffect(() => {
@@ -66,39 +70,7 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 							onSelect(wseIndex(el), e.ctrlKey || e.metaKey);
 						}
 					}}
-					onPointerDown={e => {
-						const c = (e.target as Element).closest?.<HTMLTableCellElement>('[data-wse-resize]');
-						if (!c || e.button !== 0 || e.clientX < c.getBoundingClientRect().right - 5) { return; }
-						e.preventDefault();
-						e.stopPropagation();
-						const table = c.closest('table') ?? undefined;
-						// 칸 순서(cellIndex)는 병합·번호 칸 때문에 열 순서와 다를 수 있어 렌더러가 적어 둔 <col> 순서를 쓴다
-						const col = table?.querySelector('colgroup')?.children[Number(c.getAttribute('data-wse-resize'))] as HTMLElement | undefined;
-						// 기준은 화면 폭이 아니라 <col>의 width(=XML 값). autoFit(100%)이면 화면 폭이 비율로 늘어나 있어서
-						// 화면 폭을 넣으면 그 열만 몇 배로 커진다 → 마우스 이동량도 같은 비율(scale)로 나눠 XML 단위로 바꾼다
-						const rendered = c.getBoundingClientRect().width;
-						const width = parseFloat(col?.style.width ?? '') || rendered;
-						const tableWidth = table?.style.width.endsWith('px') ? parseFloat(table.style.width) : undefined;
-						colDrag.current = { index: wseIndex(c), col, table, tableWidth, startX: e.clientX, width, scale: rendered / width || 1 };
-						try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 합성 이벤트(테스트) 등 활성 포인터가 없으면 캡처 없이 진행 */ }
-					}}
-					onPointerMove={e => {
-						const d = colDrag.current;
-						if (d?.col) {
-							const w = dragWidth(d, e.clientX);
-							d.col.style.width = `${w}px`;
-							if (d.table && d.tableWidth !== undefined) { d.table.style.width = `${d.tableWidth + w - d.width}px`; }
-						}
-					}}
-					onPointerUp={e => {
-						const d = colDrag.current;
-						colDrag.current = undefined;
-						const width = d && dragWidth(d, e.clientX);
-						if (d && width !== Math.round(d.width)) {
-							onSelect(d.index);
-							onEditAttr('width', String(width));
-						}
-					}}
+					{...columnResize}
 					onContextMenu={e => {
 						const el = target(e);
 						if (el && onContextMenu) {
@@ -116,14 +88,21 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 							return;
 						}
 						const n = el && nodeAt(body, wseIndex(el));
-						const t = n && textTarget(n, defOf(n, defs));
+						// 그리드 칸(헤더·본문·footer·subTotal 모두): 문구 아래 자주 고치는 속성. 문구 칸이 없는 inputType(checkbox 등)이어도 연다
+						const gridCell = !!n && localName(n.tag) === 'column' && !!pathTo(body, n.index)?.some(a => localName(a.tag) === 'gridView');
+						const t = n && (textTarget(n, defOf(n, defs)) ?? (gridCell ? { index: n.index, attr: 'value', value: n.attrs.value } : undefined));
 						const p = page.current;
-						if (el && t && p) {
+						if (el && n && t && p) {
 							const r = relRect(el, p);
-							const width = Math.max(r.width, 160), height = Math.max(r.height, 18 * 3 + 8);
+							const form = gridCell ? cellForm(n, defOf(n, defs), r, idChoices?.(n.index)) : undefined;
+							const width = Math.max(r.width, form ? 400 : 160), height = Math.max(r.height, 18 * 3 + 8);
 							const left = Math.max(p.scrollLeft, Math.min(r.left, p.scrollLeft + p.clientWidth - width));
-							const top = Math.max(p.scrollTop, Math.min(r.top, p.scrollTop + p.clientHeight - height));
-							setEditing({ target: t, rect: { left, top, width, height } });
+							// 아래 입력 줄까지 보이게
+							const top = Math.max(p.scrollTop, Math.min(r.top, p.scrollTop + p.clientHeight - height - (form ? FORM_HEIGHT : 0)));
+							// 더블클릭이 고른 글자 선택이 새로 뜬 입력 줄까지 번져 파랗게 칠해지지 않게
+							getSelection()?.removeAllRanges();
+							setDraft(form?.values ?? {});
+							setEditing({ target: t, rect: { left, top, width, height }, form });
 						}
 					}}
 					onDragOver={e => {
@@ -147,10 +126,13 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 					<Boundary key={generation}>{tree}</Boundary>
 					{editing && (
 						<EditBox key={editing.target.index} style={editing.rect} value={editing.target.value ?? ''}
-							onCommit={v => onEditText(editing.target, v)} onClose={() => setEditing(undefined)} />
+							footer={editing.form && <FormFields form={editing.form} values={draft} onChange={setDraft} />}
+							changed={!!editing.form && formAttrs(editing.form, draft).length > 0}
+							onCommit={v => onEditText(editing.target, v, editing.form && formAttrs(editing.form, draft))} onClose={() => setEditing(undefined)} />
 					)}
 				</div>
-				<div className="wse-overlay">
+				{/* 글자 편집 중에는 선택 테두리·손잡이·표시 점이 편집 상자를 덮지 않게 숨긴다(겹침 층이 페이지 위라 z-index로는 못 내림) */}
+				<div className="wse-overlay" hidden={!!editing}>
 					<Badges page={page} body={body} tree={tree} />
 					<Frame page={page} index={hover !== selected ? hover : undefined} kind="hover" tree={tree} />
 					{extra.map(i => <Frame key={i} page={page} index={i} kind="selected extra" tree={tree} />)}
@@ -162,11 +144,51 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 	);
 }
 
+/**
+ * 그리드 열 너비: 머리 칸 오른쪽 끝 5px을 끌면 그 <col>을 바로 넓히고, 놓으면 width 속성으로 반영(onResized).
+ * 기준은 화면 폭이 아니라 <col>의 width(=XML 값). autoFit(100%)이면 화면 폭이 비율로 늘어나 있어서
+ * 화면 폭을 넣으면 그 열만 몇 배로 커진다 → 마우스 이동량도 같은 비율(scale)로 나눠 XML 단위로 바꾼다
+ */
+function useColumnResize(onResized: (index: number, width: number) => void) {
+	const drag = useRef<{ index: number; col?: HTMLElement; table?: HTMLElement; tableWidth?: number; startX: number; width: number; scale: number }>(undefined);
+	const widthAt = (d: NonNullable<typeof drag.current>, x: number) => Math.max(20, Math.round(d.width + (x - d.startX) / d.scale));
+	return {
+		onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => {
+			const c = (e.target as Element).closest?.<HTMLTableCellElement>('[data-wse-resize]');
+			if (!c || e.button !== 0 || e.clientX < c.getBoundingClientRect().right - 5) { return; }
+			e.preventDefault();
+			e.stopPropagation();
+			const table = c.closest('table') ?? undefined;
+			// 칸 순서(cellIndex)는 병합·번호 칸 때문에 열 순서와 다를 수 있어 렌더러가 적어 둔 <col> 순서를 쓴다
+			const col = table?.querySelector('colgroup')?.children[Number(c.getAttribute('data-wse-resize'))] as HTMLElement | undefined;
+			const rendered = c.getBoundingClientRect().width;
+			const width = parseFloat(col?.style.width ?? '') || rendered;
+			const tableWidth = table?.style.width.endsWith('px') ? parseFloat(table.style.width) : undefined;
+			drag.current = { index: wseIndex(c), col, table, tableWidth, startX: e.clientX, width, scale: rendered / width || 1 };
+			try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 합성 이벤트(테스트) 등 활성 포인터가 없으면 캡처 없이 진행 */ }
+		},
+		onPointerMove: (e: ReactPointerEvent<HTMLDivElement>) => {
+			const d = drag.current;
+			if (d?.col) {
+				const w = widthAt(d, e.clientX);
+				d.col.style.width = `${w}px`;
+				if (d.table && d.tableWidth !== undefined) { d.table.style.width = `${d.tableWidth + w - d.width}px`; }
+			}
+		},
+		onPointerUp: (e: ReactPointerEvent<HTMLDivElement>) => {
+			const d = drag.current;
+			drag.current = undefined;
+			const width = d && widthAt(d, e.clientX);
+			if (d && width !== undefined && width !== Math.round(d.width)) { onResized(d.index, width); }
+		},
+	};
+}
+
 function Badges({ page, body, tree }: { page: RefObject<HTMLDivElement | null>; body: XmlNode; tree: ReactNode }) {
 	const marked = useMemo(() => {
 		const out: { index: number; bind: boolean; event: boolean }[] = [];
 		const walk = (n: XmlNode) => {
-			const bind = !!n.attrs.ref, event = Object.keys(n.attrs).some(k => k.startsWith('ev:'));
+			const bind = !!n.attrs.ref, event = Object.keys(n.attrs).some(k => k.startsWith(EV));
 			if (bind || event) { out.push({ index: n.index, bind, event }); }
 			n.children.forEach(walk);
 		};

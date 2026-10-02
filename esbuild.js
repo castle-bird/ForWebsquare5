@@ -57,13 +57,6 @@ const pureDepsPlugin = {
 	},
 };
 
-const prettierPlugin = {
-	name: 'prettier-split',
-	setup(build) {
-		build.onResolve({ filter: /^prettier$/ }, () => ({ path: './prettier.js', external: true }));
-	},
-};
-
 async function main() {
 	const common = {
 		bundle: true,
@@ -82,17 +75,6 @@ async function main() {
 			platform: 'node',
 			outfile: 'dist/extension.js',
 			external: ['vscode'],
-			plugins: [...common.plugins, prettierPlugin],
-		}),
-		esbuild.context({
-			...common,
-			entryPoints: ['prettier'],
-			format: 'cjs',
-			platform: 'node',
-			outfile: 'dist/prettier.js',
-			// ESM 패키지의 import.meta.url을 CJS에서도 쓸 수 있게
-			banner: { js: "const __importMetaUrl = require('url').pathToFileURL(__filename).href;" },
-			define: { 'import.meta.url': '__importMetaUrl' },
 		}),
 		esbuild.context({
 			...common,

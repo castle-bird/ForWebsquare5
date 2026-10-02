@@ -7,8 +7,10 @@ export interface TabHint { title?: string; dirty?: boolean }
 
 type Drop = { target: string; after: boolean };
 
-export function Tabs({ items, actions, position = 'top', keepMounted = [], active: activeProp, onActive, order, onReorder, hints, onTabMenu, onAdd, keys = {} }: {
-	items: Record<string, ReactNode>; actions?: Record<string, ReactNode>; position?: 'top' | 'bottom'; keepMounted?: string[];
+export function Tabs({ items, actions, start, position = 'top', keepMounted = [], active: activeProp, onActive, order, onReorder, hints, onTabMenu, onAdd, keys = {} }: {
+	items: Record<string, ReactNode>; actions?: Record<string, ReactNode>;
+	/** 탭 줄 맨 앞(탭 앞)에 둘 것 */
+	start?: ReactNode; position?: 'top' | 'bottom'; keepMounted?: string[];
 	active?: string; onActive?(name: string): void;
 	/** onReorder가 있으면 탭을 끌어 순서를 바꾼다 */
 	order?: readonly string[]; onReorder?(order: string[]): void;
@@ -57,6 +59,7 @@ export function Tabs({ items, actions, position = 'top', keepMounted = [], activ
 	};
 	const bar = (
 		<nav className="tab-bar" role="tablist">
+			{start}
 			<DndContext sensors={sensors} onDragMove={e => setDrop(dropOf(e))} onDragEnd={onDragEnd} onDragCancel={() => setDrop(undefined)}>
 				{names.map(n => <Tab key={n} name={n} active={n === active} hint={hints?.[n]} draggable={!!onReorder} buttons={buttons.current}
 					drop={drop?.target === n ? drop.after ? 'after' : 'before' : undefined}

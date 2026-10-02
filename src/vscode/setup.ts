@@ -26,7 +26,7 @@ const ITEMS: Record<SetupKey, { label: string; example: string; folder: boolean;
 	},
 };
 
-export function configuredPath(key: SetupKey, uri: vscode.Uri, webRoot?: string): string | undefined {
+function configuredPath(key: SetupKey, uri: vscode.Uri, webRoot?: string): string | undefined {
 	const value = vscode.workspace.getConfiguration('websquare5-editor', uri).get<string>(key)?.trim();
 	const base = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath ?? webRoot ?? path.dirname(uri.fsPath);
 	return value ? path.resolve(base, value) : undefined;
@@ -88,7 +88,7 @@ function referenceUri(): vscode.Uri | undefined {
 	return input instanceof vscode.TabInputCustom || input instanceof vscode.TabInputText ? input.uri : vscode.workspace.workspaceFolders?.[0]?.uri;
 }
 
-export async function updateSetupContext(): Promise<void> {
+async function updateSetupContext(): Promise<void> {
 	const uri = referenceUri();
 	const webRoot = uri && await findWebRoot(uri.fsPath);
 	await Promise.all((Object.keys(ITEMS) as SetupKey[]).map(async key => vscode.commands.executeCommand(

@@ -1,6 +1,7 @@
 // 편집 결과(codeAck)를 받기 전 입력은 모아 뒀다가 한 번에 보낸다 (빠르게 쳐도 버전이 어긋나지 않게)
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { EditorView, basicSetup } from 'codemirror';
+import { search } from '@codemirror/search';
 import { ChangeSet, Compartment, EditorSelection, EditorState, Prec, Transaction, countColumn, type Extension, type Text } from '@codemirror/state';
 import { hoverTooltip, keymap, type Command, type Tooltip } from '@codemirror/view';
 import { indentLess, indentMore } from '@codemirror/commands';
@@ -11,7 +12,8 @@ import { vsCodeLight } from '@fsegurai/codemirror-theme-vscode-light';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { diff } from '@codemirror/merge';
 import type { CodeChange, CodeTarget, ToExtension, ToWebview } from '../../core/protocol';
-import { lintFor, type LintMode } from './lint';
+import type { LintSource } from '@codemirror/lint';
+import { fromRemote, lintFor, remoteProblemsChanged, type LintMode } from './lint';
 import { THEMES } from './themes';
 import { baseEffect, gitChanges } from './changes';
 import { remoteCompletion } from './remoteCompletion';
@@ -66,7 +68,12 @@ const keys = Prec.high(keymap.of([{ key: 'Tab', run: acceptCompletion }, { key: 
 // 들여쓰기 단위는 파일과 상관없이 공백 4칸(포맷과 같음, CodeMirror 기본은 2칸). Tab·자동 들여쓰기·들여쓰기 가이드 간격이 이 단위를 따른다
 const indent = indentUnit.of('    ');
 
+// Ctrl+F 찾기·바꾸기 창은 위에(VS Code처럼). 기본은 아래
+const searchTop = search({ top: true });
+
 const completion = autocompletion({
+	// 기본 100ms 기다림 없이 VS Code처럼 바로(연결 탭은 결과가 완전하면 이어 치는 글자를 다시 묻지 않고 거른다)
+	activateOnTypingDelay: 0,
 	positionInfo(view, list, _option, info, space) {
 		const spaceLeft = list.left - space.left, spaceRight = space.right - list.right;
 		const left = spaceRight < Math.min(info.right - info.left, spaceLeft);
@@ -97,6 +104,9 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 	const sync = useRef<{ base: number; inFlight: boolean; remote: boolean; conflict: boolean; queued?: [ChangeSet, Text]; formatting?: Text; formatAfter?: boolean }>(
 		{ base: version, inFlight: false, remote: false, conflict: false });
 	const [conflict, setConflict] = useState(false);
+	/** VS Code가 낸 문제(연결 탭)와 그 연결 파일 버전 */
+	const diagnostics = useEditorStore(s => s.diagnostics[target]);
+	const remoteProblems = useRef(diagnostics);
 	const codeTheme = useEditorStore(s => s.codeTheme);
 	const gitBase = useEditorStore(s => s.gitBases[target]);
 	const wordWrap = useEditorStore(s => s.codeOptions.wordWrap);
@@ -153,11 +163,19 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 		const autocomplete = notInComment(remote ? remoteCompletion(target, post, synced, local) : local);
 		// 언어와 그 자동완성은 함께 바꾼다(SQL 방언 설정이 바뀌면 언어가 새로 온다)
 		languageOf.current = l => [l, l.language.data.of({ autocomplete })];
+		// 연결 탭 문법 검사 = VS Code가 그 파일에 낸 문제. 보낸 편집이 반영돼 같은 버전의 결과가 올 때까지 잠깐 기다리고(최대 2초), 안 오면 마지막 결과
+		const remoteLint: LintSource | undefined = remote ? async view => {
+			const s = sync.current;
+			for (let i = 0; i < 40 && (s.inFlight || s.queued || remoteProblems.current?.version !== s.base); i++) {
+				await new Promise(r => setTimeout(r, 50));
+			}
+			return remoteProblems.current ? fromRemote(view.state.doc, remoteProblems.current.items) : [];
+		} : undefined;
 		const editor = new EditorView({
 			parent: host.current!,
 			doc: text,
 			extensions: [
-				basicSetup, keys, completion, indent, indentGuides, lintFor(lint), gitChanges,
+				basicSetup, searchTop, keys, completion, indent, indentGuides, lintFor(lint, remoteLint), gitChanges,
 				langConf.of(languageOf.current(lang)),
 				wrapConf.of(wordWrap ? EditorView.lineWrapping : []),
 				hoverTooltip((view, pos, side) => hoverSource.current?.(view, pos, side) ?? null),
@@ -285,6 +303,10 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 	useEffect(() => {
 		view.current?.dispatch({ effects: baseEffect(gitBase) });
 	}, [gitBase]);
+	useEffect(() => {
+		remoteProblems.current = diagnostics;
+		view.current?.dispatch({ effects: remoteProblemsChanged.of(null) });
+	}, [diagnostics]);
 	useEffect(() => {
 		if (themeId.current !== codeTheme) {
 			themeId.current = codeTheme;

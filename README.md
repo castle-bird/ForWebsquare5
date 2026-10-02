@@ -33,7 +33,8 @@ Eclipse + WebSquare 환경의 사용 흐름을 참고해 VS Code 확장으로 �
 
 - **Design 탭**: 프로젝트 CSS를 적용한 화면 미리보기, 컴포넌트 선택·크기 조절, 복사·붙여넣기·삭제, 그리드 열 너비 조절
 - **Property / Event 패널**: 속성·이벤트 검색과 편집, 여러 컴포넌트 동시 편집
-- **Outline / Data 패널**: 컴포넌트 트리, DataCollection·Submission 트리, 드래그 앤 드롭 이동·바인딩
+- **Outline / Data 패널**: 컴포넌트 트리, DataCollection·Submission 트리, 드래그 앤 드롭 이동·바인딩, F2로 id 바꾸기
+- **더블클릭 편집**(캔버스·Outline): 글자 바로 고치기(버튼·textbox·output 등), 그리드 칸 속성, 선택 항목(selectbox·checkcombobox·multiselect·radio·checkbox), DataList·DataMap·Submission, multiupload 파라미터
 - **팔레트**: Activity Bar의 WebSquare5 사이드바에서 컴포넌트를 검색해 화면에 삽입
 - **Event → Script**: 이벤트 값을 더블클릭하면 `scwin.{id}_{이벤트}` 함수 뼈대를 만들거나 해당 함수로 이동
 
@@ -46,12 +47,12 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 ![Source 탭](images/sourceTab.png)
 
 - XML·WebSquare API·공통 JS 자동완성과 마우스 오버 설명
-- 문법 오류 표시, 포맷(Prettier), 검색, 줄바꿈(VS Code 설정을 따름)
+- 문법 오류 표시, 포맷(VS Code에 설정한 포매터, 없으면 VS Code 내장), 검색, 줄바꿈(VS Code 설정을 따름)
 - 코드 편집기 테마 선택, Git 변경 줄 표시
 
 ### 연결 파일 (Controller · Service · Mapper · MyBatis)
 
-화면 아래 탭에서 Java·XML·SQL 등 연결 파일을 열어 편집합니다. 탭 목록과 순서는 직접 바꿀 수 있습니다.
+화면 탭에서 Java·XML·SQL 등 연결 파일을 열어 편집합니다. 탭 목록과 순서는 직접 바꿀 수 있고, 탭 줄 맨 앞 화살표로 탭 줄을 위·아래로 옮길 수 있습니다(기본 위).
 
 ![연결 파일 탭](images/java1.png)
 
@@ -81,7 +82,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 [Releases](https://github.com/castle-bird/ForWebsquare5/releases)에서 `.vsix`를 받아 설치합니다.
 
 ```bash
-code --install-extension websquare5-editor-0.1.0.vsix
+code --install-extension websquare5-editor-0.2.0.vsix
 ```
 
 ### 설정

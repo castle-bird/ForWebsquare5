@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { childTags, readWebConfig } from './config';
 import { exists, findDirs } from './paths';
 
-export interface WpackConfig {
+interface WpackConfig {
 	destRoot: string;
 	scopeCommon?: string;
 }
@@ -23,7 +23,7 @@ export async function readWpackConfig(webRoot: string): Promise<WpackConfig | un
 	};
 }
 
-export const WPACK_NAME = 'standalone_wpack-win.exe';
+const WPACK_NAME = 'standalone_wpack-win.exe';
 
 export async function findWpack(eclipseRoot: string): Promise<string | undefined> {
 	const dirs = await findDirs(eclipseRoot, (dir, names) =>

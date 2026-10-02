@@ -65,11 +65,18 @@ export function addGridPart(text: string, root: XmlNode, grid: XmlNode, part: Gr
 	return { start: at, end: at, replacement: `${g.eol}${i1}${xml}` };
 }
 
-export interface ColumnSpan { start: number; span: number }
+/** 셀이 차지하는 칸: 시작 열·가로 칸 수, 시작 행(구역 안)·세로 칸 수 */
+interface ColumnSpan { start: number; span: number; row: number; down: number }
 
-export function columnLayout(sections: XmlNode[][], columnsOf: (row: XmlNode) => XmlNode[]) {
+const attrSpans = (col: XmlNode) => ({ across: Number(col.attrs.colSpan), down: Number(col.attrs.rowSpan) });
+
+/**
+ * 표 모양 배치: 가로·세로로 합친 셀(colSpan·rowSpan)이 덮는 자리에는 셀 요소가 없다. 구역(sections)마다 행 목록.
+ * spanOf: 셀이 합친 칸 수를 읽는 방법(기본은 gridView 컬럼의 colSpan·rowSpan 속성)
+ */
+export function columnLayout(sections: XmlNode[][], columnsOf: (row: XmlNode) => XmlNode[], spanOf: (cell: XmlNode) => { across: number; down: number } = attrSpans) {
 	const cells = new Map<XmlNode, ColumnSpan>();
-	const covered = new Map<XmlNode, ColumnSpan[]>();
+	const covered = new Map<XmlNode, { start: number; span: number }[]>();
 	for (const sectionRows of sections) {
 		const taken: Set<number>[] = sectionRows.map(() => new Set());
 		sectionRows.forEach(row => covered.set(row, []));
@@ -77,8 +84,9 @@ export function columnLayout(sections: XmlNode[][], columnsOf: (row: XmlNode) =>
 			let pos = 0;
 			for (const col of columnsOf(row)) {
 				while (taken[i].has(pos)) { pos++; }
-				const span = Math.max(1, Number(col.attrs.colSpan) || 1), down = Math.max(1, Number(col.attrs.rowSpan) || 1);
-				cells.set(col, { start: pos, span });
+				const { across, down: rows } = spanOf(col);
+				const span = Math.max(1, across || 1), down = Math.max(1, rows || 1);
+				cells.set(col, { start: pos, span, row: i, down: Math.min(down, sectionRows.length - i) });
 				for (let r = i; r < Math.min(i + down, sectionRows.length); r++) {
 					for (let c = pos; c < pos + span; c++) { taken[r].add(c); }
 					if (r > i) { covered.get(sectionRows[r])!.push({ start: pos, span }); }

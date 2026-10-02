@@ -31,7 +31,7 @@ export function registerAutoTabs(context: vscode.ExtensionContext, isLinked: (ur
 	}));
 }
 
-export const isAutoTab = (uri: vscode.Uri) => autoTabs.has(uri.toString());
+const isAutoTab = (uri: vscode.Uri) => autoTabs.has(uri.toString());
 
 /** 사용자가 VS Code 탭으로 열어 둔 파일인지(배경 탭은 빼고) */
 export const isOpenByUser = (uri: vscode.Uri) => !isAutoTab(uri) && tabsOf(uri.toString()).length > 0;

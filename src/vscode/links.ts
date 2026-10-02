@@ -6,7 +6,7 @@ import { errorMessage } from '../core/errors';
 import { serial } from '../project/paths';
 import type { CodeChange, RemoteCompletions, ToExtension, ToWebview } from '../core/protocol';
 import { closeAutoTabs, isOpenByUser, registerAutoTabs } from './autoTabs';
-import { remoteCompletions } from './completion';
+import { RESOLVE, remoteCompletions } from './completion';
 import { applyCodeEdit, formatCode } from './documentEdit';
 import { stagedText } from './gitBase';
 import { xmlSchemaOf } from './xmlSchema';
@@ -97,6 +97,11 @@ async function settleChanges(uris: vscode.Uri[]): Promise<void> {
 	}
 }
 
+const SEVERITY = {
+	[vscode.DiagnosticSeverity.Error]: 'error', [vscode.DiagnosticSeverity.Warning]: 'warning',
+	[vscode.DiagnosticSeverity.Information]: 'info', [vscode.DiagnosticSeverity.Hint]: 'hint',
+} as const;
+
 interface Link {
 	tab: LinkTab;
 	uri: vscode.Uri;
@@ -128,6 +133,8 @@ export class LinkedFiles {
 			// 내용이 그대로여도 저장 안 함 표시가 바뀌면 불린다
 			vscode.workspace.onDidChangeTextDocument(e => this.schedule(this.kindOf(e.document.uri))),
 			vscode.workspace.onDidSaveTextDocument(d => this.schedule(this.kindOf(d.uri), 0)),
+			// 언어 확장(Java 언어 서버 등)이 낸 문제를 연결 탭에도 그대로
+			vscode.languages.onDidChangeDiagnostics(e => e.uris.forEach(uri => { const kind = this.kindOf(uri); if (kind) { void this.sendDiagnostics(kind); } })),
 			// 연결할 수 있는 확장자가 바뀌면 웹뷰 안내·검색 목록을 다시
 			vscode.workspace.onDidChangeConfiguration(e => e.affectsConfiguration(LINK_EXTS_SETTING) && void this.reload()),
 		];
@@ -153,10 +160,13 @@ export class LinkedFiles {
 			case 'removeTab': run(removeLinkTab(msg.kind)); return true;
 			case 'findFiles': run(this.findFiles(msg.kind)); return true;
 			case 'complete': {
-				// 읽기만 하므로 편집 대기열에 넣지 않는다(느린 언어 서버가 입력 반영을 막지 않게). 버전이 다르면 결과 없음
+				// 읽기만 하므로 편집 대기열에 넣지 않는다(느린 언어 서버가 입력 반영을 막지 않게). 버전이 다르면 결과 없음.
+				// 목록은 풀지 않고 바로(빠름). 앞쪽 항목을 푼 결과(자동 import·설명, Java는 1초쯤)는 같은 때 물어 따로 보낸다
 				const id = linkIdOf(msg.target);
-				const result = id === undefined ? Promise.resolve(undefined) : this.complete(id, msg.version, msg.line, msg.ch, msg.trigger);
-				void result.catch(() => undefined).then(r => this.post({ type: 'completions', id: msg.id, ...r }));
+				const ask = (resolve?: number) => id === undefined ? Promise.resolve(undefined) : this.complete(id, msg.version, msg.line, msg.ch, msg.trigger, resolve).catch(() => undefined);
+				const list = ask(0), full = ask();
+				void list.then(r => this.post({ type: 'completions', id: msg.id, ...r }));
+				void full.then(r => this.post({ type: 'completionDetails', id: msg.id, items: r?.items.slice(0, RESOLVE).map(({ label, info, edits }) => ({ label, info, edits })) ?? [] }));
 				return true;
 			}
 			default: return false;
@@ -323,6 +333,20 @@ export class LinkedFiles {
 		const text = doc.getText();
 		await this.post({ type: 'linked', kind, path: shown, text, version: this.versionOf(link, doc), dirty: doc.isDirty });
 		await this.sendSchema(kind, link, text);
+		await this.sendDiagnostics(kind);
+	}
+
+	/** VS Code가 그 파일에 낸 문제(문제 탭과 같은 것)를 지금 문서 버전과 함께 */
+	private async sendDiagnostics(kind: string): Promise<void> {
+		const link = this.links.get(kind), doc = link?.doc;
+		if (!link || !doc || doc.isClosed) {
+			return;
+		}
+		const items = vscode.languages.getDiagnostics(link.uri).map(d => ({
+			fromLine: d.range.start.line, fromCh: d.range.start.character, toLine: d.range.end.line, toCh: d.range.end.character,
+			severity: SEVERITY[d.severity], message: d.message, source: d.source,
+		}));
+		await this.post({ type: 'diagnostics', target: linkTarget(kind), version: doc.version + link.offset, items });
 	}
 
 	/** XML이면 DOCTYPE의 DTD로 자동완성 스키마(DOCTYPE이 바뀔 때만). 못 찾으면 elements 없이 보내 웹뷰가 기본 목록을 쓴다 */
@@ -362,9 +386,9 @@ export class LinkedFiles {
 	}
 
 	/** VS Code 언어 확장의 자동완성 */
-	async complete(kind: string, version: number, line: number, ch: number, trigger?: string): Promise<RemoteCompletions | undefined> {
+	async complete(kind: string, version: number, line: number, ch: number, trigger?: string, resolve?: number): Promise<RemoteCompletions | undefined> {
 		const doc = await this.docAt(kind, version);
-		return doc && remoteCompletions(doc, line, ch, trigger);
+		return doc && remoteCompletions(doc, line, ch, trigger, resolve);
 	}
 
 	/**

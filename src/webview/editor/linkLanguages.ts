@@ -1,4 +1,4 @@
-// 연결 탭 편집기: 연결한 파일의 확장자로 언어·기본 자동완성(VS Code 언어 확장 결과가 없을 때)·문법 검사를 고른다
+// 연결 탭 편집기: 연결한 파일의 확장자로 언어·기본 자동완성(VS Code 언어 확장 결과가 없을 때)을 고른다. 문법 검사는 VS Code가 낸 문제를 그대로 쓰고, XML만 직접 검사한다
 import { autoCloseTags as htmlAutoCloseTags, htmlCompletionSource, htmlLanguage } from '@codemirror/lang-html';
 import { cssCompletionSource, cssLanguage } from '@codemirror/lang-css';
 import { javascriptLanguage, localCompletionSource, snippets } from '@codemirror/lang-javascript';
@@ -23,7 +23,7 @@ const LANGUAGES: Record<string, LinkLanguage> = {
 	xml: { lang: xmlWithSql('standard'), complete: mybatisCompletions, lint: 'xml' },
 	html: { lang: new LanguageSupport(htmlLanguage, [htmlAutoCloseTags, skipExistingCloseTag]), complete: htmlCompletionSource },
 	css: { lang: new LanguageSupport(cssLanguage), complete: cssCompletionSource },
-	js: { lang: new LanguageSupport(javascriptLanguage, docComments('js')), complete: context => localCompletionSource(context) ?? JS_SNIPPETS(context), lint: 'jsFile' },
+	js: { lang: new LanguageSupport(javascriptLanguage, docComments('js')), complete: context => localCompletionSource(context) ?? JS_SNIPPETS(context) },
 };
 LANGUAGES.htm = LANGUAGES.html;
 

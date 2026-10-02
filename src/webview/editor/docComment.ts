@@ -29,7 +29,7 @@ function splitTop(text: string): string[] {
 }
 
 /** 주석 아래 선언(다음 `{`·`;`까지)에서 @param·@return 줄. 함수가 아니면 없음 */
-export function docTags(after: string, lang: Lang): string[] {
+function docTags(after: string, lang: Lang): string[] {
 	// 어노테이션(@RequestMapping("/a"))의 괄호를 함수 괄호로 읽지 않게 지운다
 	const head = after.replace(/@[\w.]+(\s*\((?:[^()]|\([^()]*\))*\))?/g, ' ');
 	// 괄호 밖의 `{`·`;`까지(매개변수 안 구조 분해 `{ id }`에서 자르지 않게)
@@ -59,7 +59,7 @@ export function docTags(after: string, lang: Lang): string[] {
 const COMMENT = /Comment/;
 
 /** pos가 주석(블록·줄) 안인지 */
-export function inComment(state: EditorState, pos: number): boolean {
+function inComment(state: EditorState, pos: number): boolean {
 	const node = syntaxTree(state).resolveInner(pos, -1);
 	return COMMENT.test(node.name) && pos > node.from;
 }
