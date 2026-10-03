@@ -3,9 +3,9 @@ import type { DataField, DataKind } from './data';
 import type { SubmissionFields } from './submission';
 import type { GridBindMode, GridExtras, GridPart } from './grid';
 import type { ChoicesFields } from './choices';
-import type { DropPosition } from './paste';
+import type { InsertPosition, DropPosition } from './paste';
 import type { LinkTab, LinkTarget } from './links';
-import type { CodeThemeId } from './codeTheme';
+import type { CodeThemeState, ThemeOverlay } from './codeTheme';
 import type { CodeOptions } from './codeOptions';
 
 export type ToWebview =
@@ -21,16 +21,19 @@ export type ToWebview =
 	| { type: 'modules'; files: { path: string; text: string }[]; error?: string }
 	| LinkState
 	| { type: 'tabOrder'; order: string[] }
+	| { type: 'paletteFavorites'; keys: string[] }
 	| { type: 'tabPosition'; position: TabPosition }
 	| { type: 'linkTabs'; tabs: LinkTab[]; exts: string[]; select?: string } // select: 이 탭으로 넘어간다(방금 추가한 탭). exts: 연결할 수 있는 확장자
 	| { type: 'xmlSchema'; kind: string; elements?: XmlElementSpec[]; source?: string } // 연결한 XML의 DTD 스키마(없으면 기본 MyBatis 목록)
-	| { type: 'codeTheme'; theme: CodeThemeId }
+	| ({ type: 'codeTheme' } & CodeThemeState)
 	| ({ type: 'codeOptions' } & CodeOptions) // 줄바꿈(VS Code editor.wordWrap)·SQL 방언(설정)
 	| { type: 'diagnostics'; target: CodeTarget; version: number; items: RemoteDiagnostic[] } // VS Code가 그 파일에 낸 문제(문제 탭과 같은 것). version: 연결 파일 버전
 	| { type: 'gitBase'; target: CodeTarget; text?: string } // 변경 표시 기준(Git 스테이지 내용). 없으면 표시 안 함
 	| ({ type: 'completions'; id: number } & Partial<RemoteCompletions>)
 	| { type: 'completionDetails'; id: number; items: RemoteCompletionDetail[] } // 같은 요청의 앞쪽 항목을 푼 결과(늦게 옴)
-	| { type: 'files'; kind: string; files: string[] }; // 연결할 수 있는 파일(작업 폴더 기준 경로)
+	| { type: 'files'; kind: string; files: string[] } // 연결할 수 있는 파일(작업 폴더 기준 경로)
+	| { type: 'linkProblem'; kind: string; message: string } // 연결하지 못한 이유(알림을 꺼 둬도 경로 입력 화면에 보인다)
+	| { type: 'toast'; message: string }; // 편집기 오른쪽 아래 잠깐 뜨는 알림(VS Code 알림을 꺼 둬도 보임)
 
 /** Design·Script·Source·연결 탭 줄 위치 */
 export type TabPosition = 'top' | 'bottom';
@@ -97,10 +100,16 @@ export type ScriptApi = Record<string, ScriptApiMethod[]>;
 export type CodeTarget = 'source' | 'script' | LinkTarget;
 export interface CodeChange { fromLine: number; fromCh: number; toLine: number; toCh: number; insert: string }
 
+/** 탭 줄 톱니바퀴 메뉴 항목(확장이 정해진 VS Code 명령으로 바꿔 실행) */
+export type SettingsMenuItem = 'codeTheme' | 'importCodeTheme' | 'themeColors' | 'sqlDialect' | 'setup' | 'settings';
+
 export type ToExtension =
 	| { type: 'ready' }
 	| { type: 'warn'; message: string }
-	| { type: 'selection'; version: number; index?: number }
+	| { type: 'settingsMenu'; item: SettingsMenuItem }
+	// 테마 색 덮어쓰기 팝업의 확인: 지금 테마에 대한 공통·이 테마 층
+	| { type: 'saveThemeCustomizations'; common?: ThemeOverlay; own?: ThemeOverlay }
+	| { type: 'insertComponent'; version: number; index?: number; component: Pick<ComponentDef, 'id' | 'ns' | 'realType'>; position?: InsertPosition }
 	| { type: 'setCode'; target: CodeTarget; version: number; changes: CodeChange[] }
 	| { type: 'format'; target: CodeTarget; version: number }
 	// more: 함께 바꿀 다른 노드(여러 개 선택)와 그 노드에 넣을 값
@@ -129,6 +138,8 @@ export type ToExtension =
 	| { type: 'removeTab'; kind: string }
 	| { type: 'renameTab'; kind: string }
 	| { type: 'setTabOrder'; order: string[] }
+	| { type: 'reorderPaletteFavorites'; keys: string[] }
+	| { type: 'setPaletteFavorite'; component: Pick<ComponentDef, 'id' | 'ns' | 'realType'>; favorite: boolean }
 	| { type: 'setTabPosition'; position: TabPosition };
 
 interface PropertyDef { name: string; category: string; order: number; description: string; options?: string[] }

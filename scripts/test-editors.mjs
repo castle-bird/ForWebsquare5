@@ -63,13 +63,14 @@ const assets = new Map(bundle.outputFiles.map(f => ['/' + path.basename(f.path),
 const html = `<!doctype html><html><head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-test'; style-src 'self' 'nonce-test'; font-src 'self'; img-src 'self' data:;">
 <link rel="stylesheet" href="/editor.css">
-<style nonce="test">body { --vscode-editor-font-family: Consolas, monospace; --vscode-editor-font-size:16px; --vscode-font-size:14px; --vscode-editor-selectionBackground:#264f78; --vscode-editor-lineHighlightBackground:#555555; --vscode-editorIndentGuide-background1:#404040; --vscode-editorIndentGuide-activeBackground1:#707070; --vscode-editor-background:#222; --vscode-sideBar-background:#333; --vscode-foreground:#ddd; --vscode-focusBorder:#007fd4; --vscode-symbolIcon-classForeground:#ee9d28; --vscode-symbolIcon-methodForeground:#b180d7; --vscode-button-foreground:#fff; --vscode-button-background:#0078d4; --vscode-input-background:#313131; --vscode-input-border:#3c3c3c; --vscode-input-foreground:#cccccc; --vscode-input-placeholderForeground:#989898; --vscode-panel-border:#2b2b2b; --vscode-descriptionForeground:#9d9d9d; --vscode-list-hoverBackground:#2a2d2e; --vscode-list-activeSelectionBackground:#04395e; --vscode-list-activeSelectionForeground:#ffffff; --vscode-dropdown-background:#313131; --vscode-dropdown-border:#3c3c3c; --vscode-widget-shadow:#0000005c; --vscode-checkbox-background:#313131; --vscode-checkbox-border:#3c3c3c; --vscode-toolbar-hoverBackground:#5a5d5e50; --vscode-badge-background:#616161; --vscode-badge-foreground:#f8f8f8; --vscode-textLink-foreground:#4daafc; } ::-webkit-scrollbar { width: 10px; height: 10px; }</style>
+<style nonce="test">body { --vscode-editor-font-family: Consolas, monospace; --vscode-editor-font-size:16px; --vscode-font-size:14px; --vscode-editor-selectionBackground:#264f78; --vscode-editor-lineHighlightBackground:#555555; --vscode-editorIndentGuide-background1:#404040; --vscode-editorIndentGuide-activeBackground1:#707070; --vscode-editor-background:#222; --vscode-sideBar-background:#333; --vscode-foreground:#ddd; --vscode-charts-yellow:#cca700; --vscode-focusBorder:#007fd4; --vscode-symbolIcon-classForeground:#ee9d28; --vscode-symbolIcon-methodForeground:#b180d7; --vscode-button-foreground:#fff; --vscode-button-background:#0078d4; --vscode-input-background:#313131; --vscode-input-border:#3c3c3c; --vscode-input-foreground:#cccccc; --vscode-input-placeholderForeground:#989898; --vscode-panel-border:#2b2b2b; --vscode-descriptionForeground:#9d9d9d; --vscode-list-hoverBackground:#2a2d2e; --vscode-list-activeSelectionBackground:#04395e; --vscode-list-activeSelectionForeground:#ffffff; --vscode-dropdown-background:#313131; --vscode-dropdown-border:#3c3c3c; --vscode-widget-shadow:#0000005c; --vscode-checkbox-background:#313131; --vscode-checkbox-border:#3c3c3c; --vscode-toolbar-hoverBackground:#5a5d5e50; --vscode-badge-background:#616161; --vscode-badge-foreground:#f8f8f8; --vscode-textLink-foreground:#4daafc; } ::-webkit-scrollbar { width: 10px; height: 10px; }</style>
 </head><body class="vscode-dark"><div id="root"></div>
 <script nonce="test">window.leakedUndo=0; window.leakedSave=0; window.addEventListener('keydown',e=>{if(e.ctrlKey&&/^[zy]$/i.test(e.key)){window.leakedUndo++;} if(e.ctrlKey&&e.key==='s'){window.leakedSave++;}}); const versions={source:1,script:1}; window.addEventListener('message',e=>{if(e.data&&e.data.type==='document'){versions.source=versions.script=e.data.version;} if(e.data&&e.data.type==='linked'&&e.data.version){versions['link:'+e.data.kind]=e.data.version;}}); window.sent=[]; window.acquireVsCodeApi=()=>({postMessage(msg){msg=JSON.parse(JSON.stringify(msg));window.sent.push(msg);if(msg.type==='setCode'){const ok=msg.version===versions[msg.target]; if(ok){versions[msg.target]++;} setTimeout(()=>window.send({type:'codeAck',target:msg.target,ok,version:versions[msg.target]}),5);}else if(msg.type==='findFiles'){if(window.mockFiles){setTimeout(()=>window.send({type:'files',kind:msg.kind,files:window.mockFiles}),5);}}else if(msg.type==='complete'){setTimeout(()=>window.send({type:'completions',id:msg.id,...(window.remoteItems?window.remoteItems(msg):{items:[]})}),5);if(window.remoteDetails){setTimeout(()=>window.send({type:'completionDetails',id:msg.id,items:window.remoteDetails(msg)}),300);}}else if(msg.type==='format'){setTimeout(()=>window.send({type:'formatted',target:msg.target,text:window.formatResult??'formatted();'}),5);}}});</script>
 <script nonce="test" src="/editor.js"></script></body></html>`;
 const server = createServer((req, res) => {
-	const asset = assets.get(req.url);
-	res.setHeader('Content-Type', req.url.endsWith('.css') ? 'text/css' : req.url.endsWith('.js') ? 'text/javascript' : req.url.endsWith('.ttf') ? 'font/ttf' : 'text/html');
+	const pathname = new URL(req.url, 'http://localhost').pathname;
+	const asset = assets.get(pathname);
+	res.setHeader('Content-Type', pathname.endsWith('.css') ? 'text/css' : pathname.endsWith('.js') ? 'text/javascript' : pathname.endsWith('.ttf') ? 'font/ttf' : 'text/html');
 	res.end(asset ?? html);
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -88,6 +89,19 @@ try {
 	assert.equal(await page.$$eval('.pane .tree-row', rows => rows.length), 1, 'Outline 초기에는 루트만 표시');
 	assert.equal(await page.$eval('.pane .tree-row', row => row.getAttribute('aria-expanded')), 'false');
 	await page.evaluate(() => window.tab('Data', '.pane').click());
+	// 테마 색 덮어쓰기 팝업: 코드 편집기가 한 번도 안 뜬 처음 Design 탭에서 열어도 미리 보기가 칠해진다
+	// (CodeMirror가 넣는 <style>에 CSP nonce가 없으면 막혀서, Script 탭이 먼저 넣어 줘야만 칠해졌다)
+	{
+		assert.equal(await page.$$eval('.canvas-frame .tab-body .code-editor', e => e.length), 0, '아직 코드 편집기 없음');
+		await page.click('.canvas-frame .tab-settings');
+		await page.evaluate(() => [...document.querySelectorAll('.context-menu [role="menuitem"]')].find(b => b.textContent === '테마 색 덮어쓰기…').click());
+		await page.waitForSelector('.theme-colors-editor[open]');
+		const [keyword, fg] = await page.$eval('.theme-colors-editor .theme-preview', p => [
+			getComputedStyle([...p.querySelectorAll('.cm-line span')].find(s => s.textContent === 'return')).color, getComputedStyle(p.querySelector('.cm-content')).color]);
+		assert.notEqual(keyword, fg, `처음 Design 탭에서도 문법 색: ${keyword}`);
+		await page.evaluate(() => [...document.querySelectorAll('.theme-colors-editor .data-editor-actions button')].find(b => b.textContent === '닫기').click());
+		await page.waitForFunction(() => !document.querySelector('.theme-colors-editor'));
+	}
 	assert.equal(await page.$$eval('.pane .tree-row', rows => rows.length), 2, 'Data 초기에는 DataCollection·Submission 루트만 표시');
 	// 둘 다 이 픽스처에서는 자식이 없는 루트라 aria-expanded 자체가 안 붙는다 (children 있는 Outline 쪽은 위에서 이미 확인)
 	assert.equal(await page.$eval('.pane .tree-row', row => row.getAttribute('aria-expanded')), null);
@@ -234,12 +248,12 @@ try {
 		});
 		await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row')].some(r => r.textContent.includes('m_bucd_from'))
 			|| (document.querySelector('.pane .tree-row[aria-expanded="false"] .chevron')?.click(), false));
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('[data-tag="w2:input"]'));
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('[data-tag="w2:input"]'));
 		await page.evaluate(() => {
 			const dt = new DataTransfer();
 			const row = [...document.querySelectorAll('.pane .tree-row')].find(r => r.textContent.includes('m_bucd_from'));
 			row.dispatchEvent(new DragEvent('dragstart', { bubbles: true, composed: true, dataTransfer: dt }));
-			const input = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('[data-tag="w2:input"]');
+			const input = document.querySelector('.canvas-host').shadowRoot.querySelector('[data-tag="w2:input"]');
 			input.dispatchEvent(new DragEvent('dragover', { bubbles: true, composed: true, cancelable: true, dataTransfer: dt }));
 			input.dispatchEvent(new DragEvent('drop', { bubbles: true, composed: true, cancelable: true, dataTransfer: dt }));
 		});
@@ -251,8 +265,8 @@ try {
 			const text = '<html xmlns:w2="urn:test" xmlns:ev="http://www.w3.org/2001/xml-events"><body><w2:input id="a" ref="data:m.k" ev:onclick="scwin.a_onclick"/><w2:input id="b" ev:onblur="scwin.b"/><w2:input id="c"/></body></html>';
 			window.send({ type: 'document', version: 70, text, root: window.parseXml(text), script: { text: '' } });
 		});
-		const badges = () => page.evaluate(() => [...document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.wse-badges')].map(b => [...b.children].map(s => s.className).join(',')));
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.wse-badges').length === 2);
+		const badges = () => page.evaluate(() => [...document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-badges')].map(b => [...b.children].map(s => s.className).join(',')));
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-badges').length === 2);
 		assert.deepEqual(await badges(), ['bind,event', 'event']);
 		console.log('Design: ref·event 표시 점 passed');
 		// gridView 바인딩: dataList를 gridView에 떨구면 옵션 팝업 → 확인 시 bindGrid 요청
@@ -263,12 +277,12 @@ try {
 		});
 		await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row')].some(r => r.textContent.includes('dl1'))
 			|| (document.querySelector('.pane .tree-row[aria-expanded="false"] .chevron')?.click(), false));
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('[data-tag="w2:gridView"]'));
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('[data-tag="w2:gridView"]'));
 		await page.evaluate(() => {
 			const dt = new DataTransfer();
 			const row = [...document.querySelectorAll('.pane .tree-row')].find(r => r.textContent.includes('dl1'));
 			row.dispatchEvent(new DragEvent('dragstart', { bubbles: true, composed: true, dataTransfer: dt }));
-			const grid = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('[data-tag="w2:gridView"]');
+			const grid = document.querySelector('.canvas-host').shadowRoot.querySelector('[data-tag="w2:gridView"]');
 			grid.dispatchEvent(new DragEvent('dragover', { bubbles: true, composed: true, cancelable: true, dataTransfer: dt }));
 			grid.dispatchEvent(new DragEvent('drop', { bubbles: true, composed: true, cancelable: true, dataTransfer: dt }));
 		});
@@ -289,10 +303,10 @@ try {
 			root.children[0].children[0].def = 2;
 			window.send({ type: 'document', version: 90, text, root, script: { text: '' } });
 		});
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('.w2grid .gridFooterTableDefault'));
-		assert.match(await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.w2grid').textContent), /소계.*합계/);
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('.w2grid .gridFooterTableDefault'));
+		assert.match(await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid').textContent), /소계.*합계/);
 		await page.evaluate(() => {
-			const cell = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.w2grid tbody td');
+			const cell = document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid tbody td');
 			cell.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, clientX: 50, clientY: 50 }));
 		});
 		await page.waitForSelector('.context-menu');
@@ -304,7 +318,7 @@ try {
 		assert.equal(addPart?.at, 5, '우클릭한 본문 컬럼 기준');
 		// 열 너비 끌기: 기준 칸(gBody 한 줄) 오른쪽 가장자리를 30px 끌면 그 컬럼 width
 		await page.evaluate(() => {
-			const td = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('[data-wse-resize]');
+			const td = document.querySelector('.canvas-host').shadowRoot.querySelector('[data-wse-resize]');
 			const r = td.getBoundingClientRect();
 			const at = (type, x) => td.dispatchEvent(new PointerEvent(type, { bubbles: true, composed: true, button: 0, pointerId: 1, clientX: x, clientY: r.top + 5 }));
 			at('pointerdown', r.right - 2); at('pointermove', r.right + 28); at('pointerup', r.right + 28);
@@ -320,14 +334,14 @@ try {
 			window.send({ type: 'document', version: 91, text, root, script: { text: '' } });
 		});
 		await page.waitForFunction(() => {
-			const rows = document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelectorAll('.w2grid thead tr');
+			const rows = document.querySelector('.canvas-host')?.shadowRoot?.querySelectorAll('.w2grid thead tr');
 			return rows?.length === 2 && rows[0].style.height && rows[0].style.height === rows[1].style.height;
 		});
-		assert.equal(await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.w2grid thead th.gridHeaderTDDefault_rowNumber').getAttribute('data-wse')), '3', '번호 칸 = w2:header');
+		assert.equal(await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid thead th.gridHeaderTDDefault_rowNumber').getAttribute('data-wse')), '3', '번호 칸 = w2:header');
 		// 상태 칸(번호 칸과 같은 header index)에 올려도 헤더 전체가 hover 배경으로 덮인다
-		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('th.gridHeaderTDDefault_rowStatus').dispatchEvent(new MouseEvent('mouseover', { bubbles: true, composed: true })));
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('th.gridHeaderTDDefault_rowStatus').dispatchEvent(new MouseEvent('mouseover', { bubbles: true, composed: true })));
 		await page.waitForFunction(() => {
-			const s = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot;
+			const s = document.querySelector('.canvas-host').shadowRoot;
 			const hover = s.querySelector('.wse-frame.hover')?.getBoundingClientRect(), head = s.querySelector('.w2grid thead').getBoundingClientRect();
 			return hover && Math.abs(hover.width - head.width) < 2 && Math.abs(hover.height - head.height) < 2;
 		});
@@ -339,8 +353,8 @@ try {
 			root.children[0].children[0].def = 2;
 			window.send({ type: 'document', version: 93, text, root, script: { text: '' } });
 		});
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('.w2grid input[type="radio"]'));
-		assert.deepEqual(await page.evaluate(() => [...document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.w2grid tbody td')].map(td => td.querySelector('.wse-input-icon')?.title ?? td.className.match(/gridBodyDefault_(?!data\b)(\w+)/)?.[1])), ['link', 'radio', 'select', 'secret']);
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('.w2grid input[type="radio"]'));
+		assert.deepEqual(await page.evaluate(() => [...document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.w2grid tbody td')].map(td => td.querySelector('.wse-input-icon')?.title ?? td.className.match(/gridBodyDefault_(?!data\b)(\w+)/)?.[1])), ['link', 'radio', 'select', 'secret']);
 		console.log('Design: 그리드 inputType 아이콘 passed');
 		// 그리드 열 너비: 그리드가 좁아도 XML width 그대로(가로 스크롤). autoFit="none"도 같고, allColumn·lastColumn은 남는 폭을 채운다
 		const gridWidths = (autoFit, width = 300) => page.evaluate(async (autoFit, width) => {
@@ -349,7 +363,7 @@ try {
 			root.children[0].children[0].def = 2;
 			window.send({ type: 'document', version: 95, text, root, script: { text: '' } });
 			await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-			return [...document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.w2grid thead th')].map(th => Math.round(th.getBoundingClientRect().width));
+			return [...document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.w2grid thead th')].map(th => Math.round(th.getBoundingClientRect().width));
 		}, autoFit, width);
 		assert.deepEqual(await gridWidths(''), [40, 100, 250], '열 너비 유지');
 		assert.deepEqual(await gridWidths('none'), [40, 100, 250], 'autoFit=none은 안 채움');
@@ -364,7 +378,7 @@ try {
 			root.children[0].children[0].def = 2;
 			window.send({ type: 'document', version: 96, text, root, script: { text: '' } });
 			await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-			const s = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot;
+			const s = document.querySelector('.canvas-host').shadowRoot;
 			return { widths: [...s.querySelectorAll('.w2grid thead tr:first-child th')].map(th => Math.round(th.getBoundingClientRect().width)),
 				handles: [...s.querySelectorAll('.w2grid [data-wse-resize]')].map(e => `${e.id || e.getAttribute('data-wse')}:${e.getAttribute('data-wse-resize')}`) };
 		});
@@ -378,16 +392,16 @@ try {
 			root.children[0].children.forEach(c => c.def = 0);
 			window.send({ type: 'document', version: 92, text, root, script: { text: '' } });
 		});
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('#m2'));
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('#m2'));
 		await page.evaluate(() => {
-			const s = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot;
+			const s = document.querySelector('.canvas-host').shadowRoot;
 			s.querySelector('#m1').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
 			s.querySelector('#m2').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, ctrlKey: true }));
 		});
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.wse-frame.selected').length === 2);
-		assert.equal(await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.wse-frame.selected.extra').length), 1);
-		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#m1').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.wse-frame.selected').length === 1);
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-frame.selected').length === 2);
+		assert.equal(await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-frame.selected.extra').length), 1);
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('#m1').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-frame.selected').length === 1);
 		console.log('Design: Ctrl+클릭 다중 선택 passed');
 		// 여러 개 고른 채 Property 값 변경 → 한 요청에 모두(id는 마지막 선택만), Style은 바뀐 CSS 속성만 각자의 style에
 		await page.evaluate(() => {
@@ -396,9 +410,9 @@ try {
 			root.children[0].children.forEach(c => c.def = 0);
 			window.send({ type: 'document', version: 93, text, root, script: { text: '' } });
 		});
-		await page.waitForFunction(() => document.querySelectorAll('.canvas-frame > .tab-body > div')[0]?.shadowRoot?.querySelector('#m2[style]') || true);
+		await page.waitForFunction(() => document.querySelectorAll('.canvas-host')[0]?.shadowRoot?.querySelector('#m2[style]') || true);
 		await page.evaluate(() => {
-			const s = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot;
+			const s = document.querySelector('.canvas-host').shadowRoot;
 			s.querySelector('#m1').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
 			s.querySelector('#m2').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, ctrlKey: true }));
 		});
@@ -417,7 +431,7 @@ try {
 		const styleMsg = await page.evaluate(() => window.sent.find(m => m.name === 'style'));
 		assert.deepEqual({ value: styleMsg.value, more: styleMsg.more }, { value: 'width:99px;top:2px;', more: [{ index: 2, value: 'width:99px;top:1px;' }] }, 'Style은 바뀐 속성(width)만 다른 컴포넌트에');
 		await page.evaluate(() => { window.sent.length = 0; });
-		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#m2').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('#m2').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
 		console.log('Property: 여러 개 선택 후 값·Style 변경 passed');
 		// 바인딩된 그리드의 본문 셀: Property의 id는 dataList 컬럼 id 목록에서 고른다(헤더 셀은 그대로 입력칸)
 		await page.evaluate(() => {
@@ -427,8 +441,8 @@ try {
 			root.children[1].children[0].def = 2;
 			window.send({ type: 'document', version: 94, text, root, script: { text: '' } });
 		});
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('.w2grid tbody td'));
-		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.w2grid tbody td').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('.w2grid tbody td'));
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid tbody td').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
 		// 입력칸 + 목록(datalist): 직접 입력도, 목록에서 고르기도
 		const idValue = () => page.evaluateHandle(() => [...document.querySelectorAll('.kv tr')].find(tr => tr.querySelector('.key')?.textContent === 'id').querySelector('.value, input'));
 		await page.waitForFunction(() => [...document.querySelectorAll('.kv tr')].find(tr => tr.querySelector('.key')?.textContent === 'id')?.querySelector('.value.has-list'), {timeout: 3000})
@@ -451,7 +465,7 @@ try {
 		await page.evaluate(() => [...document.querySelectorAll('.combo-list li')].find(l => l.textContent === 'age').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })));
 		await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr' && m.name === 'id' && m.value === 'age'), {timeout: 3000}).catch(() => assert.fail('목록에서 고르면 바로 반영'));
 		assert.equal(await page.$('.kv input[role="combobox"]'), null, '고르면 닫힘');
-		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.w2grid thead th:last-child').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid thead th:last-child').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
 		await page.waitForFunction(() => !document.querySelector('.kv .value.has-list'));
 		console.log('Property: 바인딩된 그리드 셀 id → 입력칸 + dataList 컬럼 목록 passed');
 		await page.evaluate(() => {
@@ -460,10 +474,10 @@ try {
 			root.children[0].children.forEach(c => c.def = 0);
 			window.send({ type: 'document', version: 95, text, root, script: { text: '' } });
 		});
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('#m2'));
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('#m2'));
 		// 캔버스의 input 컴포넌트를 실제로 클릭(그 안 input에 포커스)해도 Delete가 먹어야 한다. Ctrl+클릭으로 둘 고르면 한 요청에 둘 다
 		const inputBox = async id => page.evaluate(id => {
-			const r = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector(`#${id}`).getBoundingClientRect();
+			const r = document.querySelector('.canvas-host').shadowRoot.querySelector(`#${id}`).getBoundingClientRect();
 			return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 		}, id);
 		await page.evaluate(() => { window.sent.length = 0; });
@@ -485,7 +499,7 @@ try {
 		await page.mouse.click(o1.x, o1.y);
 		await page.keyboard.down('Control'); await page.mouse.click(o2.x, o2.y); await page.keyboard.up('Control');
 		assert.equal(await page.evaluate(() => document.querySelectorAll('.pane .tree-row.selected').length), 2, 'Outline 두 행 선택 표시');
-		assert.equal(await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.wse-frame.selected').length), 2, '캔버스도 두 개');
+		assert.equal(await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-frame.selected').length), 2, '캔버스도 두 개');
 		await page.keyboard.press('Delete');
 		const outlineDel = await page.evaluate(() => window.sent.find(m => m.type === 'delete'));
 		assert.ok(outlineDel && [outlineDel.index, ...outlineDel.more ?? []].length === 2, JSON.stringify(outlineDel));
@@ -542,12 +556,12 @@ try {
 			root.children[0].children[0].def = 0;
 			window.send({ type: 'document', version: 94, text, root, script: { text: '' } });
 		});
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('#top'));
-		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#top').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.wse-overlay .wse-frame.selected .wse-handle'));
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('#top'));
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('#top').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-overlay .wse-frame.selected .wse-handle'));
 		await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 		const fill = await page.evaluate(() => {
-			const s = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot, p = s.querySelector('.wse-page');
+			const s = document.querySelector('.canvas-host').shadowRoot, p = s.querySelector('.wse-page');
 			const chip = s.querySelector('.wse-chip'), c = chip.getBoundingClientRect(), b = p.getBoundingClientRect();
 			return { overflow: p.scrollWidth > p.clientWidth || p.scrollHeight > p.clientHeight, text: chip.textContent,
 				inside: c.left >= b.left && c.top >= b.top && c.right <= b.left + p.clientWidth && c.bottom <= b.top + p.clientHeight, x: c.left + c.width / 2, y: c.top + c.height / 2 };
@@ -555,7 +569,7 @@ try {
 		assert.deepEqual([fill.overflow, fill.text, fill.inside], [false, 'input #top .a.b', true]);
 		await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row .cls')].some(e => e.textContent === '.a.b'));
 		await page.mouse.move(fill.x, fill.y);
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.wse-chip.faded'));
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-chip.faded'));
 		await page.mouse.move(5, 5);
 		await page.screenshot({path:path.join(tmpdir(), 'ws5-design-chip.png')});
 		console.log('Design: 겹침 층(스크롤 없음)·선택 정보 칩·Outline class passed');
@@ -568,9 +582,9 @@ try {
 			window.sent.length = 0;
 			window.send({ type: 'document', version: 97, text, root, script: { text: '' } });
 		});
-		const dblclick = id => page.evaluate(id => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector(`#${id}`)
+		const dblclick = id => page.evaluate(id => document.querySelector('.canvas-host').shadowRoot.querySelector(`#${id}`)
 			.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })), id);
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('#rad'));
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('#rad'));
 		await dblclick('sel');
 		await page.waitForSelector('.choices-editor[open]');
 		assert.deepEqual(await page.$$eval('.choices-editor tbody input:not([type="checkbox"]), #choices-ref', els => els.map(e => e.value)), ['재직자', '1', 'data:m.a']);
@@ -636,9 +650,7 @@ try {
 		await page.$eval('.choices-editor .popup-close', b => b.click());
 		await page.waitForFunction(() => !document.querySelector('.choices-editor'));
 		console.log('Design: selectbox·radio 선택 항목 팝업(항목·All Option·바인딩·정렬, Outline 이름·더블클릭) passed');
-		// 팔레트: 선택을 확장에 알리고(넣을 자리), 확장이 넣은 컴포넌트(select id)는 그 id가 든 다음 문서에서 선택된다
-		await page.evaluate(() => { window.sent.length = 0; document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#sel').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })); });
-		await page.waitForFunction(() => window.sent.some(m => m.type === 'selection' && m.version === 97 && m.index === 2));
+		// 팔레트: 확장이 넣은 컴포넌트(select id)는 그 id가 든 다음 문서에서 선택된다
 		await page.evaluate(() => {
 			window.send({ type: 'select', id: 'radio1' });
 			const text = '<html xmlns:w2="urn:test" xmlns:xf="http://www.w3.org/2002/xforms"><body><xf:select1 id="sel" appearance="minimal"/><xf:select1 id="radio1" appearance="full"><xf:choices></xf:choices></xf:select1><xf:select1 id="rad" appearance="full"/></body></html>';
@@ -647,8 +659,7 @@ try {
 			window.send({ type: 'document', version: 97, text, root, script: { text: '' } });
 		});
 		await page.waitForFunction(() => document.querySelector('.pane .tree-row.selected .id')?.textContent === 'radio1');
-		assert.ok(await page.evaluate(() => window.sent.some(m => m.type === 'selection' && m.version === 97 && m.index === 3)), '새 선택도 확장에 알림');
-		console.log('Palette: 선택 알림·넣은 컴포넌트 선택 passed');
+		console.log('Palette: 넣은 컴포넌트 선택 passed');
 		// 문구 편집(라벨 더블클릭) 중에는 선택 테두리·손잡이·표시 점(겹침 층)을 숨긴다: 페이지 위 층이라 편집 상자를 덮는다
 		await page.evaluate(() => {
 			const text = '<html xmlns:w2="urn:test"><body><w2:input id="btnLabel" label="취소"/></body></html>';
@@ -656,13 +667,13 @@ try {
 			root.children[0].children[0].def = 0;
 			window.send({ type: 'document', version: 97, text, root, script: { text: '' } });
 		});
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('#btnLabel'));
-		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#btnLabel').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit'), {timeout: 3000});
-		assert.equal(await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.wse-overlay').hidden), true, '문구 편집 중 겹침 층 숨김');
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('#btnLabel'));
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('#btnLabel').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.edit'), {timeout: 3000});
+		assert.equal(await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-overlay').hidden), true, '문구 편집 중 겹침 층 숨김');
 		await page.keyboard.press('Escape');
-		await page.waitForFunction(() => !document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit'), {timeout: 3000});
-		assert.equal(await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.wse-overlay').hidden), false, '편집을 닫으면 다시 보임');
+		await page.waitForFunction(() => !document.querySelector('.canvas-host').shadowRoot.querySelector('.edit'), {timeout: 3000});
+		assert.equal(await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-overlay').hidden), false, '편집을 닫으면 다시 보임');
 		// 그리드 헤더 칸 더블클릭: 문구 상자 아래 너비(W)·높이(H). 칸으로 옮겨도 안 닫히고, Enter면 문구·width·style height를 한 편집으로
 		await page.evaluate(() => {
 			const text = '<html xmlns:w2="urn:test"><body><w2:gridView id="grdSize"><w2:header id="hd"><w2:row id="hr"><w2:column id="h1" value="이름" width="70" style="height:26px;"/></w2:row></w2:header><w2:gBody id="gb"><w2:row id="br"><w2:column id="b1"/></w2:row></w2:gBody></w2:gridView></body></html>';
@@ -676,37 +687,63 @@ try {
 			window.sent.length = 0;
 			window.send({ type: 'document', version: 96, text, root, script: { text: '' } });
 		});
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('.w2grid thead th'));
-		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.w2grid thead th').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit-footer input'), {timeout: 3000});
-		assert.deepEqual(await page.evaluate(() => [...document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.edit-footer input')].slice(0, 2).map(i => i.value)), ['70', '26'], '지금 너비·높이');
-		const sizeInput = await page.evaluateHandle(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.edit-footer input')[0]);
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('.w2grid thead th'));
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid thead th').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-footer input'), {timeout: 3000});
+		assert.deepEqual(await page.evaluate(() => [...document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.edit-footer input')].slice(0, 2).map(i => i.value)), ['70', '26'], '지금 너비·높이');
+		const sizeInput = await page.evaluateHandle(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.edit-footer input')[0]);
 		await sizeInput.click(); await sizeInput.evaluate(i => i.select());
 		await page.keyboard.type('12x0');
-		assert.equal(await page.evaluate(() => !!document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit-footer')), true, '칸으로 옮겨도 열려 있음');
+		assert.equal(await page.evaluate(() => !!document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-footer')), true, '칸으로 옮겨도 열려 있음');
 		// 입력칸이 아닌 이름 글자를 눌러도 닫히지 않음(그 입력칸으로)
-		const nameLabel = await page.evaluateHandle(() => [...document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.edit-fields .name')].find(e => e.textContent === 'class'));
+		const nameLabel = await page.evaluateHandle(() => [...document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.edit-fields .name')].find(e => e.textContent === 'class'));
 		await nameLabel.click();
-		assert.equal(await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.activeElement?.getAttribute('aria-label')), 'class', '이름을 누르면 그 입력칸으로');
+		assert.equal(await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.activeElement?.getAttribute('aria-label')), 'class', '이름을 누르면 그 입력칸으로');
 		assert.equal(await page.evaluate(() => getSelection().toString()), '', '더블클릭 글자 선택이 남지 않음');
 		await sizeInput.click();
 		await page.keyboard.press('Enter');
 		assert.deepEqual(await page.evaluate(() => { const m = window.sent.find(m => m.type === 'setAttr'); return m && { name: m.name, value: m.value, also: m.also }; }),
 			{ name: 'value', value: '이름', also: [{ name: 'width', value: '120' }] }, '바뀐 너비만, 숫자만');
-		assert.equal(await page.evaluate(() => !!document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit-wrap')), false, 'Enter로 닫힘');
+		assert.equal(await page.evaluate(() => !!document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-wrap')), false, 'Enter로 닫힘');
 		// 본문 셀 더블클릭: 자주 고치는 속성(정해진 값은 select, 숫자 칸은 숫자만)을 한 편집으로
-		await page.evaluate(() => { window.sent.length = 0; document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.w2grid tbody td').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })); });
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit-fields'), {timeout: 3000}).catch(() => assert.fail('본문 셀 속성 입력 없음'));
-		assert.deepEqual(await page.evaluate(() => [...document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.edit-fields .name')].map(e => e.textContent)),
-			['width', 'height', 'inputType', 'dataType', 'id', 'class', 'maxLength', 'maxByteLength', 'expression', 'colMerge']);
-		const cellField = name => page.evaluateHandle(name => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector(`.edit-fields [aria-label="${name}"]`), name);
+		await page.evaluate(() => { window.sent.length = 0; document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid tbody td').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })); });
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-fields'), {timeout: 3000}).catch(() => assert.fail('본문 셀 속성 입력 없음'));
+		assert.deepEqual(await page.evaluate(() => [...document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.edit-fields .name')].map(e => e.textContent)),
+			['width', 'height', 'id', 'class', 'inputType', 'dataType', 'maxLength', 'maxByteLength', 'expression', 'colMerge']);
+		assert.deepEqual(await page.evaluate(() => { const r = document.querySelector('.canvas-host').shadowRoot; return { part: r.querySelector('.edit-head .edit-chip')?.textContent, id: r.querySelector('.edit-head .edit-id')?.textContent, sections: [...r.querySelectorAll('.edit-section')].map(e => e.textContent), buttons: [...r.querySelectorAll('.edit-actions button')].map(b => b.textContent) }; }),
+			{ part: '본문 칸', id: 'b1', sections: ['크기', '속성'], buttons: ['취소', '적용'] }, '칸 종류·id, 크기·속성 묶음, 취소·적용');
+		await page.screenshot({path:path.join(tmpdir(), 'ws5-cell-editor.png')});
+		const cellField = name => page.evaluateHandle(name => document.querySelector('.canvas-host').shadowRoot.querySelector(`.edit-fields [aria-label="${name}"]`), name);
 		assert.equal(await (await cellField('inputType')).evaluate(e => e.tagName), 'SELECT', '정해진 값은 select');
 		await (await cellField('inputType')).select('checkbox');
 		await (await cellField('class')).click(); await page.keyboard.type('num');
 		await (await cellField('maxLength')).click(); await page.keyboard.type('1a0');
-		await page.keyboard.press('Enter');
+		assert.equal(await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-status')?.textContent), '바꾼 속성 3');
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-apply').click());
 		assert.deepEqual(await page.evaluate(() => window.sent.find(m => m.type === 'setAttr')?.also),
-			[{ name: 'inputType', value: 'checkbox' }, { name: 'class', value: 'num' }, { name: 'maxLength', value: '10' }], '바뀐 속성만 한 편집으로');
+			[{ name: 'class', value: 'num' }, { name: 'inputType', value: 'checkbox' }, { name: 'maxLength', value: '10' }], '적용 버튼: 바뀐 속성만 한 편집으로');
+		assert.equal(await page.evaluate(() => !!document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-wrap')), false, '적용하면 닫힘');
+		// 편집 상자 너비: 좁은 칸은 400, 넓은 칸(width 900)도 480까지만
+		const wrapWidth = () => page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-wrap')?.getBoundingClientRect().width);
+		for (const [cellWidth, expected] of [[70, 400], [900, 480]]) {
+			await page.evaluate(cellWidth => {
+				const text = `<html xmlns:w2="urn:test"><body><w2:gridView id="grdSize"><w2:header id="hd"><w2:row id="hr"><w2:column id="h1" value="이름" width="${cellWidth}"/></w2:row></w2:header><w2:gBody id="gb"><w2:row id="br"><w2:column id="b1"/></w2:row></w2:gBody></w2:gridView></body></html>`;
+				const root = window.parseXml(text), grid = root.children[0].children[0];
+				grid.def = 2;
+				grid.children[0].children[0].children[0].def = grid.children[1].children[0].children[0].def = window.testDefs.length;
+				window.send({ type: 'document', version: 96, text, root, script: { text: '' } });
+			}, cellWidth);
+			await page.waitForFunction(w => document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid thead th')?.getBoundingClientRect().width >= w - 2, {timeout: 3000}, Math.min(cellWidth, 600));
+			await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid thead th').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
+			await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-wrap'), {timeout: 3000});
+			assert.equal(Math.round(await wrapWidth()), expected, `칸 너비 ${cellWidth} → 편집 상자 ${expected}`);
+			// 취소 버튼: 바꾼 값이 있어도 반영 안 하고 닫음
+			await page.evaluate(() => { window.sent.length = 0; });
+			await (await cellField('class')).click(); await page.keyboard.type('x');
+			await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-cancel').click());
+			assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'setAttr')), false, '취소는 반영 안 함');
+			await page.waitForFunction(() => !document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-wrap'), {timeout: 3000});
+		}
 		await page.evaluate(() => window.send({ type: 'definitions', defs: window.testDefs }));
 		console.log('Design: 그리드 헤더 칸 문구·너비·높이 편집 passed');
 		console.log('Design: 그리드 칸(헤더·본문 공통) 더블클릭 속성 입력 passed');
@@ -718,8 +755,8 @@ try {
 			window.sent.length = 0;
 			window.send({ type: 'document', version: 98, text, root, script: { text: '' } });
 		});
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('.w2grid td'));
-		const cellDblclick = n => page.evaluate(n => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelectorAll('.w2grid tbody td')[n]
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('.w2grid td'));
+		const cellDblclick = n => page.evaluate(n => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.w2grid tbody td')[n]
 			.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })), n);
 		await cellDblclick(1);
 		assert.equal(await page.$('.choices-editor'), null, 'text 컬럼은 팝업 없음');
@@ -735,7 +772,7 @@ try {
 		// 요청 대상은 그 컬럼 노드(칸의 data-wse), 항목은 그대로·Choose Option만 추가
 		const choicesMsg = await page.evaluate(() => {
 			const m = window.sent.find(m => m.type === 'editChoices');
-			const cell = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.w2grid tbody td');
+			const cell = document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid tbody td');
 			return { sameNode: m.index === Number(cell.getAttribute('data-wse')), fields: m.fields };
 		});
 		assert.deepEqual(choicesMsg, { sameNode: true, fields: { items: [{ label: '미사용', value: 'F' }], attrs: { ref: null, chooseOption: 'true', chooseOptionLabel: '-선택-' } } });
@@ -750,7 +787,7 @@ try {
 			window.sent.length = 0;
 			window.send({ type: 'document', version: 100, text, root, script: { text: '' } });
 		});
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('#chk'));
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('#chk'));
 		await dblclick('chk');
 		await page.waitForSelector('.choices-editor[open]');
 		assert.deepEqual(await page.$$eval('.choices-editor .popup-badge, .choices-editor tbody input:not([type="checkbox"]), #choices-ref, #choices-direction', els => els.map(e => e.value ?? e.dataset.value ?? e.textContent)),
@@ -771,12 +808,12 @@ try {
 			root.children[0].children[1].udc = true;
 			window.send({ type: 'document', version: 97, text, root, script: { text: '' } });
 		});
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('#u1'));
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('#u1'));
 		assert.deepEqual(await page.evaluate(() => {
-			const s = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot;
+			const s = document.querySelector('.canvas-host').shadowRoot;
 			return ['#c1', '#u1'].map(id => !!s.querySelector(id)?.getClientRects().length);
 		}), [false, true], '캔버스: 모르는 태그는 없음, UDC는 표시');
-		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#u1').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('#u1').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
 		await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row .id')].some(e => e.textContent === 'u1'));
 		assert.ok(![...await page.$$eval('.pane .tree-row .id', es => es.map(e => e.textContent))].includes('c1'), 'Outline에도 모르는 태그 없음');
 		console.log('Design: 엔진이 모르는 태그 숨김(캔버스·Outline)·UDC 박스 passed');
@@ -792,27 +829,27 @@ try {
 			root.children[0].children.forEach((n, i) => { n.def = window.testDefs.length + i; });
 			window.send({ type: 'document', version: 98, text, root, script: { text: '' } });
 		});
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('#mu1'));
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('#mu1'));
 		assert.deepEqual(await page.evaluate(() => {
-			const s = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot;
+			const s = document.querySelector('.canvas-host').shadowRoot;
 			return ['#k1', '#m1', '#s1', '#q1', '#o1', '#cal1', '#mu1'].map(id => s.querySelector(id).matches('.wse-todo'));
 		}), [false, false, false, false, false, false, false], '자리 표시 아님');
 		assert.deepEqual(await page.evaluate(() => {
-			const s = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot;
+			const s = document.querySelector('.canvas-host').shadowRoot;
 			return [s.querySelector('#m1').textContent, s.querySelector('#s1 input').value, s.querySelector('#o1').textContent, s.querySelectorAll('#cal1 tbody td').length, s.querySelector('#k1').offsetWidth];
 		}), ['가나', '3', '출력', 42, 148]);
 		await page.screenshot({ path: path.join(tmpdir(), 'ws5-input-components.png') });
 		console.log('Design: checkcombobox·multiselect·spinner·searchbox·output·calendar·multiupload 그리기 passed');
 		// output: textbox처럼 더블클릭 → 문구(label) 편집
-		await page.evaluate(() => { window.sent.length = 0; document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#o2').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })); });
-		await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit'), { timeout: 3000 });
+		await page.evaluate(() => { window.sent.length = 0; document.querySelector('.canvas-host').shadowRoot.querySelector('#o2').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })); });
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.edit'), { timeout: 3000 });
 		await page.keyboard.type('결과');
 		await page.keyboard.press('Enter');
 		await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr'));
 		assert.deepEqual(await page.evaluate(() => { const m = window.sent.find(m => m.type === 'setAttr'); return [m.name, m.value]; }), ['label', '결과']);
 		console.log('Design: output 더블클릭 문구 편집 passed');
 		// multiupload 더블클릭 → 파라미터(Name·Value) 표만 있는 팝업
-		await page.evaluate(() => { window.sent.length = 0; document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#mu1').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })); });
+		await page.evaluate(() => { window.sent.length = 0; document.querySelector('.canvas-host').shadowRoot.querySelector('#mu1').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })); });
 		await page.waitForSelector('.choices-editor[open]');
 		assert.deepEqual(await page.evaluate(() => [document.querySelector('.choices-editor .popup-badge').textContent, !!document.querySelector('#choices-nodeset'), !!document.querySelector('#choices-ref'),
 			[...document.querySelectorAll('.choices-editor thead th')].map(t => t.textContent).slice(2)]), ['Multiupload', false, false, ['Name', 'Value']]);
@@ -826,14 +863,14 @@ try {
 		await page.waitForFunction(() => !document.querySelector('.choices-editor'));
 		console.log('Design: multiupload 파라미터 팝업 passed');
 		// checkcombobox 더블클릭 → selectbox와 같은 선택 항목 팝업(All·Choose Option 포함)
-		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#k1').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('#k1').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
 		await page.waitForSelector('.choices-editor[open]');
 		assert.deepEqual(await page.evaluate(() => [document.querySelector('.choices-editor .popup-badge').textContent, !!document.querySelector('.choices-editor .choices-options'), !!document.querySelector('#choices-direction')]),
 			['CheckComboBox', true, false]);
 		await page.click('.choices-editor .btn-secondary');
 		await page.waitForFunction(() => !document.querySelector('.choices-editor'));
 		// multiselect: 같은 팝업, All·Choose Option 영역 없음
-		await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('#m1').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('#m1').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
 		await page.waitForSelector('.choices-editor[open]');
 		assert.deepEqual(await page.evaluate(() => [document.querySelector('.choices-editor .popup-badge').textContent, !!document.querySelector('.choices-editor .choices-options'), !!document.querySelector('#choices-direction'),
 			[...document.querySelectorAll('.choices-editor tbody input[aria-label$="Label"]')].map(e => e.value)]), ['MultiSelect', false, false, ['가', '나']]);
@@ -876,14 +913,14 @@ try {
 	};
 	// 연결 화면(wframe) 안쪽 더블클릭 → 그 화면 열기 요청, 문구 편집 입력칸은 안 열림
 	const inner = await page.evaluate(() => {
-		const root = document.querySelector('.canvas-frame > .tab-body > div').shadowRoot;
+		const root = document.querySelector('.canvas-host').shadowRoot;
 		const r = root.querySelector('[data-wse-frame] input').getBoundingClientRect();
 		return { x: r.x + 5, y: r.y + r.height / 2, frame: Number(root.querySelector('[data-wse-frame]').getAttribute('data-wse')) };
 	});
 	await page.mouse.click(inner.x, inner.y, {count:2});
 	await page.waitForFunction(() => window.sent.some(m => m.type === 'openFrame'));
 	assert.deepEqual(await page.evaluate(() => window.sent.find(m => m.type === 'openFrame')), { type: 'openFrame', index: inner.frame });
-	assert.equal(await page.evaluate(() => !!document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('.edit')), false);
+	assert.equal(await page.evaluate(() => !!document.querySelector('.canvas-host').shadowRoot.querySelector('.edit')), false);
 	console.log('Frame: 더블클릭 → 연결 화면 열기 passed');
 	// 패널 구분선: 두께 1px(라이브러리 inline flex에 안 묻힘), 선 옆 3px을 잡아도 끌린다
 	assert.deepEqual(await page.$$eval('.resizer', es => es.map(e => Math.min(e.offsetWidth, e.offsetHeight))), [1, 1]);
@@ -895,8 +932,8 @@ try {
 	assert.ok(Math.abs(await canvasWidth() - (canvasBefore - 100)) <= 3, `패널 너비: ${canvasBefore} → ${await canvasWidth()}`);
 	console.log('Split: 두께·잡는 범위 passed');
 	// Property 값: 정의에 정해진 값 목록이 있으면 select, 고르면 바로 반영
-	await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('input[data-wse]'));
-	await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('input[data-wse]').click());
+	await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('input[data-wse]'));
+	await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('input[data-wse]').click());
 	await page.waitForSelector('.kv select.choice');
 	await page.evaluate(() => { window.sent.length = 0; });
 	await page.select('.kv select.choice', 'true');
@@ -927,8 +964,8 @@ try {
 	assert.equal(await page.$('.style-area textarea'), null, 'Ctrl+Enter로 닫힘');
 	console.log('Style: Enter 줄바꿈·Ctrl+Enter 반영 passed');
 	// Property 표 Key 열 너비: 머리 칸 손잡이를 끌면 바뀌고 Event 탭에도 유지된다
-	await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('input[data-wse]'));
-	await page.evaluate(() => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector('input[data-wse]').click());
+	await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('input[data-wse]'));
+	await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('input[data-wse]').click());
 	const handle = await page.waitForSelector('.kv-wrap > .col-resizer');
 	const box = await handle.boundingBox();
 	const keyWidth = () => page.$eval('.kv th', e => e.offsetWidth);
@@ -959,7 +996,7 @@ try {
 		await page.waitForFunction(() => window.editor().state.sliceDoc(window.editor().state.selection.main.from, window.editor().state.selection.main.to) === 'set');
 		await page.waitForSelector('.tab-body:not([hidden]) .cm-selectionBackground');
 		const alpha = await page.$eval('.tab-body:not([hidden]) .cm-activeLine', e => getComputedStyle(e).backgroundColor);
-		assert.match(alpha, /(?:0\.25|25%)/, `현재 줄 배경이 선택을 가립니다: ${alpha}`);
+		assert.equal(alpha, 'rgba(0, 0, 0, 0)', `선택 중엔 현재 줄 배경을 걷어야(선택을 가림): ${alpha}`);
 		await page.screenshot({path:path.join(tmpdir(), `ws5-${tab}-selection.png`)});
 		const end = await page.evaluate(() => { const p = window.editor().coordsAtPos(27); return {x:p.left, y:(p.top+p.bottom)/2}; });
 		await page.mouse.click(point.x, point.y);
@@ -1168,6 +1205,14 @@ try {
 	await page.waitForFunction(() => window.sent.some(m => m.type === 'complete'));
 	assert.equal((await lastSent('complete')).trigger, '.', '점 뒤는 trigger character로');
 	await page.keyboard.press('Escape');
+	// 자리 없는 스니펫(Java getHour()): '.' 바로 뒤에서 Enter로 골라도 커서는 넣은 글자 끝으로
+	await page.evaluate(() => { window.remoteItems = () => ({ items: [{ label: 'getHour', type: 'method', insert: 'getHour()', snippet: true }] }); });
+	await reset('entry'); await page.keyboard.type('.', {delay: 25});
+	await page.waitForFunction(() => [...document.querySelectorAll('.cm-completionLabel')].some(e => e.textContent === 'getHour'), {timeout: 3000});
+	await new Promise(resolve => setTimeout(resolve, 100));
+	await page.keyboard.press('Enter');
+	assert.equal(await content(), 'entry.getHour()');
+	assert.equal(await page.evaluate(() => window.editor().state.selection.main.head), 'entry.getHour()'.length, '커서는 넣은 글자 끝');
 	await page.evaluate(() => { window.remoteItems = undefined; });
 	console.log('Link: VS Code 언어 확장 자동완성(위치·자동 import·스니펫·점) passed');
 	// 자동완성 아이콘: IntelliJ처럼 종류별 글자(C I E T N · m f p v c · ƒ k S), 타입류는 원·멤버류는 둥근 사각, 종류마다 다른 색
@@ -1190,6 +1235,8 @@ try {
 	// 키 입력: Tab은 커서 자리에 다음 4칸 자리까지(줄 전체가 아니라), Java Enter는 윗줄 기준(+ { 뒤 한 단계, } 앞 한 단계 덜), XML 태그 자동 닫기
 	const typed = async (doc, pos, keys) => {
 		await page.evaluate((d, p) => { const v = window.editor(); v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: d }, selection: { anchor: p } }); v.focus(); }, doc, pos);
+		// 앞 입력의 자동완성 결과(모의 언어 서버 5ms)가 늦게 와서 창이 뜨면 Tab이 그 항목을 받는다 → 늦은 응답까지 기다린 뒤 확인
+		await new Promise(resolve => setTimeout(resolve, 50));
 		await page.waitForFunction(() => !document.querySelector('.cm-tooltip-autocomplete'));
 		for (const k of keys) {
 			if (k.length > 1) { await page.keyboard.press(k); } else { await page.keyboard.type(k); }
@@ -1220,7 +1267,8 @@ try {
 	// 탭 줄 위치: 기본 위, 맨 앞 화살표로 아래·위(확장에 저장 요청, 다른 화면이 보낸 위치도 따름)
 	const barAt = () => page.evaluate(() => { const f = document.querySelector('.canvas-frame'); return f.firstElementChild.classList.contains('tab-bar') ? 'top' : f.lastElementChild.classList.contains('tab-bar') ? 'bottom' : '?'; });
 	assert.equal(await barAt(), 'top', '탭 줄 기본 위');
-	assert.equal(await page.$eval('.canvas-frame .tab-bar > :first-child', b => b.title), '탭을 아래로', '화살표는 탭 줄 맨 앞');
+	assert.equal(await page.$eval('.canvas-frame .tab-bar > :first-child', b => b.classList.contains('tab-palette')), true, '팔레트 버튼은 화살표 왼쪽');
+	assert.equal(await page.$eval('.canvas-frame .tab-move', b => b.title), '탭을 아래로', '탭 방향 화살표 유지');
 	await page.click('.canvas-frame .tab-move');
 	await page.waitForFunction(() => document.querySelector('.canvas-frame').lastElementChild.classList.contains('tab-bar'));
 	assert.equal((await lastSent('setTabPosition')).position, 'bottom', '위치 저장 요청');
@@ -1278,6 +1326,11 @@ try {
 	await page.waitForSelector('.tab-body:not([hidden]) .file-suggest li');
 	await page.click('.tab-body:not([hidden]) .file-suggest li');
 	assert.deepEqual(await lastSent('link'), { type: 'link', kind: 'service', path: 'src/main/java/a/OrderService.java' }, '클릭으로 고름');
+	// 연결 못 한 이유는 알림을 꺼 둬도 보이게 경로 입력 화면에, 다시 입력하면 지움
+	await page.evaluate(() => window.send({ type: 'linkProblem', kind: 'service', message: '이미 Controller 탭에 연결된 파일입니다.' }));
+	await page.waitForFunction(() => document.querySelector('.tab-body:not([hidden]) .link-picker .warning')?.textContent === '이미 Controller 탭에 연결된 파일입니다.');
+	await page.keyboard.type('x');
+	await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .link-picker .warning'));
 	await page.keyboard.press('Escape');
 	console.log('Link: 경로 입력 파일 검색(퍼지·키보드·클릭) passed');
 	// MyBatis: 매퍼 태그·속성 자동완성, XML 문법 오류 밑줄
@@ -1509,7 +1562,6 @@ try {
 	// 코드 편집기 테마: 확장이 고른 테마를 보내면 모든 코드 편집기에 적용, VS Code 밝음/어두움 전환에는 안 바뀜. 'vscode'면 다시 따라간다
 	await clickTab('Script');
 	const editorBg = () => page.evaluate(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor);
-	assert.equal(await page.$eval('.tab-body:not([hidden]) .code-editor', e => JSON.parse(e.dataset.vscodeContext).webviewSection), 'codeEditor', '우클릭 메뉴 표시');
 	const vsDarkBg = await editorBg();
 	await page.evaluate(() => window.send({ type: 'codeTheme', theme: 'dracula' }));
 	await page.waitForFunction(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor === 'rgb(45, 47, 63)', {timeout: 3000})
@@ -1527,10 +1579,151 @@ try {
 	await page.evaluate(() => { document.body.className = 'vscode-dark'; });
 	await clickTab('Source');
 	assert.equal(await editorBg(), 'rgb(45, 47, 63)', '다른 코드 탭도 같은 테마');
+	// 검색창(Ctrl+F)도 고른 테마의 배경·글자색
+	await page.click('.tab-body:not([hidden]) .cm-content'); await modifiedKey('Control', 'f');
+	await page.waitForSelector('.tab-body:not([hidden]) .cm-search .cm-textfield');
+	const search = await page.evaluate(() => {
+		const q = s => getComputedStyle(document.querySelector('.tab-body:not([hidden]) ' + s));
+		return { panels: q('.cm-panels').backgroundColor, field: q('.cm-search .cm-textfield').color, editor: q('.cm-editor').color };
+	});
+	assert.deepEqual({ panels: search.panels, field: search.field }, { panels: 'rgb(45, 47, 63)', field: search.editor }, `검색창 테마: ${JSON.stringify(search)}`);
+	await page.keyboard.press('Escape');
 	await page.evaluate(() => window.send({ type: 'codeTheme', theme: 'vscode' }));
 	await page.waitForFunction(bg => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor === bg, {timeout: 3000}, vsDarkBg);
 	assert.ok(!await page.$eval('.tab-body:not([hidden]) .code-editor', e => e.classList.contains('custom-theme')));
 	console.log('Code theme: 적용·VS Code 전환 무시·되돌리기 passed');
+	// 사용자 테마: 고른 테마 위 덮어쓰기 층(배경·선택·문법 색), 가져온 테마(VS Code 기본 라이트 바탕 + 층)
+	await clickTab('Script');
+	await reset('return "x";');
+	const keywordStyle = () => page.evaluate(() => {
+		const span = [...document.querySelectorAll('.tab-body:not([hidden]) .cm-content span')].find(s => s.textContent === 'return');
+		const style = getComputedStyle(span);
+		return [style.color, style.fontStyle];
+	});
+	await page.evaluate(() => window.send({ type: 'codeTheme', theme: 'dracula', own: { colors: { background: '#102030', selection: '#ff000080' }, tokens: { keyword: { color: '#ff8800', fontStyle: 'italic' } } } }));
+	await page.waitForFunction(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor === 'rgb(16, 32, 48)', { timeout: 3000 })
+		.catch(async () => assert.fail(`덮어쓴 배경 아님: ${await editorBg()}`));
+	assert.deepEqual(await keywordStyle(), ['rgb(255, 136, 0)', 'italic'], '덮어쓴 키워드 색·기울임이 테마보다 우선');
+	assert.equal(await page.$eval('.tab-body:not([hidden]) .code-editor', e => e.style.getPropertyValue('--code-selection')), '#ff000080', '선택 색은 CSS 변수로');
+	await page.evaluate(() => window.send({ type: 'codeTheme', theme: 'vscode', dark: false, imported: { tokens: { keyword: { color: '#0000ff' } } } }));
+	await page.waitForFunction(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor === 'rgb(255, 255, 255)', { timeout: 3000 })
+		.catch(async () => assert.fail(`가져온 라이트 테마 바탕 아님: ${await editorBg()}`));
+	assert.equal((await keywordStyle())[0], 'rgb(0, 0, 255)');
+	assert.ok(await page.$eval('.tab-body:not([hidden]) .code-editor', e => e.classList.contains('custom-theme')), '가져온 테마는 고른 테마처럼');
+	await page.evaluate(() => { document.body.className = 'vscode-dark'; document.body.classList.add('x'); });
+	await new Promise(resolve => setTimeout(resolve, 100));
+	assert.equal(await editorBg(), 'rgb(255, 255, 255)', '가져온 테마는 VS Code 밝음·어두움 전환에 안 바뀜');
+	// 현재 줄 색이 불투명해도(IntelliJ Dark 등) 단어 더블클릭 선택이 보이게: 선택 중엔 현재 줄 배경을 걷는다
+	await page.evaluate(() => window.send({ type: 'codeTheme', theme: 'vscode', dark: true, imported: { colors: { lineHighlight: '#26282e', selection: '#214283' } } }));
+	await page.waitForFunction(() => document.querySelector('.tab-body:not([hidden]) .code-editor')?.style.getPropertyValue('--code-line') === '#26282e', { timeout: 3000 });
+	await reset('word other');
+	const lineBg = () => page.$eval('.tab-body:not([hidden]) .cm-activeLine', e => getComputedStyle(e).backgroundColor);
+	assert.equal(await lineBg(), 'rgb(38, 40, 46)', '선택 없으면 현재 줄 색');
+	const word = await page.evaluate(() => { const v = window.editor(), r = v.coordsAtPos(2); return { x: r.left, y: (r.top + r.bottom) / 2 }; });
+	await page.mouse.click(word.x, word.y, { count: 2 });
+	await page.waitForFunction(() => { const v = window.editor(), r = v.state.selection.main; return v.state.sliceDoc(r.from, r.to) === 'word'; }, { timeout: 3000 });
+	assert.equal(await lineBg(), 'rgba(0, 0, 0, 0)', '선택 중엔 현재 줄 배경 걷음(선택 색이 가려지지 않게)');
+	await page.evaluate(() => { document.body.className = 'vscode-dark'; window.send({ type: 'codeTheme', theme: 'vscode' }); });
+	await page.waitForFunction(bg => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor === bg, { timeout: 3000 }, vsDarkBg);
+	console.log('Code theme: 덮어쓰기 층·가져온 테마 passed');
+	// 탭 줄 톱니바퀴: 우측 패널 버튼 왼쪽, 누르면 아래로 메뉴. 항목은 확장에 이름만 보낸다
+	const gear = await page.$('.canvas-frame .tab-settings');
+	assert.ok(await page.evaluate(() => { const g = document.querySelector('.canvas-frame .tab-settings'), r = document.querySelector('.canvas-frame .tab-panel-right'); return g.nextElementSibling === r; }), '우측 패널 버튼 바로 왼쪽');
+	await gear.click();
+	await page.waitForSelector('.context-menu[role="menu"]');
+	assert.deepEqual(await page.$$eval('.context-menu [role="menuitem"]', bs => bs.map(b => b.textContent)),
+		['코드 편집기 테마 변경…', '테마 파일 가져오기…', '테마 색 덮어쓰기…', 'SQL 방언…', '도구 경로 설정…', '확장 설정 모두 보기…']);
+	assert.ok(await page.evaluate(() => { const m = document.querySelector('.context-menu').getBoundingClientRect(), g = document.querySelector('.canvas-frame .tab-settings').getBoundingClientRect(); return (m.top >= g.bottom || m.bottom <= g.top) && Math.abs(m.right - g.right) < 1; }), '톱니바퀴 아래(공간 없으면 위)에, 버튼을 덮지 않고 오른쪽 끝 맞춤');
+	await page.evaluate(() => { window.sent.length = 0; });
+	await page.evaluate(() => [...document.querySelectorAll('.context-menu [role="menuitem"]')].find(b => b.textContent === 'SQL 방언…').click());
+	assert.deepEqual(await page.evaluate(() => window.sent.find(m => m.type === 'settingsMenu')), { type: 'settingsMenu', item: 'sqlDialect' });
+	assert.equal(await page.$('.context-menu'), null, '고르면 닫힘');
+	await gear.click(); await page.waitForSelector('.context-menu');
+	await gear.click();
+	assert.equal(await page.$('.context-menu'), null, '열린 채 다시 누르면 닫힘');
+	await gear.click(); await page.waitForSelector('.context-menu');
+	await page.keyboard.press('Escape');
+	assert.equal(await page.$('.context-menu'), null, 'Esc로 닫힘');
+	console.log('Settings: 탭 줄 톱니바퀴 메뉴 passed');
+	// 잠깐 뜨는 알림: 확장이 보내면 오른쪽 아래에 떴다가 사라짐
+	await page.evaluate(() => window.send({ type: 'toast', message: 'dlt_a → dlt_b: 바인딩 2곳도 바꿨습니다.' }));
+	await page.waitForFunction(() => document.querySelector('.toast[role="status"]')?.textContent === 'dlt_a → dlt_b: 바인딩 2곳도 바꿨습니다.', { timeout: 3000 });
+	await new Promise(resolve => setTimeout(resolve, 300));
+	assert.equal(await page.$eval('.toast', e => getComputedStyle(e).backgroundColor), 'color(srgb 0.85 0.924706 0.974706)', '캔버스 hover와 같은 파란 파스텔');
+	await page.screenshot({path:path.join(tmpdir(), 'ws5-toast.png')});
+	await page.waitForFunction(() => !document.querySelector('.toast'), { timeout: 7000 });
+	console.log('Toast: 알림 표시·자동 사라짐 passed');
+	// 테마 색 덮어쓰기 팝업: 테마 기본 색 표시, 입력하는 대로 열린 편집기에 미리 보기, 닫기는 되돌림, 확인은 공통·이 테마 층 저장
+	await clickTab('Script');
+	await reset('return "x"; // c');
+	// 글자 위치로 찾는다(커서 표시 등으로 한 단어가 여러 span으로 쪼개질 수 있다)
+	const spanStyle = text => page.evaluate(text => {
+		const v = window.editor(), { node } = v.domAtPos(v.state.doc.toString().indexOf(text) + 1);
+		const st = getComputedStyle(node.nodeType === Node.TEXT_NODE ? node.parentElement : node);
+		return [st.color, st.fontStyle];
+	}, text);
+	await page.evaluate(() => window.send({ type: 'codeTheme', theme: 'dracula', id: 'dracula', label: 'Dracula' }));
+	await page.waitForFunction(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor === 'rgb(45, 47, 63)');
+	const draculaKeyword = await spanStyle('return');
+	const openThemeColors = async () => {
+		await page.click('.canvas-frame .tab-settings');
+		await page.evaluate(() => [...document.querySelectorAll('.context-menu [role="menuitem"]')].find(b => b.textContent === '테마 색 덮어쓰기…').click());
+		await page.waitForSelector('.theme-colors-editor[open]');
+	};
+	const hex = name => `.theme-colors-editor .theme-hex[data-name="${name}"]`;
+	const themeRow = name => `.theme-colors-editor .theme-row:has(.theme-hex[data-name="${name}"])`;
+	await openThemeColors();
+	assert.equal(await page.$eval('.theme-colors-editor .popup-title .mono', e => e.textContent), 'Dracula');
+	assert.equal(await page.$eval(hex('keyword'), e => e.placeholder), '테마 기본');
+	assert.equal(await page.$eval(`${themeRow('keyword')} .theme-swatch`, e => getComputedStyle(e).backgroundColor), draculaKeyword[0], '안 바꾼 칸에도 테마의 실제 색');
+	assert.equal(await page.$eval(`${themeRow('background')} .theme-swatch`, e => getComputedStyle(e).backgroundColor), 'rgb(45, 47, 63)');
+	await page.click(hex('keyword')); await page.keyboard.type('#ff8800'); await page.keyboard.press('Enter');
+	await page.waitForFunction(() => { const s = [...document.querySelectorAll('.tab-body:not([hidden]) .cm-content span')].find(s => s.textContent === 'return'); return getComputedStyle(s).color === 'rgb(255, 136, 0)'; }, { timeout: 3000 });
+	assert.ok(await page.$eval('.theme-colors-editor .theme-preview', p => [...p.querySelectorAll('.cm-content span')].some(s => s.textContent === 'return' && getComputedStyle(s).color === 'rgb(255, 136, 0)')), '팝업 미리 보기도');
+	await page.click(`${themeRow('keyword')} .font-italic`);
+	assert.equal((await spanStyle('return'))[1], 'italic', 'I 토글');
+	assert.equal(await page.$eval('.theme-colors-editor .popup-meta', e => e.textContent), '· 바꾼 색 1');
+	await page.evaluate(() => { window.sent.length = 0; });
+	await page.evaluate(() => [...document.querySelectorAll('.theme-colors-editor .data-editor-actions button')].find(b => b.textContent === '닫기').click());
+	await page.waitForFunction(() => !document.querySelector('.theme-colors-editor'));
+	assert.deepEqual(await spanStyle('return'), draculaKeyword, '닫기는 원래대로');
+	assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'saveThemeCustomizations')), false, '닫기는 저장 안 함');
+	await openThemeColors();
+	await page.click(hex('keyword')); await page.keyboard.type('#ff8800'); await page.keyboard.press('Enter');
+	assert.ok(await page.$(`${themeRow('keyword')}.changed .theme-reset`), '바꾼 줄에 되돌리기');
+	await page.click(`${themeRow('keyword')} .theme-reset`);
+	assert.equal(await page.$eval(hex('keyword'), e => e.value), '', '되돌리면 테마 기본');
+	await page.click(hex('keyword')); await page.keyboard.type('#ff8800'); await page.keyboard.press('Enter');
+	await page.evaluate(() => [...document.querySelectorAll('.theme-colors-editor .segmented button')].find(b => b.textContent === '모든 테마').click());
+	await page.waitForFunction(sel => document.querySelector(sel)?.value === '', { timeout: 3000 }, hex('keyword'))
+		.catch(() => assert.fail('모든 테마 층은 따로'));
+	await page.click(hex('comment')); await page.keyboard.type('#123456'); await page.keyboard.press('Tab');
+	await page.click('.theme-colors-editor .btn-primary');
+	await page.waitForFunction(() => window.sent.some(m => m.type === 'saveThemeCustomizations'));
+	assert.deepEqual(await page.evaluate(() => window.sent.find(m => m.type === 'saveThemeCustomizations')),
+		{ type: 'saveThemeCustomizations', common: { tokens: { comment: { color: '#123456' } } }, own: { tokens: { keyword: { color: '#ff8800' } } } });
+	assert.equal((await spanStyle('return'))[0], 'rgb(255, 136, 0)', '확인하면 그대로 유지');
+	assert.equal((await spanStyle('// c'))[0], 'rgb(18, 52, 86)');
+	// 미리 보기 글꼴은 코드 편집기와 같다
+	const scriptFont = await page.$eval('.tab-body:not([hidden]) .cm-scroller', e => getComputedStyle(e).fontFamily);
+	await openThemeColors();
+	const previewColor = text => page.$eval('.theme-colors-editor .theme-preview', (p, text) => {
+		const span = [...p.querySelectorAll('.cm-line span')].find(s => s.textContent === text);
+		return span && getComputedStyle(span).color;
+	}, text);
+	assert.equal(await page.$eval('.theme-colors-editor .theme-preview .cm-scroller', e => getComputedStyle(e).fontFamily), scriptFont, '미리 보기 글꼴 = 코드 편집기 글꼴');
+	// 어노테이션 색이 @Override에 칠해진다(@lezer/java에는 어노테이션 태그가 없어 덧붙임)
+	await page.click(hex('annotation')); await page.keyboard.type('#00ff00'); await page.keyboard.press('Enter');
+	await page.waitForFunction(() => [...document.querySelectorAll('.theme-colors-editor .theme-preview .cm-line span')].some(s => s.textContent.includes('Override') && getComputedStyle(s).color === 'rgb(0, 255, 0)'), { timeout: 3000 })
+		.catch(async () => assert.fail(`어노테이션 색 아님: ${await previewColor('Override')}`));
+	// 글꼴 모양을 켰다 끄면 테마 기본으로(되돌리기 없음)
+	await page.click(`${themeRow('string')} .font-bold`);
+	assert.ok(await page.$(`${themeRow('string')}.changed .theme-reset`));
+	await page.click(`${themeRow('string')} .font-bold`);
+	assert.equal(await page.$(`${themeRow('string')}.changed`), null, '켰다 끄면 바꾼 줄 아님(되돌리기 없음)');
+	await page.evaluate(() => [...document.querySelectorAll('.theme-colors-editor .data-editor-actions button')].find(b => b.textContent === '닫기').click());
+	await page.evaluate(() => window.send({ type: 'codeTheme', theme: 'vscode' }));
+	console.log('Theme colors: 덮어쓰기 팝업(테마 기본·미리 보기·닫기·되돌리기·범위·저장) passed');
 	// Git 변경 표시: 확장이 보낸 기준(스테이지 내용)과 비교. 줄 번호 옆 막대(줄마다)와 오른쪽 끝 띠(범위마다)
 	await clickTab('Script');
 	// hover 설명: Script는 WebSquare API·컴포넌트 메서드, Source는 속성 설명. 설명이 없는 자리에는 안 뜬다
@@ -1568,8 +1761,8 @@ try {
 		index(root);
 		return ids;
 	}, WS, XF);
-	await page.waitForFunction(() => document.querySelector('.canvas-frame > .tab-body > div')?.shadowRoot?.querySelector('[data-wse]'), { timeout: 5000 });
-	const cell = id => page.evaluateHandle(i => document.querySelector('.canvas-frame > .tab-body > div').shadowRoot.querySelector(`[data-wse="${i}"]`), mergeDoc[id]);
+	await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('[data-wse]'), { timeout: 5000 });
+	const cell = id => page.evaluateHandle(i => document.querySelector('.canvas-host').shadowRoot.querySelector(`[data-wse="${i}"]`), mergeDoc[id]);
 	const row = id => page.evaluateHandle(i => [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.id')?.textContent === i), id);
 	const clickRow = async (id, options) => (await row(id)).asElement().click(options);
 	const ctrlClick = async handle => { await page.keyboard.down('Control'); await (await handle.asElement()).click(); await page.keyboard.up('Control'); };
@@ -1643,8 +1836,21 @@ try {
 	assert.deepEqual(await dragTo('dm1', 'dl1', 'after'), { accepted: true, sent: { type: 'move', version: 950, dragged: dataIds.dm1, target: dataIds.dl1, position: 'after' } }, 'dataMap → dataList 뒤');
 	assert.deepEqual(await dragTo('s1', 'Submission', 'after'), { accepted: true, sent: { type: 'move', version: 950, dragged: dataIds.s1, target: dataIds['xf:model'], position: 'inside' } }, 'Submission 루트 → model 맨 뒤');
 	assert.deepEqual(await dragTo('s1', 'dm1', 'before'), { accepted: false, sent: null }, '다른 종류에는 못 놓음');
+	// 화면 점검: Data 줄에 경고(마우스를 올리면 이유), 접힌 줄은 안쪽 문제를 흐리게
+	await page.evaluate(() => {
+		const text = '<html xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms" xmlns:ev="urn:ev"><head><xf:model><w2:dataCollection baseNode="map"><w2:dataMap id="dm1"/><w2:dataList id="dm1"/></w2:dataCollection><xf:submission id="s1" ev:submitdone="scwin.s1_done"/><xf:submission id="s2" ref="data:json,dl_none" ev:submitdone="scwin.s2_done"/></xf:model></head><body/></html>';
+		window.send({ type: 'document', version: 950, text, root: window.parseXml(text), script: { text: 'scwin.s2_done = function () {};' } });
+	});
+	const problemOf = id => page.evaluate(id => [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.id')?.textContent === id)?.querySelector('.tree-problem')?.title ?? null, id);
+	await page.waitForFunction(() => document.querySelectorAll('.pane .tree-row .tree-problem').length >= 3, {timeout: 3000})
+		.catch(async () => assert.fail(`경고 수: ${await page.$$eval('.pane .tree-row .tree-problem', e => e.length)}`));
+	assert.equal(await problemOf('dm1'), 'id가 겹칩니다: dm1 (2곳)');
+	assert.equal(await problemOf('s1'), 'ev:submitdone: Script에 없는 함수 scwin.s1_done');
+	assert.equal(await problemOf('s2'), null, '화면에 없는 데이터(스크립트에서 만듦)는 경고 안 함');
+	await page.evaluate(() => [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.tag')?.textContent === 'Submission')?.querySelector('.chevron').click());
+	await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.tag')?.textContent === 'Submission')?.querySelector('.tree-problem.inside'), {timeout: 3000});
 	await page.evaluate(() => window.tab('Outline', '.pane').click());
-	console.log('Data: 트리 끌어 옮기기 passed');
+	console.log('Data: 트리 끌어 옮기기, 화면 점검 경고 passed');
 	await clickTab('Script');
 	const marks = () => page.evaluate(() => {
 		const body = document.querySelector('.tab-body:not([hidden])');
@@ -1687,6 +1893,228 @@ try {
 	await page.waitForFunction(() => document.querySelectorAll('.tab-body:not([hidden]) .cm-change-ruler .cm-change-mark').length === 1, {timeout: 3000});
 	assert.deepEqual(await marks(), { gutter: ['3:modified'], ruler: ['modified'] });
 	console.log('Git changes: 수정·추가·삭제 표시·입력이 멈추면 갱신·연결 탭 passed');
+
+	// 팔레트: 정의 기반 분류·검색·클릭 요청, Shadow DOM 캔버스 드롭·고정 버튼.
+	await clickTab('Design');
+	await page.evaluate(() => window.send({ type: 'tabPosition', position: 'top' }));
+	await page.waitForFunction(() => document.querySelector('.canvas-frame').firstElementChild.classList.contains('tab-bar'));
+	const paletteIds = await page.evaluate(() => {
+		const extra = (id, category, realType = id) => ({ id, ns: 'urn:test', realType, display: id, category, parents: [], bases: [], properties: [], events: [] });
+		const defs = window.testDefs.map(d => ({ ...d, display: d.display ?? d.id, category: d.realType === 'gridView' ? 'Grid' : d.realType === 'wframe' ? 'Frame' : 'Forms' }));
+		defs.push(extra('group', 'Container'), ...['Chart', 'HTML5', 'Navigation', 'Others'].map(category => extra(category.toLowerCase(), category)), { ...extra('hidden-component', 'Forms'), hidden: true });
+		window.paletteDefs = defs;
+		window.send({ type: 'definitions', defs });
+		const text = '<html xmlns:w2="urn:test"><body><w2:group id="group" style="height:180px;"><w2:input id="input" style="height:30px;width:120px;"/></w2:group><w2:gridView id="grid" style="height:70px;"><w2:header><w2:row><w2:column id="col" value="Column" width="120"/></w2:row></w2:header><w2:gBody><w2:row><w2:column id="cell"/></w2:row></w2:gBody></w2:gridView><w2:wframe id="frame" style="height:60px;"/></body></html>';
+		const root = window.parseXml(text), ids = {};
+		const walk = node => { ids[node.attrs.id ?? node.tag] = node.index; node.def = defs.findIndex(d => d.id === node.tag.split(':').at(-1)); node.children.forEach(walk); };
+		walk(root);
+		const frame = root.children[0].children[2];
+		frame.frame = window.parseXml('<body><w2:input id="inner"/></body>'); frame.frame.children[0].def = 0;
+		window.send({ type: 'document', version: 1000, text, root, script: { text: '' } });
+		return ids;
+	});
+	assert.equal(await page.$('.palette-pane'), null, '처음에는 팔레트 접힘');
+	assert.deepEqual(await page.$$eval('.canvas-frame .tab-bar > button', bs => bs.slice(0, 2).map(b => ({ name: b.className.split(' ')[0], draggable: b.draggable, tab: b.getAttribute('role') }))), [
+		{ name: 'tab-palette', draggable: false, tab: null }, { name: 'tab-move', draggable: false, tab: null },
+	], '팔레트·화살표는 정렬 탭에 포함되지 않는다');
+	await page.click('.tab-palette');
+	await page.waitForSelector('.palette-pane');
+	assert.deepEqual(await page.$$eval('.palette-category', bs => bs.map(b => b.textContent)), ['Chart', 'Container', 'Forms', 'Frame', 'Grid', 'HTML5', 'Navigation', 'Others']);
+	assert.equal(await page.$('[data-component="hidden-component"]'), null, '숨긴 컴포넌트 제외');
+	await page.evaluate(() => [...document.querySelectorAll('.palette-category')].find(b => b.textContent === 'Forms').click());
+	assert.ok(await page.$('[data-component="input"] .codicon-edit'), '기존 컴포넌트 아이콘');
+	await page.evaluate(index => {
+		const shadow = [...document.querySelectorAll('.design-canvas div')].find(el => el.shadowRoot).shadowRoot;
+		shadow.querySelector(`[data-wse="${index}"]`).click(); window.sent.length = 0;
+	}, paletteIds.group);
+	await page.click('[data-component="input"]');
+	assert.deepEqual(await lastSent('insertComponent'), { type: 'insertComponent', version: 1000, index: paletteIds.group, component: { id: 'input', ns: 'urn:test', realType: 'input' } }, '클릭은 현재 선택 + 기존 위치 선택창 요청');
+	await page.type('.palette-search input', 'radio');
+	assert.deepEqual(await page.$$eval('.palette-category', bs => bs.map(b => b.textContent)), ['Forms']);
+	await page.click('[data-component="radio"]');
+	assert.equal((await lastSent('insertComponent')).component.realType, 'radio', 'select1 태그가 같은 Radio·SelectBox 구분');
+	await page.$eval('.palette-search input', input => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, ''); input.dispatchEvent(new Event('input', { bubbles: true })); });
+	await page.waitForFunction(() => document.querySelectorAll('.palette-category').length === 8);
+	const paletteDrop = (index, ratio, invalid) => page.evaluate((index, ratio, invalid) => {
+		const shadow = [...document.querySelectorAll('.design-canvas div')].find(el => el.shadowRoot).shadowRoot;
+		const target = shadow.querySelector(`[data-wse="${index}"]`), source = document.querySelector('[data-component="input"]');
+		const transfer = new DataTransfer(); source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer }));
+		if (invalid) { transfer.setData('application/x-websquare5-component', invalid); }
+		const r = target.getBoundingClientRect(), y = r.top + r.height * ratio;
+		const over = new DragEvent('dragover', { bubbles: true, composed: true, cancelable: true, dataTransfer: transfer, clientY: y });
+		target.dispatchEvent(over); window.sent.length = 0;
+		return new Promise(resolve => setTimeout(() => {
+			const indicator = shadow.querySelector('.wse-frame.drop')?.className;
+			target.dispatchEvent(new DragEvent('drop', { bubbles: true, composed: true, cancelable: true, dataTransfer: transfer, clientY: y }));
+			source.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: transfer }));
+			resolve({ accepted: over.defaultPrevented, indicator, sent: window.sent.find(m => m.type === 'insertComponent') ?? null });
+		}, 60));
+	}, index, ratio, invalid);
+	for (const [index, ratio, expected, position] of [[paletteIds.group, .5, paletteIds.group, 'inside'], [paletteIds.group, .1, paletteIds.group, 'before'], [paletteIds.group, .9, paletteIds.group, 'after'], [paletteIds.input, .1, paletteIds.input, 'before'], [paletteIds.input, .9, paletteIds.input, 'after'], [paletteIds.col, .5, paletteIds.grid, 'inside'], [paletteIds.body, .99, paletteIds.body, 'inside']]) {
+		const dropped = await paletteDrop(index, ratio);
+		if (index === paletteIds.col) { // 그리드는 형제 삽입만: 열 위치가 아니라 gridView 전체의 가장자리 기준.
+			assert.equal(dropped.sent.index, paletteIds.grid); assert.ok(['before', 'after'].includes(dropped.sent.position));
+		} else {
+			assert.ok(dropped.accepted && dropped.indicator?.includes(position), '드롭 위치 표시: ' + position);
+			assert.deepEqual(dropped.sent, { type: 'insertComponent', version: 1000, component: { id: 'input', ns: 'urn:test', realType: 'input' }, index: expected, position });
+		}
+	}
+	const frameDrop = await paletteDrop(paletteIds.frame, .5);
+	assert.equal(frameDrop.sent.index, paletteIds.frame, '연결 화면에는 형제로 넣는다');
+	assert.ok(['before', 'after'].includes(frameDrop.sent.position));
+	assert.equal((await paletteDrop(paletteIds.group, .5, '{bad json')).sent, null, '잘못된 드래그 데이터 거부');
+	assert.equal((await paletteDrop(paletteIds.group, .5, JSON.stringify({ version: 1000, component: { id: 'hidden-component', ns: 'urn:test', realType: 'hidden-component' } }))).sent, null, '숨김 항목 드롭 거부');
+	// 실제 마우스 HTML5 drag도 Shadow DOM으로 전달된다.
+	await page.setDragInterception(true);
+	const sourceComponent = await page.$('[data-component="input"]');
+	const groupElement = (await page.evaluateHandle(index => [...document.querySelectorAll('.design-canvas div')].find(el => el.shadowRoot).shadowRoot.querySelector(`[data-wse="${index}"]`), paletteIds.group)).asElement();
+	await page.evaluate(() => { window.sent.length = 0; });
+	await sourceComponent.dragAndDrop(groupElement);
+	assert.equal((await lastSent('insertComponent')).position, 'inside', '실제 마우스로 그룹 중앙에 놓기');
+	await page.setDragInterception(false);
+	// 고정 버튼을 움직여도 탭 순서 저장은 발생하지 않는다.
+	for (const selector of ['.tab-palette', '.tab-move']) {
+		const box = await (await page.$(selector)).boundingBox();
+		await page.evaluate(() => { window.sent.length = 0; });
+		await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
+		await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2 + 25, { steps: 4 }); await page.mouse.up();
+		assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'setTabOrder')), false, '고정 버튼 드래그 제외');
+	}
+	await page.click('.tab-palette');
+	await page.waitForFunction(() => !document.querySelector('.palette-pane'));
+	await page.click('.tab-palette');
+	await page.waitForSelector('.palette-pane');
+	await page.evaluate(() => document.fonts.ready);
+	assert.ok(await page.evaluate(() => document.fonts.check('16px codicon')), '컴포넌트·패널 버튼 아이콘 폰트 로드');
+	await page.evaluate(() => [...document.querySelectorAll('.palette-category')].filter(b => ['Forms', 'Container'].includes(b.textContent)).forEach(b => b.click()));
+
+	// 즐겨찾기는 삽입 버튼과 별 버튼을 분리하고, 항상 열린 상단 목록에 표시한다.
+	await page.evaluate(() => { window.send({ type: 'paletteFavorites', keys: [] }); window.sent.length = 0; });
+	// 캔버스의 기존 컴포넌트 이동: XML 이동 요청만 보내고 좌표/스타일은 편집하지 않는다.
+	const canvasNodes = await page.evaluate(() => {
+		const root = document.querySelector('.canvas-host').shadowRoot;
+		const input = root.querySelector('input[data-wse]'), group = root.querySelector('[data-wse-id="group"]') ?? input.closest('[data-wse]')?.parentElement.closest('[data-wse]');
+		const grid = root.querySelector('.w2grid[data-wse]');
+		return { input: Number(input.dataset.wse), group: Number(group.dataset.wse), grid: Number(grid.dataset.wse) };
+	});
+	assert.equal(await page.evaluate(i => document.querySelector('.canvas-host').shadowRoot.querySelector(`[data-wse="${i}"]`).draggable, canvasNodes.input), true);
+	const canvasDrag = async (from, to, ratio, drop = true) => page.evaluate(({ from, to, ratio, drop }) => {
+		const root = document.querySelector('.canvas-host').shadowRoot;
+		const source = root.querySelector(`[data-wse="${from}"]`), target = root.querySelector(`[data-wse="${to}"]`);
+		const dataTransfer = new DataTransfer(), rect = target.getBoundingClientRect();
+		source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer }));
+		target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer, clientY: rect.top + rect.height * ratio }));
+		const hint = root.querySelector('.wse-frame.drop')?.textContent;
+		if (drop) { target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer, clientY: rect.top + rect.height * ratio })); }
+		source.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer }));
+		return hint;
+	}, { from, to, ratio, drop });
+	await page.evaluate(() => { window.sent.length = 0; });
+	await canvasDrag(canvasNodes.input, canvasNodes.grid, 0.1);
+	assert.ok(await page.evaluate(({input,grid}) => window.sent.some(m => m.type === 'move' && m.dragged === input && m.target === grid && m.position === 'before'), canvasNodes), '컴포넌트 앞 이동');
+	await canvasDrag(canvasNodes.input, canvasNodes.grid, 0.9);
+	assert.ok(await page.evaluate(() => window.sent.some(m => m.type === 'move' && m.position === 'after')), '컴포넌트 뒤 이동');
+	await canvasDrag(canvasNodes.input, canvasNodes.group, 0.5);
+	assert.ok(await page.evaluate(() => window.sent.some(m => m.type === 'move' && m.position === 'inside')), '그룹 중앙으로 이동');
+	await page.evaluate(() => { window.sent.length = 0; });
+	await canvasDrag(canvasNodes.group, canvasNodes.input, 0.5);
+	await canvasDrag(canvasNodes.input, canvasNodes.input, 0.5);
+	assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'move')), false, '자기 자신·자손으로 이동 금지');
+	await page.setDragInterception(true);
+	const sourceMove = await page.evaluateHandle(i => document.querySelector('.canvas-host').shadowRoot.querySelector(`[data-wse="${i}"]`), canvasNodes.input);
+	const targetMove = await page.evaluateHandle(i => document.querySelector('.canvas-host').shadowRoot.querySelector(`[data-wse="${i}"]`), canvasNodes.grid);
+	await sourceMove.asElement().dragAndDrop(targetMove.asElement());
+	await page.setDragInterception(false);
+	await page.waitForFunction(() => window.sent.some(m => m.type === 'move'));
+	assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'editAttr' || m.type === 'insertComponent')), false, '이동으로 좌표/스타일 변경·새 컴포넌트 삽입 없음');
+	console.log('Design: 기존 컴포넌트 실제 드래그·앞/뒤/그룹 이동·자기 자신/자손 거부 passed');
+	await page.evaluate(i => document.querySelector('.canvas-host').shadowRoot.querySelector(`[data-wse="${i}"]`).click(), paletteIds.group);
+	await page.evaluate(() => { window.sent.length = 0; });
+	const categoryStar = type => `.palette-list section:not(.palette-favorites) .palette-row:has([data-component="${type}"]) .palette-star`;
+	assert.equal(await page.$eval('.palette-favorites h2', el => el.textContent), '즐겨찾기');
+	assert.equal(await page.$('.palette-favorites [aria-expanded], .palette-favorites summary'), null, '즐겨찾기는 아코디언이 아니다');
+	await page.click(categoryStar('input'));
+	await page.waitForSelector('.palette-favorites [data-component="input"]');
+	assert.deepEqual(await lastSent('setPaletteFavorite'), { type: 'setPaletteFavorite', favorite: true, component: { id: 'input', ns: 'urn:test', realType: 'input' } });
+	assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'insertComponent')), false, '별 클릭은 컴포넌트를 삽입하지 않는다');
+	assert.equal(await page.$eval(categoryStar('input'), b => b.getAttribute('aria-pressed')), 'true');
+	assert.ok(await page.$('.palette-favorites .codicon-star-full'), '선택한 별은 채워진 아이콘');
+	assert.ok(await page.evaluate(() => document.querySelector('.palette-favorites').compareDocumentPosition(document.querySelector('.palette-category')) & Node.DOCUMENT_POSITION_FOLLOWING), '즐겨찾기가 분류 목록보다 먼저');
+	await page.click('.palette-favorites [data-component="input"]');
+	assert.equal((await lastSent('insertComponent')).index, paletteIds.group, '즐겨찾기 항목 클릭도 기존 선택 기준으로 삽입');
+	await page.setDragInterception(true);
+	await (await page.$('.palette-favorites [data-component="input"]')).dragAndDrop(groupElement);
+	assert.equal((await lastSent('insertComponent')).position, 'inside', '즐겨찾기도 실제 마우스로 드롭');
+	await page.setDragInterception(false);
+	assert.notEqual(await page.$eval(categoryStar('input'), s => getComputedStyle(s).color), await page.$eval(categoryStar('radio'), s => getComputedStyle(s).color), '등록한 별은 테마 강조색');
+	await page.click('.palette-favorites .palette-star');
+	assert.equal(await page.$('.palette-favorites [data-component]'), null, '별을 다시 누르면 즐겨찾기 해제');
+	assert.equal(await page.$eval(categoryStar('input'), b => b.getAttribute('aria-pressed')), 'false');
+	assert.ok(await page.$(`${categoryStar('input')} .codicon-star-empty`), '해제한 별은 빈 아이콘');
+	await page.click(categoryStar('radio'));
+	assert.equal(await page.$eval(categoryStar('selectbox'), b => b.getAttribute('aria-pressed')), 'false', '같은 태그인 SelectBox와 Radio를 구분');
+	await page.click(categoryStar('selectbox'));
+	assert.equal(await page.$$eval('.palette-favorites [data-component]', bs => bs.length), 2);
+	const favoriteOrder = () => page.$$eval('.palette-favorites .palette-component', buttons => buttons.map(b => b.dataset.component));
+	assert.deepEqual(await favoriteOrder(), ['radio', 'selectbox']);
+	assert.equal(await page.$eval('.palette-favorites .palette-drag-handle', b => b.textContent), '⠿', 'DataList와 같은 손잡이');
+	await page.evaluate(() => { window.sent.length = 0; });
+	const selectHandle = await page.$('.palette-favorites .palette-row:has([data-component="selectbox"]) .palette-drag-handle');
+	const radioRow = await page.$('.palette-favorites .palette-row:has([data-component="radio"])');
+	await page.setDragInterception(true);
+	await selectHandle.dragAndDrop(radioRow);
+	await page.setDragInterception(false);
+	await page.waitForFunction(() => window.sent.some(m => m.type === 'reorderPaletteFavorites'));
+	assert.deepEqual(await favoriteOrder(), ['selectbox', 'radio'], '손잡이 실제 드래그로 앞으로 이동');
+	const reordered = await page.evaluate(() => window.sent.find(m => m.type === 'reorderPaletteFavorites').keys);
+	assert.deepEqual(reordered.map(key => JSON.parse(key)[2]), ['selectbox', 'radio']);
+	assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'insertComponent')), false, '정렬 손잡이는 캔버스 삽입을 요청하지 않는다');
+	await page.evaluate(keys => window.send({ type: 'paletteFavorites', keys }), reordered);
+	await page.click('.tab-palette'); await page.click('.tab-palette');
+	assert.deepEqual(await favoriteOrder(), ['selectbox', 'radio'], '재개방 후 저장된 순서 유지');
+	await page.focus('.palette-favorites .palette-drag-handle');
+	await page.keyboard.press('ArrowDown');
+	assert.deepEqual(await favoriteOrder(), ['radio', 'selectbox'], '손잡이 키보드 이동');
+	await page.$eval('[aria-label="컴포넌트 검색"]', input => { input.value = 'Radio'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+	// React controlled input은 실제 키 입력으로 검색한다.
+	await page.click('[aria-label="컴포넌트 검색"]'); await page.keyboard.down('Control'); await page.keyboard.press('A'); await page.keyboard.up('Control'); await page.keyboard.type('Radio');
+	const reorders = () => page.evaluate(() => window.sent.filter(m => m.type === 'reorderPaletteFavorites').length);
+	const reorderCount = await reorders();
+	await page.focus('.palette-favorites .palette-drag-handle'); await page.keyboard.press('ArrowDown');
+	assert.equal(await reorders(), reorderCount, '검색 중 방향키는 보이는 즐겨찾기끼리만(숨은 항목과 자리 안 바꿈)');
+	await page.click('[aria-label="컴포넌트 검색"]'); await page.keyboard.down('Control'); await page.keyboard.press('A'); await page.keyboard.up('Control'); await page.keyboard.press('Backspace');
+	assert.deepEqual(await favoriteOrder(), ['radio', 'selectbox'], '검색에 숨긴 즐겨찾기도 제자리에 보존');
+	const restoredKey = JSON.stringify(['urn:test', 'input', 'input']);
+	await page.evaluate(key => window.send({ type: 'paletteFavorites', keys: [key] }), restoredKey);
+	await page.click('.tab-palette'); await page.click('.tab-palette');
+	await page.waitForSelector('.palette-favorites [data-component="input"]');
+	assert.equal(await page.$$eval('.palette-favorites [data-component]', bs => bs.length), 1, '저장소에서 받은 목록은 패널 재개방 후에도 유지');
+	await page.evaluate(() => [...document.querySelectorAll('.palette-category')].find(b => b.textContent === 'Forms').click());
+	assert.ok(await page.$$eval('.palette-star', stars => { const right = stars.filter(s => s.getClientRects().length && s.closest('.palette-row').getClientRects().length && s.getBoundingClientRect().width).map(s => s.getBoundingClientRect().right); return right.length > 1 && Math.max(...right) - Math.min(...right) < 1; }), '상단 목록·분류 목록의 별은 같은 우측 끝에 정렬');
+	// 우측 패널은 DOM·탭 상태를 버리지 않고 라이브러리 API로 접는다.
+	assert.ok(await page.$eval('.canvas-frame .tab-bar', bar => bar.lastElementChild.classList.contains('tab-panel-right')), '우측 토글은 탭 줄 맨 오른쪽');
+	assert.deepEqual(await page.$eval('.tab-panel-right', b => ({ draggable: b.draggable, role: b.getAttribute('role') })), { draggable: false, role: null });
+	const rightBefore = await page.evaluate(() => { window.rightPaneBefore = document.querySelector('.right-panel .pane'); return { width: document.querySelector('.right-panel').getBoundingClientRect().width, canvas: document.querySelector('.canvas-frame').getBoundingClientRect().width, active: [...document.querySelectorAll('.right-panel [role="tab"][aria-selected="true"]')].map(b => b.textContent) }; });
+	await page.click('.tab-panel-right');
+	// 버튼 상태는 패널 폭 변경 이벤트(onResize) 뒤에 바뀐다 → 둘 다 기다린다
+	await page.waitForFunction(() => document.querySelector('.right-panel').getBoundingClientRect().width < 1 && document.querySelector('.tab-panel-right').getAttribute('aria-expanded') === 'false');
+	assert.equal(await page.$eval('.right-panel-content', panel => panel.inert), true, '숨긴 패널은 키보드 포커스 대상에서 제외');
+	assert.ok(await page.$eval('.canvas-frame', (frame, width) => frame.getBoundingClientRect().width > width + 100, rightBefore.canvas), '닫힌 패널의 공간은 캔버스가 사용');
+	await page.click('.tab-panel-right');
+	await page.waitForFunction(() => document.querySelector('.right-panel').getBoundingClientRect().width > 200);
+	assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.right-panel [role="tab"][aria-selected="true"]')].map(b => b.textContent)), rightBefore.active, '재개방 후 선택한 우측 탭 유지');
+	assert.equal(await page.evaluate(() => window.rightPaneBefore === document.querySelector('.right-panel .pane')), true, '패널 내용을 재생성하지 않는다');
+	assert.ok(Math.abs(await page.$eval('.right-panel', panel => panel.getBoundingClientRect().width) - rightBefore.width) < 2, '재개방 후 원래 패널 폭 복원');
+	const rightToggleBox = await (await page.$('.tab-panel-right')).boundingBox();
+	await page.evaluate(() => { window.sent.length = 0; });
+	await page.mouse.move(rightToggleBox.x + rightToggleBox.width / 2, rightToggleBox.y + rightToggleBox.height / 2); await page.mouse.down();
+	await page.mouse.move(rightToggleBox.x - 80, rightToggleBox.y + 30, { steps: 4 }); await page.mouse.up();
+	assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'setTabOrder')), false, '우측 토글은 끌어서 탭을 옮길 수 없다');
+	console.log('Palette favorites: 별 정렬·등록/해제·상단 목록·복원·클릭/실제 드롭; 우측 패널 접기/펼치기·상태/폭 유지·드래그 제외 passed');
+
+	if (process.env.PALETTE_SCREENSHOT) { await page.screenshot({ path: process.env.PALETTE_SCREENSHOT }); }
+	console.log('Palette: 묶음·아이콘·검색·선택 기준 클릭·드롭 위치·실제 마우스 드롭·고정 버튼 passed');
+
 	assert.deepEqual(errors, []);
 } finally {
 	await browser?.close();

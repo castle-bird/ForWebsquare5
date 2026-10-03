@@ -1,0 +1,40 @@
+{
+	// IntelliJ New UI Dark 느낌의 코드 편집기 테마(색 값은 직접 맞춘 근사치, JetBrains 파일 아님).
+	// media/themes의 VS Code 테마 .json은 테마 목록에 기본으로 나온다
+	"name": "IntelliJ Dark",
+	"type": "dark",
+	"colors": {
+		"editor.background": "#1E1F22",
+		"editor.foreground": "#BCBEC4",
+		"editorCursor.foreground": "#CED0D6",
+		"editor.selectionBackground": "#214283",
+		"editor.lineHighlightBackground": "#26282E",
+		"editorGutter.background": "#1E1F22",
+		"editorLineNumber.foreground": "#4B5059",
+		"editorLineNumber.activeForeground": "#A1A3AB",
+		"editorIndentGuide.background1": "#313438",
+		"editorIndentGuide.activeBackground1": "#4B5059",
+		"editorWhitespace.foreground": "#393B40"
+	},
+	"tokenColors": [
+		{ "settings": { "foreground": "#BCBEC4", "background": "#1E1F22" } },
+		{ "name": "주석", "scope": ["comment", "punctuation.definition.comment"], "settings": { "foreground": "#7A7E85" } },
+		{ "name": "문서 주석", "scope": "comment.block.documentation", "settings": { "foreground": "#5F826B", "fontStyle": "italic" } },
+		{ "name": "문자열", "scope": ["string", "string.quoted"], "settings": { "foreground": "#6AAB73" } },
+		{ "name": "문자열 이스케이프", "scope": "constant.character.escape", "settings": { "foreground": "#CF8E6D" } },
+		{ "name": "숫자", "scope": "constant.numeric", "settings": { "foreground": "#2AACB8" } },
+		{ "name": "true·false·null", "scope": "constant.language", "settings": { "foreground": "#CF8E6D" } },
+		{ "name": "키워드", "scope": ["keyword", "keyword.control"], "settings": { "foreground": "#CF8E6D" } },
+		{ "name": "수식어·선언", "scope": ["storage", "storage.type", "storage.modifier"], "settings": { "foreground": "#CF8E6D" } },
+		{ "name": "연산자", "scope": "keyword.operator", "settings": { "foreground": "#BCBEC4" } },
+		{ "name": "타입·클래스", "scope": ["entity.name.type", "entity.name.class", "support.type", "support.class"], "settings": { "foreground": "#BCBEC4" } },
+		{ "name": "함수·메서드 선언", "scope": ["entity.name.function", "support.function"], "settings": { "foreground": "#56A8F5" } },
+		{ "name": "변수", "scope": ["variable", "variable.other"], "settings": { "foreground": "#BCBEC4" } },
+		{ "name": "필드·속성", "scope": ["variable.other.property", "variable.other.object.property", "support.type.property-name"], "settings": { "foreground": "#C77DBB" } },
+		{ "name": "상수 필드", "scope": "variable.other.constant", "settings": { "foreground": "#C77DBB", "fontStyle": "italic" } },
+		{ "name": "어노테이션", "scope": ["storage.type.annotation", "meta.annotation", "punctuation.definition.annotation"], "settings": { "foreground": "#B3AE60" } },
+		{ "name": "XML·HTML 태그", "scope": ["entity.name.tag", "punctuation.definition.tag"], "settings": { "foreground": "#D5B778" } },
+		{ "name": "XML·HTML 속성", "scope": "entity.other.attribute-name", "settings": { "foreground": "#BABABA" } },
+		{ "name": "XML CDATA·엔티티", "scope": ["string.unquoted.cdata", "constant.character.entity"], "settings": { "foreground": "#6AAB73" } }
+	]
+}

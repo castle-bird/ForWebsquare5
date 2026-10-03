@@ -106,6 +106,38 @@ button.icon { background: none; border: none; padding: 3px; border-radius: 4px; 
 button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground); }
 .tab-body { flex: 1; overflow: auto; min-height: 0; }
 .canvas-frame > .tab-body { padding: 12px; }
+.canvas-frame > .tab-body:has(.design-layout) { padding: 0; overflow: hidden; }
+.design-layout { height: 100%; }
+.design-canvas { height: 100%; box-sizing: border-box; padding: 12px; display: flex; flex-direction: column; }
+.design-canvas > div { flex: 1; min-height: 0; }
+.tab-bar .tab-panel-right, .tab-bar .tab-palette, .tab-bar .tab-settings { padding: 4px 8px; }
+.tab-bar .tab-palette:disabled { opacity: .35; cursor: default; }
+.palette-pane { display: flex; flex-direction: column; height: 100%; background: var(--vscode-sideBar-background); }
+.palette-pane header { padding: 10px 12px; font-weight: 600; font-size: 12px; }
+.palette-search { padding: 0 8px 8px; }
+.palette-search input { width: 100%; }
+.palette-list { flex: 1; overflow: auto; min-height: 0; padding: 0 4px 8px; }
+.palette-list button { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left; border: none; background: none; padding: 6px 8px; cursor: pointer; border-radius: 3px; }
+.palette-list button:hover { background: var(--vscode-list-hoverBackground); }
+.palette-list button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.palette-list .palette-component { padding-left: 27px; }
+.palette-component > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-component[draggable="true"] { cursor: grab; }
+.palette-component:disabled { opacity: .5; cursor: default; }
+.palette-row { display: grid; grid-template-columns: minmax(0, 1fr) 30px; align-items: center; }
+.palette-list .palette-star { width: 30px; padding: 6px; justify-content: center; }
+.palette-star[aria-pressed="true"] { color: var(--vscode-charts-yellow, var(--vscode-editorWarning-foreground, var(--vscode-foreground))); }
+.palette-favorites { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--vscode-panel-border); }
+.palette-favorites h2 { margin: 6px 8px; font-size: 12px; font-weight: 600; }
+.palette-favorites .palette-component { padding-left: 4px; }
+.palette-favorite-row { grid-template-columns: 24px minmax(0, 1fr) 30px; }
+.palette-list .palette-drag-handle { width: 24px; padding: 6px 3px; justify-content: center; cursor: grab; color: var(--vscode-descriptionForeground); font-size: 18px; }
+.palette-drag-handle:active { cursor: grabbing; }
+.palette-favorite-row.drop-before { box-shadow: inset 0 2px var(--vscode-focusBorder); }
+.palette-favorite-row.drop-after { box-shadow: inset 0 -2px var(--vscode-focusBorder); }
+.right-panel-content { height: 100%; }
+.right-panel-content[inert] { visibility: hidden; }
+.resizer.collapsed { width: 0; visibility: hidden; }
 .pane > .tab-body { --pad: 5px; padding: var(--pad); }
 .canvas-frame > .tab-body:has(.code-editor) { padding: 0; }
 .code-editor { height: 100%; display: flex; flex-direction: column; }
@@ -132,9 +164,10 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .file-suggest li { display: flex; gap: 8px; align-items: baseline; padding: 3px 6px; border-radius: 3px; cursor: pointer; font-size: 12px; white-space: nowrap; overflow: hidden; }
 .file-suggest li.active { background: var(--vscode-quickInputList-focusBackground, var(--vscode-list-activeSelectionBackground)); color: var(--vscode-quickInputList-focusForeground, var(--vscode-list-activeSelectionForeground, inherit)); }
 .file-suggest .file-dir { opacity: .65; overflow: hidden; text-overflow: ellipsis; }
-.code-editor:not(.custom-theme) .cm-selectionBackground, .code-editor:not(.custom-theme) .cm-focused .cm-selectionBackground { background: var(--vscode-editor-selectionBackground) !important; }
+/* --code-selection·--code-line: 사용자 테마 색(themes.ts codeVars), 없으면 아래 기본 */
+.code-editor:not(.custom-theme) .cm-selectionBackground, .code-editor:not(.custom-theme) .cm-focused .cm-selectionBackground { background: var(--code-selection, var(--vscode-editor-selectionBackground)) !important; }
 /* 선택 레이어는 글자 뒤에 있어서 VS Code의 불투명한 현재 줄 배경이면 가려진다. */
-.code-editor:not(.custom-theme) .cm-activeLine { background-color: color-mix(in srgb, var(--vscode-editor-lineHighlightBackground, #888) 25%, transparent) !important; }
+.code-editor:not(.custom-theme) .cm-activeLine { background-color: var(--code-line, color-mix(in srgb, var(--vscode-editor-lineHighlightBackground, #888) 25%, transparent)) !important; }
 /* Git 변경 표시: 줄 번호 옆 막대, 오른쪽 끝 띠(스크롤바 위, 클릭은 스크롤바로). 색은 VS Code 줄 옆 변경 표시 색 */
 .code-editor .cm-changes-gutter { width: 3px; }
 .code-editor .cm-change { height: 100%; }
@@ -146,8 +179,10 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .code-editor .cm-change-ruler { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; z-index: 3; pointer-events: none; }
 .code-editor .cm-change-mark { position: absolute; left: 0; right: 0; min-height: 2px; background: var(--change); opacity: .8; }
 /* 고른 테마(thememirror): 선택 색 규칙이 그려지는 선택 레이어에 안 먹고 현재 줄 배경은 불투명해서, 테마 글자색을 옅게 섞어 쓴다 */
-.code-editor.custom-theme .cm-selectionBackground, .code-editor.custom-theme .cm-focused .cm-selectionBackground { background: color-mix(in srgb, currentColor 25%, transparent) !important; }
-.code-editor.custom-theme .cm-activeLine { background-color: color-mix(in srgb, currentColor 7%, transparent) !important; }
+.code-editor.custom-theme .cm-selectionBackground, .code-editor.custom-theme .cm-focused .cm-selectionBackground { background: var(--code-selection, color-mix(in srgb, currentColor 25%, transparent)) !important; }
+.code-editor.custom-theme .cm-activeLine { background-color: var(--code-line, color-mix(in srgb, currentColor 7%, transparent)) !important; }
+/* 선택 중에는 현재 줄 배경을 걷는다(불투명한 현재 줄 색이 뒤 층의 선택을 가림, codeEditor selectionClass) */
+.code-editor .cm-editor.cm-has-selection .cm-activeLine { background-color: transparent !important; }
 /* 자동완성 팝업: 둥근 모서리·종류별 색 배지(IntelliJ처럼 C·I·E·m·f…). 색은 VS Code 테마의 심볼 아이콘 색(symbolIcon)을 쓴다.
    고른 코드 테마(custom-theme)는 팝업 색을 테마에 맡기고 모양만 바꾼다 */
 .code-editor .cm-editor .cm-tooltip.cm-tooltip-autocomplete, .code-editor .cm-editor .cm-tooltip.cm-tooltip-autocomplete > ul { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); }
@@ -211,10 +246,19 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .code-editor .cm-editor .cm-completionIcon-snippet::after { content: 'S'; }
 .code-editor .cm-editor .cm-completionIcon-text { --ci: var(--vscode-symbolIcon-textForeground, var(--vscode-foreground)); }
 .code-editor .cm-editor .cm-completionIcon-text::after { content: 'abc'; font-size: 7px; font-weight: 600; }
-.code-editor .cm-editor .cm-panel.cm-search { padding: 8px 10px; font-size: var(--vscode-font-size); color: var(--vscode-foreground); background: var(--vscode-editorWidget-background); border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border)); }
+/* 검색창(Ctrl+F): 고른 코드 테마(custom-theme)면 테마 배경·글자색을 섞어 쓴다(자동완성 팝업과 같음) */
+.code-editor .cm-editor .cm-panel.cm-search { padding: 8px 10px; font-size: var(--vscode-font-size); }
+.code-editor:not(.custom-theme) .cm-editor .cm-panel.cm-search { color: var(--vscode-foreground); background: var(--vscode-editorWidget-background); border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border)); }
 .code-editor .cm-editor .cm-panel.cm-search label { font-size: inherit; }
-.code-editor .cm-search .cm-textfield { box-sizing: border-box; width: 240px; max-width: 40%; height: 28px; padding: 4px 8px; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); }
-.code-editor .cm-search .cm-button { min-height: 28px; padding: 4px 10px; font: inherit; color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); border: 1px solid var(--vscode-button-border, var(--vscode-panel-border)); cursor: pointer; }
+.code-editor .cm-search .cm-textfield { box-sizing: border-box; width: 240px; max-width: 40%; height: 28px; padding: 4px 8px; font: inherit; }
+.code-editor:not(.custom-theme) .cm-search .cm-textfield { color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); }
+.code-editor .cm-search .cm-button { min-height: 28px; padding: 4px 10px; font: inherit; cursor: pointer; }
+.code-editor:not(.custom-theme) .cm-search .cm-button { color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); border: 1px solid var(--vscode-button-border, var(--vscode-panel-border)); }
+.code-editor.custom-theme .cm-editor .cm-panels { color: inherit; background-color: inherit; }
+.code-editor.custom-theme .cm-editor .cm-panel.cm-search { background: color-mix(in srgb, currentColor 5%, transparent); border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent); }
+.code-editor.custom-theme .cm-search :is(.cm-textfield, .cm-button) { color: inherit; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); }
+.code-editor.custom-theme .cm-search .cm-textfield { background: color-mix(in srgb, currentColor 8%, transparent); }
+.code-editor.custom-theme .cm-search .cm-button { background: color-mix(in srgb, currentColor 12%, transparent); }
 .cm-tooltip .ws-hover { max-width: 520px; max-height: 320px; overflow: auto; box-sizing: border-box; padding: 8px 12px; line-height: 1.5; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); }
 .ws-doc-sig { font-family: var(--vscode-editor-font-family); font-weight: 600; margin-bottom: 6px; }
 .ws-doc-desc { margin-bottom: 8px; white-space: pre-wrap; }
@@ -326,6 +370,9 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .id { opacity: .7; }
 .id::before { content: '#'; }
 .tree-row .name, .tree-row .cls { opacity: .55; }
+/* 화면 점검 경고(core/check): 마우스를 올리면 이유. 접힌 줄은 안쪽 문제를 흐리게 */
+.tree-row .tree-problem { flex: none; margin-left: 4px; font-size: 13px; color: var(--vscode-editorWarning-foreground, var(--vscode-problemsWarningIcon-foreground, #cca700)); }
+.tree-row .tree-problem.inside { opacity: .55; }
 .drag-ghost { position: fixed; top: -100px; left: 0; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; color: var(--vscode-list-activeSelectionForeground, #fff); background: var(--vscode-list-activeSelectionBackground, #0e639c); }
 .tree-row .name::before { content: '· '; }
 .context-menu { position: fixed; z-index: 200; min-width: 170px; padding: 4px; border-radius: 5px; background: var(--vscode-menu-background, var(--vscode-dropdown-background)); color: var(--vscode-menu-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border)); box-shadow: 0 4px 16px var(--vscode-widget-shadow, rgba(0, 0, 0, .25)); }
@@ -478,6 +525,29 @@ input[type="checkbox"].switch:focus-visible { outline: 1px solid var(--vscode-fo
 /* 섹션(기본·데이터·이벤트)으로 묶은 입력: 라벨은 입력칸 위, 두 칸(이벤트는 세 칸)씩 */
 .form-sections { overflow: auto; }
 .form-sections section { padding: 12px 18px 14px; border-bottom: 1px solid var(--vscode-panel-border); }
+/* 테마 색 덮어쓰기 팝업: 한 줄 = 이름 · 색칸 · 색 코드 · I B U · 되돌리기, 두 줄씩 */
+.theme-colors-editor { width: min(640px, calc(100vw - 32px)); height: min(720px, calc(100vh - 32px)); }
+.theme-colors-editor .form-sections { flex: 1; min-height: 0; }
+.theme-scope { display: flex; align-items: center; gap: 12px; }
+.theme-scope .section-hint { margin-left: 0; font-size: 12px; font-weight: 400; color: var(--vscode-descriptionForeground); }
+.theme-preview { margin-top: 10px; border: 1px solid var(--ctl-border); border-radius: 6px; overflow: hidden; }
+.theme-preview .cm-content { padding: 6px 4px; }
+.theme-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; }
+.theme-row { display: grid; grid-template-columns: 76px 22px minmax(0, 1fr) auto 22px; align-items: center; gap: 6px; height: 26px; font-size: 12px; }
+.theme-row:not(.changed) .theme-name { color: var(--vscode-descriptionForeground); }
+.theme-swatch { position: relative; width: 20px; height: 20px; box-sizing: border-box; border-radius: 4px; border: 1px solid var(--ctl-border); cursor: pointer; overflow: hidden; }
+.theme-swatch input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.form-sections .theme-hex { height: 24px; padding: 0 6px; font-size: 11px; }
+.form-sections .theme-hex::placeholder { font-family: var(--vscode-font-family, system-ui, sans-serif); letter-spacing: 0; }
+.theme-font { display: inline-flex; height: 22px; border: 1px solid var(--ctl-border); border-radius: 5px; overflow: hidden; }
+.theme-font button { width: 20px; padding: 0; border: 0; background: none; font-size: 11px; color: var(--vscode-descriptionForeground); cursor: pointer; }
+.theme-font button + button { border-left: 1px solid var(--ctl-border); }
+.theme-font button[aria-pressed="true"] { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+.theme-font .font-italic { font-style: italic; } .theme-font .font-bold { font-weight: 700; } .theme-font .font-underline { text-decoration: underline; }
+.theme-row:not(.changed) .theme-font { opacity: .6; }
+.theme-reset { padding: 2px; }
+.theme-settings-link { margin-right: auto; padding: 0; border: 0; background: none; color: var(--vscode-textLink-foreground); cursor: pointer; font-size: 12px; }
+.theme-settings-link:hover { text-decoration: underline; }
 .form-sections section:last-child { border-bottom: 0; }
 .form-sections h3 { margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: .02em; color: var(--vscode-descriptionForeground); }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
@@ -574,3 +644,12 @@ textarea.edit.style-value {
 .combo-list li { padding: 2px 8px; border-radius: 3px; cursor: pointer; white-space: nowrap; }
 .combo-list li.current { font-weight: 600; }
 .combo-list li[aria-selected="true"], .combo-list li:hover { background: var(--vscode-list-activeSelectionBackground, #0060c0); color: var(--vscode-list-activeSelectionForeground, #fff); }
+
+/* 잠깐 뜨는 알림(ui/toast.tsx): 캔버스 hover와 같은 파란 파스텔(focusBorder 15% + 흰색)이라 어두운 테마에서도 눈에 띈다 */
+.toast {
+	position: fixed; right: 16px; bottom: 16px; z-index: 1000; max-width: min(420px, calc(100vw - 32px)); box-sizing: border-box; padding: 12px 16px; border-radius: 6px;
+	font-size: calc(var(--vscode-font-size) + 2px); line-height: 1.4; color: color-mix(in srgb, var(--vscode-focusBorder) 45%, #000);
+	background: color-mix(in srgb, var(--vscode-focusBorder) 15%, #fff); border: 1px solid color-mix(in srgb, var(--vscode-focusBorder) 45%, #fff);
+	box-shadow: 0 2px 10px var(--vscode-widget-shadow, #0006); animation: toast-in .15s ease-out;
+}
+@keyframes toast-in { from { opacity: 0; transform: translateY(6px); } }

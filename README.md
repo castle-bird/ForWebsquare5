@@ -35,8 +35,11 @@ Eclipse + WebSquare 환경의 사용 흐름을 참고해 VS Code 확장으로 �
 - **Property / Event 패널**: 속성·이벤트 검색과 편집, 여러 컴포넌트 동시 편집
 - **Outline / Data 패널**: 컴포넌트 트리, DataCollection·Submission 트리, 드래그 앤 드롭 이동·바인딩, F2로 id 바꾸기
 - **더블클릭 편집**(캔버스·Outline): 글자 바로 고치기(버튼·textbox·output 등), 그리드 칸 속성, 선택 항목(selectbox·checkcombobox·multiselect·radio·checkbox), DataList·DataMap·Submission, multiupload 파라미터
-- **팔레트**: Activity Bar의 WebSquare5 사이드바에서 컴포넌트를 검색해 화면에 삽입
+- **Design 이동**: 이미 배치된 컴포넌트를 끌어 순서·부모 그룹을 변경합니다. 그룹 중앙은 안쪽 맨 뒤, 가장자리는 앞·뒤로 이동하며 놓을 위치를 표시합니다. 그리드는 전체 컴포넌트 단위로 이동합니다. Outline과 같은 XML 이동·Undo를 사용합니다.
+- **팔레트**: 탭 방향 화살표 왼쪽 패널 버튼으로 Design 왼쪽 팔레트를 열고 닫습니다. 설치본 정의의 묶음별 목록·아이콘·검색을 지원합니다. 행 오른쪽 별로 즐겨찾기를 저장하며, 상단 즐겨찾기는 접기 없이 표시합니다. 즐겨찾기도 클릭·드래그로 삽입합니다. 즐겨찾기 왼쪽 ⠿ 손잡이를 끌어 순서를 바꾸며, 순서도 저장됩니다(손잡이에서 위·아래 방향키 지원). 탭 맨 오른쪽 버튼으로 우측 Property·Event·Outline·Data 패널을 접고 펼칩니다. 클릭하면 삽입 위치를 고르고, 캔버스로 끌어다 놓으면 그룹 중앙은 안쪽, 위·아래 가장자리는 앞·뒤에 삽입합니다.
 - **Event → Script**: 이벤트 값을 더블클릭하면 `scwin.{id}_{이벤트}` 함수 뼈대를 만들거나 해당 함수로 이동
+- **id 바꾸기**: dataList·dataMap이나 그 컬럼의 id를 바꾸면 `data:` 바인딩·바인딩된 그리드 열·Submission 참조도 같이 바뀝니다(Script 코드 안 참조는 그대로). 이미 쓰는 id로는 바꾸지 않고 알려 줍니다
+- **화면 점검**: Outline·Data 트리에 경고 아이콘으로 겹치는 id, 없는 컬럼을 가리키는 바인딩, Script에 없는 이벤트 함수를 표시합니다(마우스를 올리면 이유). 스크립트에서 만드는 데이터는 경고하지 않습니다
 
 XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그대로 동작합니다.
 
@@ -48,11 +51,19 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 
 - XML·WebSquare API·공통 JS 자동완성과 마우스 오버 설명
 - 문법 오류 표시, 포맷(VS Code에 설정한 포매터, 없으면 VS Code 내장), 검색, 줄바꿈(VS Code 설정을 따름)
-- 코드 편집기 테마 선택, Git 변경 줄 표시
+- 코드 편집기 테마 선택(탭 줄 오른쪽 톱니바퀴 메뉴, "IntelliJ Dark"·"IntelliJ Light" 포함), Git 변경 줄 표시
+- 테마 색 덮어쓰기: 톱니바퀴 메뉴의 "테마 색 덮어쓰기…" 팝업에서 색칸·색 코드·기울임/굵게/밑줄로 바꾸면 바로 미리 보이고, 확인하면 저장됩니다(지금 테마만 또는 모든 테마). 저장 위치는 설정 `websquare5-editor.codeThemeCustomizations`라 직접 적어도 됩니다. 예:
+  ```json
+  "websquare5-editor.codeThemeCustomizations": {
+    "tokens": { "keyword": "#ff8800", "comment": { "color": "#888888", "fontStyle": "italic" } },
+    "[Dracula]": { "colors": { "background": "#1e1f29" } }
+  }
+  ```
+- 테마 가져오기: 톱니바퀴 메뉴의 "테마 파일 가져오기…"로 VS Code 테마 `.json`을 가져옵니다. 배경·글자·선택·줄 번호 색은 그대로, 문법 색은 이 편집기의 분류에 맞춰 비슷하게 옮겨집니다
 
 ### 연결 파일 (Controller · Service · Mapper · MyBatis)
 
-화면 탭에서 Java·XML·SQL 등 연결 파일을 열어 편집합니다. 탭 목록과 순서는 직접 바꿀 수 있고, 탭 줄 맨 앞 화살표로 탭 줄을 위·아래로 옮길 수 있습니다(기본 위).
+화면 탭에서 Java·XML·SQL 등 연결 파일을 열어 편집합니다. 탭 목록과 순서는 직접 바꿀 수 있고, 탭 줄 앞쪽 화살표로 탭 줄을 위·아래로 옮길 수 있습니다(기본 위).
 
 ![연결 파일 탭](images/java1.png)
 
@@ -85,11 +96,22 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 code --install-extension websquare5-editor-0.2.0.vsix
 ```
 
-### 설정
+## 사용 방법
+
+### 처음 설정 (Walkthrough)
 
 1. VS Code에서 WebSquare5 프로젝트 폴더를 엽니다.
-2. `F1` → **WebSquare5: 환경 설정**을 실행하고 위 WebSquare5 설정 파일 폴더를 고릅니다.
-3. 그 밑에서 컴포넌트 정의 파일, wpack 변환기, API 문서를 자동으로 찾습니다. 못 찾은 항목은 해당 기능을 쓸 때 알림으로 알려주며, 설정(`websquare5-editor.*`)에서 직접 지정할 수 있습니다.
+2. `F1`을 누르고 **Welcome: Open Walkthrough...**(한국어 VS Code는 "연습"으로 검색)를 실행합니다.
+3. 목록에서 **WebSquare5 Editor 시작하기**를 고릅니다.
+4. **폴더 선택**을 눌러 위 WebSquare5 설정 파일 폴더(예: `eclipse_egov4.1/`)를 고릅니다.
+5. 그 밑에서 컴포넌트 정의 파일, wpack 변환기, API 문서를 자동으로 찾습니다. 못 찾은 항목은 해당 기능을 쓸 때 알림으로 알려 줍니다.
+
+Walkthrough 대신 `F1` → **WebSquare5: 환경 설정**으로 항목별 위치를 확인·변경할 수도 있고, 설정(`websquare5-editor.*`)에서 직접 지정해도 됩니다.
+
+### 화면 열기
+
+- 화면 `*.xml`을 열면 Design 탭으로 열립니다. 탭 줄에서 Script·Source와 연결 파일 탭으로 옮겨 다닙니다.
+- 코드 편집기 테마·SQL 방언·도구 경로는 탭 줄 오른쪽 톱니바퀴 메뉴에서 바꿉니다.
 
 ---
 
@@ -115,6 +137,7 @@ WebSquare5 교육용 개발팩 기준으로 개발하고 확인했습니다. 엔
 ## 고지 사항
 
 - **비공식 도구**: 이 확장은 Inswave Systems의 공식 제품이 아니며 Inswave와 무관한 개인 프로젝트입니다. WebSquare는 Inswave Systems의 제품·상표입니다.
+- **테마 이름**: 기본 테마 "IntelliJ Dark"·"IntelliJ Light"는 IntelliJ New UI의 느낌을 참고해 색을 직접 맞춘 것으로, JetBrains의 파일이 아니며 JetBrains와 무관합니다. IntelliJ는 JetBrains s.r.o.의 상표입니다.
 - **독립 구현**: WebSquare 엔진·스킨·컴포넌트 정의·wpack·문서·아이콘 등 Inswave의 파일을 이 저장소와 확장에 포함하지 않으며, Studio 소스를 복사·포팅하지 않았습니다. 공개 문서와 실행 결과를 참고해 독립적으로 작성했습니다.
 - **WebSquare 환경 의존**: 사용자의 작업 폴더와 설치본의 WebSquare 프로젝트 구조·리소스를 실행 중에 읽습니다. WebSquare 프로젝트가 아닌 환경에서는 XML ↔ JS 변환, 컴포넌트 목록·속성 조회가 동작하지 않습니다.
 

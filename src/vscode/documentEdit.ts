@@ -7,7 +7,8 @@ import { applyEdits, applyLineChanges, deleteNode, editableScript, encodeScript,
 import { pasteNode } from '../core/paste';
 import { moveNode } from '../core/move';
 import { mergeCells } from '../core/merge';
-import { addDataNode, editDataFields } from '../core/data';
+import { idConflict } from '../core/check';
+import { addDataNode, editDataFields, isDataKind, renameDataRefs, type DataRename } from '../core/data';
 import { addSubmissionNode, editSubmissionNode } from '../core/submission';
 import { editChoices } from '../core/choices';
 import { addGridColumn, addGridPart, addGridRow, bindGridView } from '../core/grid';
@@ -15,14 +16,59 @@ import type { CodeChange, CodeTarget, ToExtension } from '../core/protocol';
 
 type NodeEdit = Extract<ToExtension, { type: 'setAttr' | 'setText' | 'paste' | 'delete' | 'move' | 'addData' | 'editDataFields' | 'addSubmission' | 'editSubmission' | 'editChoices' | 'bindGrid' | 'addGridPart' | 'mergeCells' }>;
 
-export async function applyNodeEdit(document: vscode.TextDocument, msg: NodeEdit): Promise<boolean> {
+/** notify: 같이 바꾼 것(데이터·컬럼 id를 바꿔 바인딩도 바꿈)·막은 이유(겹치는 id)를 알린다 */
+export async function applyNodeEdit(document: vscode.TextDocument, msg: NodeEdit, notify?: (message: string) => void): Promise<boolean> {
 	const text = document.getText();
 	const root = parseXml(text);
+	// id는 같은 범위(화면·그리드 부분·데이터 컬럼) 안에서 안 겹치게. 막으면 바꾸지 않는다
+	const conflict = root && msg.type === 'setAttr' ? [{ name: msg.name, value: msg.value }, ...msg.also ?? []]
+		.map(a => a.name === 'id' && a.value ? idConflict(root, msg.index, a.value) : undefined).find(Boolean) : undefined;
+	if (conflict) {
+		notify?.(conflict);
+		return false;
+	}
 	const changes = root && nodeChanges(text, root, msg);
 	if (!changes) {
 		return false;
 	}
-	return !changes.length || applyTextEdits(document, changes);
+	const rename = root && changes.length ? dataRename(root, msg) : undefined;
+	const refs = rename ? renameDataRefs(text, root!, rename) : [];
+	const ok = !changes.length || await applyTextEdits(document, [...changes, ...refs]);
+	if (ok && rename && refs.length) {
+		const { from, to, columns = new Map<string, string>() } = rename;
+		const what = [...from !== to ? [`${from} → ${to}`] : [], ...[...columns].map(([a, b]) => `${from}.${a} → ${b}`)];
+		notify?.(`${what.join(', ')}: 바인딩 ${refs.length}곳도 바꿨습니다.`);
+	}
+	return ok;
+}
+
+/** 데이터 노드(dataList·dataMap 등)나 그 컬럼·키의 id를 바꾸는 편집이면 무엇을 바꾸는지 */
+function dataRename(root: XmlNode, msg: NodeEdit): DataRename | undefined {
+	if (msg.type === 'editDataFields') {
+		const node = nodeAt(root, msg.index), from = node?.attrs.id;
+		if (!node || !from) {
+			return undefined;
+		}
+		const columns = new Map(msg.fields.flatMap(f => {
+			const old = f.sourceIndex === undefined ? undefined : nodeAt(root, f.sourceIndex)?.attrs.id;
+			return old && old !== f.id ? [[old, f.id] as const] : [];
+		}));
+		const to = msg.id || from;
+		return to !== from || columns.size ? { from, to, columns } : undefined;
+	}
+	if (msg.type !== 'setAttr' || msg.name !== 'id' || msg.also?.length || !msg.value) {
+		return undefined;
+	}
+	const path = pathTo(root, msg.index), node = path?.at(-1), old = node?.attrs.id;
+	if (!path || !node || !old || old === msg.value) {
+		return undefined;
+	}
+	if (isDataKind(node)) {
+		return { from: old, to: msg.value };
+	}
+	// 데이터 > columnInfo·keyInfo > column·key
+	const owner = path.at(-3), id = owner?.attrs.id;
+	return owner && id && isDataKind(owner) && /:(columnInfo|keyInfo)$/.test(path.at(-2)!.tag) ? { from: id, to: id, columns: new Map([[old, msg.value]]) } : undefined;
 }
 
 export function applyTextEdits(document: vscode.TextDocument, changes: TextEdit[], base = 0): Thenable<boolean> {

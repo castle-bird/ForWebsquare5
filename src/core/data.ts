@@ -105,3 +105,43 @@ export function editDataFields(text: string, root: XmlNode, node: XmlNode, field
 	const change = sourceChange(text.slice(node.start, node.end), updated);
 	return change && { ...change, start: change.start + node.start, end: change.end + node.start };
 }
+
+/** 데이터 노드(dataList·dataMap·linkedDataList·alias…) */
+export const isDataKind = (node: XmlNode) => node.ns === WEBSQUARE_NS && DATA_KINDS.some(kind => node.tag.endsWith(':' + kind));
+
+/** 데이터 노드 id(from → to, 그대로면 같은 값)와 그 안 컬럼·키 id(옛 → 새) 바꾸기 */
+export interface DataRename { from: string; to: string; columns?: Map<string, string> }
+
+// id에 올 수 있는 글자: 영문·숫자·_·.·-(VALID_ID)
+const idPattern = (id: string) => id.replace(/[.-]/g, '\\$&');
+
+/**
+ * 데이터 id·컬럼 id를 바꿀 때 가리키는 곳도 바꾸는 편집. Script 안 참조(dlt_a.getRowCount())는 그대로
+ * - "data:"로 시작하는 속성 값(ref·nodeset·dataList·target, `data:json,["dlt_a"]`·`{"id":"dlt_a"}` 포함)의 데이터 id와 `data:dlt_a.col`의 컬럼
+ * - linkedDataList의 bind
+ * - 그 dataList에 바인딩된 gridView 본문(gBody) column id, 그 데이터에 바인딩된 itemset의 label·value ref(컬럼 이름)
+ * 더 긴 이름(dlt_a2·col2)은 안 건드린다
+ */
+export function renameDataRefs(text: string, root: XmlNode, { from, to, columns }: DataRename): TextEdit[] {
+	const token = new RegExp(String.raw`(?<![\w.-])` + idPattern(from) + String.raw`(?![\w-])`, 'g');
+	const column = columns?.size ? new RegExp(String.raw`(?<![\w.-])` + idPattern(from) + String.raw`\.(` + [...columns.keys()].map(idPattern).join('|') + String.raw`)(?![\w.-])`, 'g') : undefined;
+	const bound = `data:${from}`;
+	const edits: TextEdit[] = [];
+	/** scope: 이 데이터에 바인딩된 그리드 안·그 본문 안·itemset 안 */
+	const walk = (node: XmlNode, ancestors: XmlNode[], scope?: 'grid' | 'gridBody' | 'itemset') => {
+		const local = (name: string, value: string) => columns && (scope === 'gridBody' && name === 'id' && node.tag.endsWith(':column')
+			|| scope === 'itemset' && name === 'ref') ? columns.get(value) : undefined;
+		for (const [name, value] of Object.entries(node.attrs)) {
+			const next = value.startsWith('data:') ? (column ? value.replace(column, (_m, c: string) => `${from}.${columns!.get(c)}`) : value).replace(token, () => to)
+				: name === 'bind' && value === from && isDataKind(node) ? to : local(name, value) ?? value;
+			const edit = next !== value ? setAttribute(text, node, name, next, ancestors) : undefined;
+			if (edit) { edits.push(edit); }
+		}
+		const inner = node.tag.endsWith(':gridView') ? (node.attrs.dataList === bound ? 'grid' : undefined)
+			: node.tag.endsWith(':itemset') ? (node.attrs.nodeset === bound ? 'itemset' : undefined)
+			: scope === 'grid' && node.tag.endsWith(':gBody') ? 'gridBody' : scope;
+		node.children.forEach(c => walk(c, [...ancestors, node], inner));
+	};
+	walk(root, []);
+	return edits;
+}

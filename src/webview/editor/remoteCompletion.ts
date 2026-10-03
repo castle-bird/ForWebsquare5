@@ -43,7 +43,10 @@ const extraEdits = (view: EditorView, edits: CodeChange[] | undefined) => edits?
 
 /** detail: 이 항목을 푼 결과(늦게 옴). 자동 import는 고른 뒤 오면 그때 넣고, 설명은 펼칠 때 기다린다 */
 function toCompletion(item: RemoteCompletion, rank: number, detail: Promise<RemoteCompletionDetail | undefined>): Completion {
-	const apply = item.snippet ? snippet(toSnippet(item.insert)) : undefined;
+	// 자리(`$1`·`${…}`) 없는 스니펫(Java `getHour()` 등)은 글자로 넣는다: CodeMirror snippet은 자리가 없으면 커서를 안 옮겨 '.' 뒤에 남는다
+	const fields = item.snippet && /(^|[^\\])\$(\d|\{)/.test(item.insert);
+	const apply = fields ? snippet(toSnippet(item.insert)) : undefined;
+	const text = item.snippet ? item.insert.replace(/\\([$}\\])/g, '$1') : item.insert;
 	return {
 		label: item.label,
 		displayLabel: item.display,
@@ -57,7 +60,7 @@ function toCompletion(item: RemoteCompletion, rank: number, detail: Promise<Remo
 			if (apply) {
 				apply(view, completion, from, to);
 			} else {
-				view.dispatch({ changes: { from, to, insert: item.insert }, selection: { anchor: from + item.insert.length }, userEvent: 'input.complete' });
+				view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length }, userEvent: 'input.complete' });
 			}
 			if (item.edits) {
 				extraEdits(view, item.edits);

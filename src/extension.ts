@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { defOf, isScreen, nodeAt, parseXml, type XmlNode } from './core/xmlModel';
 import { editableScript, scriptBody } from './core/edit';
 import { errorMessage } from './core/errors';
-import type { CodeTarget, ToExtension, ToWebview } from './core/protocol';
+import type { CodeTarget, SettingsMenuItem, ToExtension, ToWebview } from './core/protocol';
 import { ENGINE_PAGE, findWebRoot, fromWebPath, serial } from './project/paths';
 import { scopeCss, stylesheetFiles } from './project/styles';
 import { attachFrames, resolveSrc } from './project/frames';
@@ -17,20 +17,20 @@ import { applyCodeEdit, applyNodeEdit, formatCode } from './vscode/documentEdit'
 import { LinkedFiles, registerLinks } from './vscode/links';
 import { saveTabOrder, saveTabPosition, tabOrder, tabPosition } from './vscode/linkTabs';
 import { linkIdOf } from './core/links';
-import { codeTheme, registerCodeTheme } from './vscode/codeTheme';
+import { findPaletteDef } from './core/palette';
+import { codeTheme, registerCodeTheme, saveCustomizations } from './vscode/codeTheme';
 import { affectsCodeOptions, codeOptions } from './vscode/codeOptions';
 import { onGitChange, stagedText } from './vscode/gitBase';
-import { hasPaletteTarget, insertFromPalette, refreshPalette, registerPalette, releasePaletteTarget, setPaletteTarget, type PaletteTarget } from './vscode/palette';
+import { insertFromPalette, paletteFavorites, savePaletteFavorite, reorderPaletteFavorites } from './vscode/palette';
 
 export const VIEW_TYPE = 'websquare5-editor.designer';
 
 export function activate(context: vscode.ExtensionContext) {
 	registerSetup(context);
-	registerPalette(context);
 	registerLinks(context);
 	registerCodeTheme(context, msg => panels.forEach(p => void p.webview.postMessage(msg)));
 	context.subscriptions.push(
-		vscode.window.registerCustomEditorProvider(VIEW_TYPE, new DesignerProvider(context.extensionUri), {
+		vscode.window.registerCustomEditorProvider(VIEW_TYPE, new DesignerProvider(context.extensionUri, context.globalState), {
 			webviewOptions: { retainContextWhenHidden: true },
 		}),
 		vscode.workspace.onDidSaveTextDocument(doc => void wpackOnSave(doc)),
@@ -43,6 +43,16 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 const panels = new Set<vscode.WebviewPanel>();
+
+/** 톱니바퀴 메뉴 → VS Code 명령. 웹뷰는 이 목록에 있는 것만 부른다 */
+const SETTINGS_MENU: Record<SettingsMenuItem, [string, ...unknown[]]> = {
+	codeTheme: ['websquare5-editor.codeTheme'],
+	importCodeTheme: ['websquare5-editor.importCodeTheme'],
+	themeColors: ['workbench.action.openSettingsJson', { revealSetting: { key: 'websquare5-editor.codeThemeCustomizations', edit: true } }],
+	sqlDialect: ['workbench.action.openSettings', '@id:websquare5-editor.sqlDialect'],
+	setup: ['websquare5-editor.setup'],
+	settings: ['workbench.action.openSettings', '@ext:castle-bird.websquare5-editor'],
+};
 
 const wpackQueues = new Map<string, Promise<unknown>>();
 let warnedNoWpack = false, warnedNoDefs = false;
@@ -115,7 +125,7 @@ async function documentMessage(document: vscode.TextDocument, webview: vscode.We
 }
 
 class DesignerProvider implements vscode.CustomTextEditorProvider {
-	constructor(private readonly extensionUri: vscode.Uri) {}
+	constructor(private readonly extensionUri: vscode.Uri, private readonly globalState: vscode.Memento) {}
 
 	async resolveCustomTextEditor(document: vscode.TextDocument, panel: vscode.WebviewPanel): Promise<void> {
 		const webRoot = await findWebRoot(document.uri.fsPath);
@@ -144,7 +154,8 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 				return false;
 			}
 		};
-		let definitions = loadDefinitions(document.uri, webRoot);
+		const toast = (message: string) => void post({ type: 'toast', message });
+		let definitions =loadDefinitions(document.uri, webRoot);
 		const loadApi = () => resolvePath('apiDocumentationPath', document.uri, webRoot).then(loadApiDocs);
 		let api = loadApi();
 		const styles = loadStyles(document, panel.webview, webRoot);
@@ -186,20 +197,6 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		// 화면 XML(Source·Script)과 연결 파일은 따로 줄 세운다(느린 Java 포맷이 화면 편집을 막지 않게)
 		const codeQueues = new Map<string, Promise<unknown>>();
 		const queue = (target: CodeTarget, job: () => Promise<void>) => serial(codeQueues, linkIdOf(target) === undefined ? 'xml' : target, job);
-		let selection: Extract<ToExtension, { type: 'selection' }> | undefined;
-		const paletteTarget: PaletteTarget = {
-			defs: () => definitions.then(d => d.defs),
-			insert: async def => {
-				const id = await insertFromPalette(document, def, selection?.version === document.version ? selection.index : undefined, webRoot);
-				if (id) {
-					await post({ type: 'select', id });
-					await refresh();
-				}
-			},
-		};
-		if (panel.active || !hasPaletteTarget()) {
-			setPaletteTarget(paletteTarget);
-		}
 		const subs = [
 			vscode.workspace.onDidChangeConfiguration(e => {
 				const changed = (key: SetupKey) => e.affectsConfiguration(`websquare5-editor.${key}`, document.uri);
@@ -210,16 +207,10 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 				if (eclipse || changed('componentDefinitionFile')) {
 					definitions = loadDefinitions(document.uri, webRoot);
 					void definitions.then(d => post({ type: 'definitions', ...d })).then(sendDocument);
-					refreshPalette();
 				}
 				if (eclipse || changed('apiDocumentationPath')) {
 					api = loadApi();
 					void api.then(result => post({ type: 'scriptApi', ...result }));
-				}
-			}),
-			panel.onDidChangeViewState(e => {
-				if (e.webviewPanel.active) {
-					setPaletteTarget(paletteTarget);
 				}
 			}),
 			// Git 상태는 저장할 때마다도 바뀌어 자주 불린다 → 모아서
@@ -237,7 +228,8 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 				if (msg.type === 'ready') {
 					void post({ type: 'tabOrder', order: tabOrder() ?? [] });
 					void post({ type: 'tabPosition', position: tabPosition() });
-					void post({ type: 'codeTheme', theme: codeTheme() });
+					void post({ type: 'paletteFavorites', keys: paletteFavorites(this.globalState) });
+					void post({ type: 'codeTheme', ...codeTheme() });
 					void post({ type: 'codeOptions', ...codeOptions() });
 					bases = {};
 					void sendBases();
@@ -263,8 +255,38 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 						void ack(false, linkId !== undefined ? msg.version : document.version);
 						void vscode.window.showErrorMessage(`변경 실패: ${errorMessage(e)}`);
 					});
-				} else if (msg.type === 'selection') {
-					selection = msg;
+				} else if (msg.type === 'setPaletteFavorite' || msg.type === 'reorderPaletteFavorites') {
+					// 순서 변경은 정의가 필요 없다. 추가·해제는 이 화면 정의에 있는 컴포넌트만
+					const save = msg.type === 'reorderPaletteFavorites'
+						? Array.isArray(msg.keys) && msg.keys.every(key => typeof key === 'string') ? reorderPaletteFavorites(this.globalState, msg.keys) : Promise.resolve()
+						: definitions.then(({ defs }) => {
+							const def = findPaletteDef(defs, msg.component);
+							return def && typeof msg.favorite === 'boolean' ? savePaletteFavorite(this.globalState, def, msg.favorite) : undefined;
+						});
+					void save.then(async () => {
+						const state: ToWebview = { type: 'paletteFavorites', keys: paletteFavorites(this.globalState) };
+						await post(state);
+						broadcast(panel, state);
+					}).catch(e => {
+						void post({ type: 'paletteFavorites', keys: paletteFavorites(this.globalState) });
+						void vscode.window.showErrorMessage(`즐겨찾기 저장 실패: ${errorMessage(e)}`);
+					});
+				} else if (msg.type === 'insertComponent') {
+					void queue('source', async () => {
+						const def = findPaletteDef((await definitions).defs, msg.component);
+						if (def && msg.version === document.version) {
+							const id = await insertFromPalette(document, def, msg.index, webRoot, msg.position, msg.version);
+							if (id) { await post({ type: 'select', id }); }
+						} else {
+							void vscode.window.showWarningMessage(def ? '문서가 바뀌었습니다. 다시 넣어 주세요.' : '팔레트 컴포넌트 정의를 찾지 못했습니다.');
+						}
+						await refresh();
+					}).catch(e => { void vscode.window.showErrorMessage(`컴포넌트 넣기 실패: ${errorMessage(e)}`); });
+				} else if (msg.type === 'saveThemeCustomizations') {
+					void saveCustomizations(msg.common, msg.own).catch(e => vscode.window.showErrorMessage(`테마 색 저장 실패: ${errorMessage(e)}`));
+				} else if (msg.type === 'settingsMenu') {
+					const command = SETTINGS_MENU[msg.item];
+					if (command) { void vscode.commands.executeCommand(...command); }
 				} else if (msg.type === 'warn') {
 					void vscode.window.showWarningMessage(msg.message);
 				} else if (msg.type === 'openFrame') {
@@ -278,7 +300,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 					void saveTabPosition(msg.position);
 					broadcast(panel, { type: 'tabPosition', position: msg.position });
 				} else if (msg.type === 'editDataFields' || msg.type === 'addSubmission' || msg.type === 'editSubmission' || msg.type === 'editChoices') {
-					const apply = msg.version === document.version ? applyNodeEdit(document, msg) : Promise.resolve(false);
+					const apply = msg.version === document.version ? applyNodeEdit(document, msg, toast) : Promise.resolve(false);
 					void apply.then(async ok => {
 						await post({ type: 'popupAck', popup: msg.popup, ok, ...!ok && { error: '문서가 바뀌었어. 팝업을 다시 열어 줘.' } });
 						await refresh();
@@ -296,7 +318,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 					});
 				} else {
 					// 웹뷰가 옛 버전을 보고 보낸 편집은 버린다. 어느 쪽이든 최신 문서를 디바운스 없이 바로 다시 보낸다.
-					const apply = msg.version === document.version ? applyNodeEdit(document, msg) : Promise.resolve(false);
+					const apply = msg.version === document.version ? applyNodeEdit(document, msg, toast) : Promise.resolve(false);
 					void apply.then(refresh, e => vscode.window.showErrorMessage(`변경 실패: ${errorMessage(e)}`));
 				}
 			}),
@@ -304,7 +326,6 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		panel.onDidDispose(() => {
 			disposed = true;
 			panels.delete(panel);
-			releasePaletteTarget(paletteTarget);
 			clearTimeout(timer);
 			clearTimeout(gitTimer);
 			subs.forEach(s => s.dispose());

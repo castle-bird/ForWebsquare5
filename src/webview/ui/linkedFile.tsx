@@ -83,6 +83,11 @@ function LinkPicker({ tab, missing }: { tab: LinkTab; missing?: string }) {
 	const [value, setValue] = useState('');
 	const files = useEditorStore(s => s.linkFiles[tab.id]);
 	const exts = useEditorStore(s => s.linkExts);
+	const problem = useEditorStore(s => s.linkProblems[tab.id]);
+	const change = (next: string) => {
+		setValue(next);
+		useEditorStore.setState(s => ({ linkProblems: { ...s.linkProblems, [tab.id]: undefined } }));
+	};
 	return <div className="link-picker">
 		<form onSubmit={e => {
 			e.preventDefault();
@@ -92,9 +97,10 @@ function LinkPicker({ tab, missing }: { tab: LinkTab; missing?: string }) {
 		}}>
 			<h3>{tab.label} 파일 연결</h3>
 			{missing && <p className="warning" title={missing}>파일을 찾지 못했습니다: {missing}</p>}
+			{problem && <p className="warning" role="alert">{problem}</p>}
 			<p className="link-picker-hint">작업 폴더 안의 {exts.join('·')} 파일. 상대 경로는 작업 폴더 기준입니다.</p>
 			<div className="link-picker-row">
-				<FileInput files={files} value={value} onChange={setValue} label={`${tab.label} 파일 경로`}
+				<FileInput files={files} value={value} onChange={change} label={`${tab.label} 파일 경로`}
 					placeholder="파일 이름으로 검색 또는 경로"
 					// 입력칸에 들어올 때마다 새로 받는다(파일이 생기거나 지워졌을 수 있다)
 					onFocus={() => post({ type: 'findFiles', kind: tab.id })}

@@ -1,5 +1,5 @@
 // 편집 결과(codeAck)를 받기 전 입력은 모아 뒀다가 한 번에 보낸다 (빠르게 쳐도 버전이 어긋나지 않게)
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { EditorView, basicSetup } from 'codemirror';
 import { search } from '@codemirror/search';
 import { ChangeSet, Compartment, EditorSelection, EditorState, Prec, Transaction, countColumn, type Extension, type Text } from '@codemirror/state';
@@ -7,18 +7,15 @@ import { hoverTooltip, keymap, type Command, type Tooltip } from '@codemirror/vi
 import { indentLess, indentMore } from '@codemirror/commands';
 import { acceptCompletion, autocompletion, type CompletionContext, type CompletionSource } from '@codemirror/autocomplete';
 import { getIndentUnit, indentUnit, type LanguageSupport } from '@codemirror/language';
-import { vsCodeDark } from '@fsegurai/codemirror-theme-vscode-dark';
-import { vsCodeLight } from '@fsegurai/codemirror-theme-vscode-light';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { diff } from '@codemirror/merge';
 import type { CodeChange, CodeTarget, ToExtension, ToWebview } from '../../core/protocol';
 import type { LintSource } from '@codemirror/lint';
 import { fromRemote, lintFor, remoteProblemsChanged, type LintMode } from './lint';
-import { THEMES } from './themes';
+import { codeVars, editorBase, editorClass, followsVsCode, themeOf } from './themes';
 import { baseEffect, gitChanges } from './changes';
 import { remoteCompletion } from './remoteCompletion';
 import { notInComment } from './docComment';
-import type { CodeThemeId } from '../../core/codeTheme';
 import { isModKey } from '../keys';
 import { useEditorStore } from '../store';
 
@@ -35,10 +32,6 @@ const changesTo = (editor: EditorView, next: string) => {
 	const doc = editor.state.doc.toString(), target = editor.state.toText(next).toString();
 	return diff(doc, target, { timeout: 300 }).map(c => ({ from: c.fromA, to: c.toA, insert: target.slice(c.fromB, c.toB) }));
 };
-const vsTheme = () => document.body.classList.contains('vscode-light') || document.body.classList.contains('vscode-high-contrast-light') ? vsCodeLight : vsCodeDark;
-const themeOf = (id: CodeThemeId) => id === 'vscode' ? vsTheme() : THEMES[id];
-// 웹뷰 우클릭 메뉴(package.json webview/context)에 "코드 편집기 테마…"를 붙이는 표시. 잘라내기·복사·붙여넣기는 그대로
-const MENU_CONTEXT = JSON.stringify({ webviewSection: 'codeEditor' });
 
 // 들여쓰기 가이드 색은 VS Code 테마 색(밝음·어두움 모두 같은 변수). 옛 VS Code는 번호 없는 이름만 있다
 const GUIDE = 'var(--vscode-editorIndentGuide-background1, var(--vscode-editorIndentGuide-background))';
@@ -70,6 +63,12 @@ const indent = indentUnit.of('    ');
 
 // Ctrl+F 찾기·바꾸기 창은 위에(VS Code처럼). 기본은 아래
 const searchTop = search({ top: true });
+
+/**
+ * 선택이 있으면 cm-has-selection(style.css가 현재 줄 배경을 걷음): 선택 색은 줄 뒤 층이라
+ * 테마의 현재 줄 색이 불투명하면(IntelliJ Dark 등) 그 줄의 선택(단어 더블클릭)이 가려진다
+ */
+const selectionClass = EditorView.editorAttributes.compute(['selection'], (s): Record<string, string> => s.selection.main.empty ? {} : { class: 'cm-has-selection' });
 
 const completion = autocompletion({
 	// 기본 100ms 기다림 없이 VS Code처럼 바로(연결 탭은 결과가 완전하면 이어 치는 글자를 다시 묻지 않고 거른다)
@@ -107,10 +106,11 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 	/** VS Code가 낸 문제(연결 탭)와 그 연결 파일 버전 */
 	const diagnostics = useEditorStore(s => s.diagnostics[target]);
 	const remoteProblems = useRef(diagnostics);
-	const codeTheme = useEditorStore(s => s.codeTheme);
+	const savedTheme = useEditorStore(s => s.codeTheme), themeDraft = useEditorStore(s => s.codeThemeDraft);
+	const codeTheme = useMemo(() => themeDraft ? { ...savedTheme, ...themeDraft } : savedTheme, [savedTheme, themeDraft]);
 	const gitBase = useEditorStore(s => s.gitBases[target]);
 	const wordWrap = useEditorStore(s => s.codeOptions.wordWrap);
-	const themeId = useRef(codeTheme);
+	const themeState = useRef(codeTheme);
 
 	const send = (changes: ChangeSet, doc: Text) => {
 		const at = (pos: number) => {
@@ -175,14 +175,12 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 			parent: host.current!,
 			doc: text,
 			extensions: [
-				basicSetup, searchTop, keys, completion, indent, indentGuides, lintFor(lint, remoteLint), gitChanges,
+				basicSetup, searchTop, selectionClass, keys, completion, indent, indentGuides, lintFor(lint, remoteLint), gitChanges,
 				langConf.of(languageOf.current(lang)),
 				wrapConf.of(wordWrap ? EditorView.lineWrapping : []),
 				hoverTooltip((view, pos, side) => hoverSource.current?.(view, pos, side) ?? null),
 				theme.of(themeOf(codeTheme)),
 				readOnlyConf.of(EditorState.readOnly.of(readOnly)),
-				// CodeMirror가 넣는 <style>이 웹뷰 CSP를 통과하도록
-				EditorView.cspNonce.of(document.querySelector<HTMLScriptElement>('script[nonce]')?.nonce ?? ''),
 				// 실행 취소·다시 실행은 CodeMirror만: VS Code 웹뷰는 키를 VS Code에도 넘겨서 문서까지 한 번 더 되돌리고
 				// 그러면 CodeMirror가 보낸 되돌리기가 옛 버전 기준이 돼 충돌한다. 키 전달은 window에서 받으므로 편집기에서 멈춘다.
 				// (handler는 키맵이 먼저 처리하면 안 불리므로 항상 불리는 observer로)
@@ -193,10 +191,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 						}
 					},
 				}),
-				EditorView.theme({
-					'&': { height: '100%' },
-					'.cm-scroller': { fontFamily: 'var(--vscode-editor-font-family)', fontSize: 'var(--vscode-editor-font-size)' },
-				}),
+				EditorView.theme({ '&': { height: '100%' } }),
+				editorBase,
 				EditorView.updateListener.of(u => {
 					const s = sync.current;
 					if (!u.docChanged || s.remote || s.conflict) {
@@ -212,7 +208,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 		});
 		view.current = editor;
 		// VS Code 테마를 따라갈 때만 VS Code 밝음/어두움 전환을 따른다
-		const observer = new MutationObserver(() => themeId.current === 'vscode' && editor.dispatch({ effects: theme.reconfigure(vsTheme()) }));
+		const observer = new MutationObserver(() => followsVsCode(themeState.current) && editor.dispatch({ effects: theme.reconfigure(themeOf(themeState.current)) }));
 		observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 		const onMessage = ({ data }: MessageEvent<ToWebview>) => {
 			const s = sync.current;
@@ -308,8 +304,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 		view.current?.dispatch({ effects: remoteProblemsChanged.of(null) });
 	}, [diagnostics]);
 	useEffect(() => {
-		if (themeId.current !== codeTheme) {
-			themeId.current = codeTheme;
+		if (themeState.current !== codeTheme) {
+			themeState.current = codeTheme;
 			view.current?.dispatch({ effects: theme.reconfigure(themeOf(codeTheme)) });
 		}
 	}, [codeTheme]);
@@ -324,7 +320,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 		}
 	}, [text, version]);
 
-	return <div className={codeTheme === 'vscode' ? 'code-editor' : 'code-editor custom-theme'} data-vscode-context={MENU_CONTEXT}>
+	return <div className={editorClass(codeTheme)} style={codeVars(codeTheme)}>
 		{notes.filter(Boolean).map(n => <div key={n} className="code-banner">{n}</div>)}
 		{conflict && <div className="code-banner">원본이 다른 곳에서 바뀌어 이후 입력은 반영되지 않았습니다. 필요한 부분을 복사한 뒤 다시 불러와 주세요.
 			<button onClick={() => {

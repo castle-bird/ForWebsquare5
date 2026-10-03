@@ -6,20 +6,26 @@ import type { ComponentDef } from '../../core/protocol';
 import { defOf, EV, localName, nodeAt, pathTo, type XmlNode } from '../../core/xmlModel';
 import { setStyle } from '../../core/style';
 import { EditBox } from '../ui/editBox';
-import { cellForm, FORM_HEIGHT, formAttrs, FormFields, type Form } from './cellForm';
-import { render, textTarget, type TextTarget } from './renderers';
-import { classLabel, REF_MIME } from '../ui/tree';
+import { cellForm, FORM_HEIGHT, FORM_WIDTH, formAttrs, FormFields, FormHeader, type Form } from './cellForm';
+import { render, textTarget, outlineIcon, type TextTarget } from './renderers';
+import { classLabel, REF_MIME, setDragGhost } from '../ui/tree';
+import { PALETTE_MIME, readPaletteDrag, type PaletteDrag } from '../ui/palette';
+import { componentDropPosition, findPaletteDef, insertPositions } from '../../core/palette';
+import type { InsertPosition } from '../../core/paste';
 import canvasCss from './canvas.css';
 
+const MOVE_MIME = 'application/x-websquare5-canvas-move';
 let renders = 0;
 
-export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onEditText, onEditAttr, onOpenFrame, onOpenEditor, onBindRef, onContextMenu, idChoices }: {
+export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onEditText, onEditAttr, onOpenFrame, onOpenEditor, onBindRef, onContextMenu, onInsertComponent, onMove, idChoices }: {
 	body: XmlNode; defs: ComponentDef[]; sheets?: string[]; selected?: number;
 	extra?: number[];
 	onSelect(i: number, additive?: boolean): void; onEditText(target: TextTarget, value: string, also?: { name: string; value?: string }[]): void;
 	onEditAttr(name: string, value: string | undefined): void; onOpenFrame(index: number): void;
 	onOpenEditor?(index: number): boolean;
 	onBindRef?(index: number, value: string): void;
+	onMove?(dragged: number, target: number, position: InsertPosition): void;
+	onInsertComponent?(drag: PaletteDrag, index: number, position: InsertPosition): void;
 	onContextMenu?(index: number, x: number, y: number): void;
 	/** 이 노드의 id로 고를 값(바인딩된 그리드 본문 셀 → dataList 컬럼 id) */
 	idChoices?(index: number): string[] | undefined;
@@ -28,9 +34,12 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 	const page = useRef<HTMLDivElement>(null);
 	const [shadow, setShadow] = useState<ShadowRoot>();
 	const [hover, setHover] = useState<number>();
+	const [drop, setDrop] = useState<{ index: number; position: InsertPosition; moving?: boolean }>();
+	const moving = useRef<{ index: number; body: XmlNode }>(undefined);
 	// form: 그리드 칸이면 문구 아래 입력(헤더: 너비·높이, 본문: 자주 고치는 속성). draft: 그 입력 값
 	const [editing, setEditing] = useState<{ target: TextTarget; rect: CSSProperties; form?: Form }>();
 	const [draft, setDraft] = useState<Record<string, string>>({});
+	const changes = editing?.form ? formAttrs(editing.form, draft) : [];
 	const columnResize = useColumnResize((index, width) => { onSelect(index); onEditAttr('width', String(width)); });
 	useEffect(() => setShadow(host.current!.shadowRoot ?? host.current!.attachShadow({ mode: 'open' })), []);
 	// CSP상 <style> 태그는 막혀 있어서 생성한 스타일시트(adoptedStyleSheets)로 붙인다.
@@ -58,10 +67,47 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 		return () => cancelAnimationFrame(frame);
 	}, [tree, shadow, sheets]);
 	const target = (e: { target: EventTarget }) => pick(e.target as Element);
+	/** 끌기·놓기 단위: 그리드 안 칸은 그리드 전체 */
+	const unitAt = (index: number) => {
+		const path = pathTo(body, index);
+		return path?.find(n => localName(n.tag) === 'gridView') ?? path?.at(-1);
+	};
+	/** 놓을 자리(팔레트 넣기·이동 공통): 단위의 위·아래 비율로 안쪽·앞·뒤 */
+	const dropAt = (e: { target: EventTarget; clientY: number }) => {
+		const hit = target(e);
+		const node = unitAt(hit ? wseIndex(hit) : body.index);
+		if (!node) { return undefined; }
+		const element = page.current?.querySelector(`[data-wse="${node.index}"]`);
+		const rect = (element ?? page.current)?.getBoundingClientRect();
+		const position = componentDropPosition(node, rect && rect.height ? (e.clientY - rect.top) / rect.height : 0.5);
+		return insertPositions(node).includes(position) ? { index: node.index, position } : undefined;
+	};
+	useEffect(() => {
+		moving.current = undefined;
+		setDrop(undefined);
+		page.current?.querySelectorAll<HTMLElement>('[data-wse]').forEach(el => {
+			const index = wseIndex(el);
+			el.draggable = !!onMove && index !== body.index && unitAt(index)?.index === index;
+		});
+	}, [body, tree, shadow, onMove]);
+	const moveDrop = (e: { target: EventTarget; clientY: number }) => {
+		const source = moving.current;
+		const at = dropAt(e);
+		if (!source || source.body !== body || !at) { return undefined; }
+		const dragged = nodeAt(body, source.index), target = nodeAt(body, at.index);
+		if (!dragged || !target || target.start >= dragged.start && target.end <= dragged.end
+			|| extra.some(i => { const n = nodeAt(body, i); return n && target.start >= n.start && target.end <= n.end; })) { return undefined; }
+		return { ...at, moving: true };
+	};
+	useEffect(() => {
+		const clear = () => { moving.current = undefined; setDrop(undefined); };
+		window.addEventListener('dragend', clear);
+		return () => window.removeEventListener('dragend', clear);
+	}, []);
 	const selectedNode = nodeAt(body, selected);
 	const commitStyle = (props: Record<string, string>) => onEditAttr('style', setStyle(selectedNode?.attrs.style, props));
 	return (
-		<div ref={host} style={{ height: '100%' }}>
+		<div className="canvas-host" ref={host} style={{ height: '100%' }}>
 			{shadow && createPortal(<div className="wse-view">
 				<div ref={page} className="wse-page"
 					onClick={e => {
@@ -89,13 +135,14 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 						}
 						const n = el && nodeAt(body, wseIndex(el));
 						// 그리드 칸(헤더·본문·footer·subTotal 모두): 문구 아래 자주 고치는 속성. 문구 칸이 없는 inputType(checkbox 등)이어도 연다
-						const gridCell = !!n && localName(n.tag) === 'column' && !!pathTo(body, n.index)?.some(a => localName(a.tag) === 'gridView');
+						const cellPath = n && pathTo(body, n.index);
+						const gridCell = !!n && localName(n.tag) === 'column' && !!cellPath?.some(a => localName(a.tag) === 'gridView');
 						const t = n && (textTarget(n, defOf(n, defs)) ?? (gridCell ? { index: n.index, attr: 'value', value: n.attrs.value } : undefined));
 						const p = page.current;
 						if (el && n && t && p) {
 							const r = relRect(el, p);
-							const form = gridCell ? cellForm(n, defOf(n, defs), r, idChoices?.(n.index)) : undefined;
-							const width = Math.max(r.width, form ? 400 : 160), height = Math.max(r.height, 18 * 3 + 8);
+							const form = gridCell ? cellForm(n, defOf(n, defs), r, idChoices?.(n.index), cellPath ?? []) : undefined;
+							const width = form ? Math.min(Math.max(r.width, FORM_WIDTH.min), FORM_WIDTH.max) : Math.max(r.width, 160), height = Math.max(r.height, 18 * 3 + 8);
 							const left = Math.max(p.scrollLeft, Math.min(r.left, p.scrollLeft + p.clientWidth - width));
 							// 아래 입력 줄까지 보이게
 							const top = Math.max(p.scrollTop, Math.min(r.top, p.scrollTop + p.clientHeight - height - (form ? FORM_HEIGHT : 0)));
@@ -105,7 +152,28 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 							setEditing({ target: t, rect: { left, top, width, height }, form });
 						}
 					}}
+					onDragStart={e => {
+						const el = target(e);
+						const n = el && unitAt(wseIndex(el));
+						if (!onMove || !n || n.index === body.index || editing) { e.preventDefault(); return; }
+						if (n.index !== selected && !extra.includes(n.index)) { onSelect(n.index); }
+						moving.current = { index: n.index, body };
+						e.dataTransfer.effectAllowed = 'move';
+						e.dataTransfer.setData(MOVE_MIME, String(n.index));
+						setDragGhost(e.dataTransfer, outlineIcon(n, defs), n.attrs.id ?? defOf(n, defs)?.display ?? localName(n.tag));
+					}}
 					onDragOver={e => {
+						if (e.dataTransfer.types.includes(MOVE_MIME)) {
+							const next = moveDrop(e); setDrop(next);
+							if (next) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+							return;
+						}
+						if (onInsertComponent && e.dataTransfer.types.includes(PALETTE_MIME)) {
+							const next = dropAt(e);
+							setDrop(next);
+							if (next) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
+							return;
+						}
 						const el = e.dataTransfer.types.includes(REF_MIME) ? target(e) : null;
 						if (el && !el.hasAttribute('data-wse-frame') && wseIndex(el) !== body.index) {
 							e.preventDefault();
@@ -113,7 +181,24 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 							setHover(wseIndex(el));
 						}
 					}}
+					onDragLeave={e => { if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) { setDrop(undefined); } }}
 					onDrop={e => {
+						setDrop(undefined);
+						if (e.dataTransfer.types.includes(MOVE_MIME)) {
+							e.preventDefault();
+							const at = moveDrop(e), source = moving.current;
+							moving.current = undefined;
+							if (at && source) { onMove?.(source.index, at.index, at.position); }
+							return;
+						}
+						if (e.dataTransfer.types.includes(PALETTE_MIME)) {
+							e.preventDefault();
+							const drag = readPaletteDrag(e.dataTransfer), at = dropAt(e);
+							if (drag && at && findPaletteDef(defs, drag.component)) {
+								onInsertComponent?.(drag, at.index, at.position);
+							}
+							return;
+						}
 						const el = target(e);
 						const value = e.dataTransfer.getData(REF_MIME);
 						if (el && value) {
@@ -126,14 +211,17 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 					<Boundary key={generation}>{tree}</Boundary>
 					{editing && (
 						<EditBox key={editing.target.index} style={editing.rect} value={editing.target.value ?? ''}
+							header={editing.form && <FormHeader form={editing.form} />}
 							footer={editing.form && <FormFields form={editing.form} values={draft} onChange={setDraft} />}
-							changed={!!editing.form && formAttrs(editing.form, draft).length > 0}
+							status={changes.length > 0 && `바꾼 속성 ${changes.length}`}
+							changed={changes.length > 0}
 							onCommit={v => onEditText(editing.target, v, editing.form && formAttrs(editing.form, draft))} onClose={() => setEditing(undefined)} />
 					)}
 				</div>
 				{/* 글자 편집 중에는 선택 테두리·손잡이·표시 점이 편집 상자를 덮지 않게 숨긴다(겹침 층이 페이지 위라 z-index로는 못 내림) */}
 				<div className="wse-overlay" hidden={!!editing}>
 					<Badges page={page} body={body} tree={tree} />
+					{drop && <Frame page={page} index={drop.index} kind={`drop ${drop.position}`} tree={tree} label={`${drop.position === 'inside' ? '안쪽 맨 뒤에' : drop.position === 'before' ? '앞에' : '뒤에'} ${drop.moving ? '이동' : '추가'}`} />}
 					<Frame page={page} index={hover !== selected ? hover : undefined} kind="hover" tree={tree} />
 					{extra.map(i => <Frame key={i} page={page} index={i} kind="selected extra" tree={tree} />)}
 					<Frame page={page} index={selected} kind="selected" tree={tree} onResize={commitStyle}

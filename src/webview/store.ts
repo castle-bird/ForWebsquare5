@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { CodeTarget, LinkState, TabPosition, ToExtension, ToWebview, XmlElementSpec } from '../core/protocol';
 import { DEFAULT_LINK_EXTS, DEFAULT_LINK_TABS, type LinkTab } from '../core/links';
-import type { CodeThemeId } from '../core/codeTheme';
+import type { CodeThemeState } from '../core/codeTheme';
 import { DEFAULT_CODE_OPTIONS, type CodeOptions } from '../core/codeOptions';
 import { findNode, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
 import type { DropPosition } from '../core/paste';
@@ -10,6 +10,8 @@ import { isStructure } from '../core/paste';
 import { mergeProblem } from '../core/merge';
 import { setStyle, styleChanges } from '../core/style';
 import type { TextTarget } from './design/renderers';
+import { paletteKey } from '../core/palette';
+import type { ComponentDef } from '../core/protocol';
 
 declare function acquireVsCodeApi(): { postMessage(msg: ToExtension): void };
 export const vscode = acquireVsCodeApi();
@@ -35,13 +37,20 @@ interface EditorState {
 	linkTabs: LinkTab[];
 	tabOrder?: string[];
 	tabPosition: TabPosition;
-	codeTheme: CodeThemeId;
+	paletteFavorites: string[];
+	codeTheme: CodeThemeState;
+	/** 테마 색 덮어쓰기 팝업이 고치는 중인 공통·이 테마 층(열린 코드 편집기 미리 보기) */
+	codeThemeDraft?: Pick<CodeThemeState, 'common' | 'own'>;
 	codeOptions: CodeOptions;
 	gitBases: Partial<Record<CodeTarget, string>>;
 	/** VS Code가 연결 파일에 낸 문제(편집기가 뜨기 전에 와도 남도록 여기에) */
 	diagnostics: Partial<Record<CodeTarget, Extract<ToWebview, { type: 'diagnostics' }>>>;
 	/** 연결 탭 경로 입력의 파일 검색 목록(탭 id별) */
 	linkFiles: Record<string, string[]>;
+	/** 탭마다 마지막으로 연결하지 못한 이유(입력을 바꾸면 지움) */
+	linkProblems: Record<string, string | undefined>;
+	/** 잠깐 뜨는 알림(key: 같은 글도 다시 띄움) */
+	toast?: { message: string; key: number };
 	/** 연결할 수 있는 확장자(설정) */
 	linkExts: string[];
 	/** 연결한 XML의 DTD 스키마(탭 id별, 없으면 기본 MyBatis 목록) */
@@ -64,6 +73,8 @@ interface EditorState {
 	move: (dragged: number, target: number, position: DropPosition) => void;
 	setTabOrder: (order: string[]) => void;
 	setTabPosition: (position: TabPosition) => void;
+	togglePaletteFavorite: (component: ComponentDef) => void;
+	reorderPaletteFavorites: (keys: string[]) => void;
 }
 
 /** 클립보드에 넣는 복사한 노드(XML 조각 목록, JSON) 형식 */
@@ -88,12 +99,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	extra: [],
 	links: {},
 	linkTabs: DEFAULT_LINK_TABS,
-	codeTheme: 'vscode',
+	codeTheme: { theme: 'vscode' },
 	codeOptions: DEFAULT_CODE_OPTIONS,
 	gitBases: {},
 	tabPosition: 'top',
+	paletteFavorites: [],
 	diagnostics: {},
 	linkFiles: {},
+	linkProblems: {},
 	linkExts: DEFAULT_LINK_EXTS,
 	xmlSchemas: {},
 
@@ -124,6 +137,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 			set({ linkTabs: data.tabs, linkExts: data.exts });
 		} else if (data.type === 'xmlSchema') {
 			set({ xmlSchemas: { ...get().xmlSchemas, [data.kind]: data.elements } });
+		} else if (data.type === 'toast') {
+			set({ toast: { message: data.message, key: Date.now() } });
+		} else if (data.type === 'linkProblem') {
+			set({ linkProblems: { ...get().linkProblems, [data.kind]: data.message } });
 		} else if (data.type === 'files') {
 			set({ linkFiles: { ...get().linkFiles, [data.kind]: data.files } });
 		} else if (data.type === 'gitBase') {
@@ -131,9 +148,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 		} else if (data.type === 'diagnostics') {
 			set({ diagnostics: { ...get().diagnostics, [data.target]: data } });
 		} else if (data.type === 'codeTheme') {
-			set({ codeTheme: data.theme });
+			const { type: _type, ...theme } = data;
+			set({ codeTheme: theme });
 		} else if (data.type === 'codeOptions') {
 			set({ codeOptions: { wordWrap: data.wordWrap, sqlDialect: data.sqlDialect } });
+		} else if (data.type === 'paletteFavorites') {
+			set({ paletteFavorites: data.keys });
 		} else if (data.type === 'tabOrder') {
 			set({ tabOrder: data.order });
 		} else if (data.type === 'tabPosition') {
@@ -272,6 +292,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 		const merged = [...order, ...(get().tabOrder ?? []).filter(n => !order.includes(n))];
 		set({ tabOrder: merged });
 		post({ type: 'setTabOrder', order: merged });
+	},
+
+	reorderPaletteFavorites: (keys) => {
+		set({ paletteFavorites: keys });
+		post({ type: 'reorderPaletteFavorites', keys });
+	},
+	togglePaletteFavorite: (def) => {
+		const key = paletteKey(def), current = get().paletteFavorites, favorite = !current.includes(key);
+		set({ paletteFavorites: favorite ? [...current, key] : current.filter(k => k !== key) });
+		post({ type: 'setPaletteFavorite', component: { id: def.id, ns: def.ns, realType: def.realType }, favorite });
 	},
 
 	setTabPosition: (position) => {

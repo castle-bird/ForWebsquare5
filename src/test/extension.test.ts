@@ -14,10 +14,11 @@ import { resizeBox, resizeEdges } from '../webview/ui/resizeBox';
 import { annotate, loadDefaultStyles, parseComponents, parseDefaultStyles } from '../project/components';
 import { readWebConfig } from '../project/config';
 import { cached, serial } from '../project/paths';
-import { insertComponent, insertPositions, insertTarget, matchPalette, paletteDefs } from '../core/palette';
+import { componentDropPosition, paletteKey, insertComponent, insertPositions, insertTarget, matchPalette, paletteDefs } from '../core/palette';
 import type { ComponentDef } from '../core/protocol';
 import { openFrame, VIEW_TYPE } from '../extension';
 import { applyCodeEdit, applyNodeEdit, formatCode } from '../vscode/documentEdit';
+import { insertFromPalette, paletteFavorites, savePaletteFavorite, reorderPaletteFavorites } from '../vscode/palette';
 import { applyEdits, deleteNode, encodeScript, leadOf, scriptBody, setAttribute, setText, sourceChange } from '../core/edit';
 import { convert, eclipseDeployRoots, findWpack, publish, readWpackConfig } from '../project/wpack';
 import { scopeCss } from '../project/styles';
@@ -34,7 +35,8 @@ import { zipSync } from 'fflate';
 import type { LinkState, ToWebview } from '../core/protocol';
 import { LinkedFiles, registerLinks } from '../vscode/links';
 import { linkTabs, saveLinkTabs } from '../vscode/linkTabs';
-import { CODE_THEMES, readCodeTheme } from '../core/codeTheme';
+import { idConflict, screenProblems } from '../core/check';
+import { CODE_THEMES, customizationsFor, fromVsCodeTheme, parseJsonc, withCustomizations, type VsTheme } from '../core/codeTheme';
 import { DEFAULT_CODE_OPTIONS, readSqlDialect, readWordWrap, SQL_DIALECTS } from '../core/codeOptions';
 import { stagedText } from '../vscode/gitBase';
 import { remoteCompletions } from '../vscode/completion';
@@ -767,6 +769,103 @@ suite('edit', () => {
 		assert.strictEqual(boundColumnIds(root, path('x')), undefined, '바인딩 안 된 그리드');
 	});
 
+	test('데이터 id 바꾸기: 바인딩(ref·nodeset·dataList·json·bind)도 같이, 컬럼 이름·더 긴 id·Script는 그대로, 알림', async () => {
+		const xml = `<html xmlns:w2="http://www.inswave.com/websquare"><head><w2:dataCollection>
+<w2:dataList id="dlt_a"><w2:columnInfo><w2:column id="dlt_a"/></w2:columnInfo></w2:dataList>
+<w2:dataList id="dlt_a2"><w2:columnInfo/></w2:dataList><w2:linkedDataList id="ldt" bind="dlt_a"/>
+<xf:submission ref='data:json,[{"id":"dlt_a","action":"modified"},"dma_x"]' target="data:json,dlt_a"/>
+<script>scwin.f = () => dlt_a.getRowCount();</script>
+</w2:dataCollection></head><body>
+<w2:gridView dataList="data:dlt_a"/><xf:select1 ref="data:dlt_a.dlt_a"><xf:itemset nodeset="data:dlt_a2"/></xf:select1><xf:input ref="data:dlt_a2.x"/>
+</body></html>`;
+		const doc = await vscode.workspace.openTextDocument({ content: xml, language: 'xml' });
+		const list = findNode(parseXml(xml)!, n => n.attrs.id === 'dlt_a' && n.tag === 'w2:dataList')!;
+		const notes: string[] = [];
+		assert.ok(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: list.index, name: 'id', value: 'dlt_b' }, m => notes.push(m)));
+		assert.strictEqual(doc.getText(), xml.replace('dataList id="dlt_a"', 'dataList id="dlt_b"').replace('bind="dlt_a"', 'bind="dlt_b"')
+			.replace('"id":"dlt_a"', '"id":"dlt_b"').replace('data:json,dlt_a"', 'data:json,dlt_b"').replace('dataList="data:dlt_a"', 'dataList="data:dlt_b"')
+			.replace('ref="data:dlt_a.dlt_a"', 'ref="data:dlt_b.dlt_a"'));
+		assert.deepStrictEqual(notes, ['dlt_a → dlt_b: 바인딩 5곳도 바꿨습니다.']);
+		// DataList 팝업에서 id를 바꿔도 같이. 참조가 없으면 알림 없음
+		const two = findNode(parseXml(doc.getText())!, n => n.attrs.id === 'dlt_a2')!;
+		assert.ok(await applyNodeEdit(doc, { type: 'editDataFields', version: doc.version, index: two.index, popup: 'p', fields: [], id: 'dlt_c' }, m => notes.push(m)));
+		assert.ok(doc.getText().includes('nodeset="data:dlt_c"') && doc.getText().includes('ref="data:dlt_c.x"'), doc.getText());
+		assert.strictEqual(notes.at(-1), 'dlt_a2 → dlt_c: 바인딩 2곳도 바꿨습니다.');
+		const ldt = findNode(parseXml(doc.getText())!, n => n.attrs.id === 'ldt')!;
+		assert.ok(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: ldt.index, name: 'id', value: 'ldt2' }, m => notes.push(m)));
+		assert.strictEqual(notes.length, 2, '참조 없으면 알림 없음');
+	});
+
+	test('화면 점검: id 범위(화면·그리드 부분·데이터 컬럼), 없는 데이터·컬럼 바인딩, Script에 없는 이벤트 함수', () => {
+		const xml = `<html xmlns:w2="http://www.inswave.com/websquare" xmlns:ev="urn:ev"><head><w2:dataCollection>
+<w2:dataList id="dlt"><w2:columnInfo><w2:column id="a"/><w2:column id="b"/></w2:columnInfo></w2:dataList>
+<w2:dataMap id="dma"><w2:keyInfo><w2:key id="a"/></w2:keyInfo></w2:dataMap><w2:linkedDataList id="ldt" bind="dlt"/>
+<xf:submission id="sbm" ref='data:json,[{"id":"dlt","action":"modified"},"dma_none"]' target="data:json,dma" ev:submitdone="scwin.sbm_done"/>
+</w2:dataCollection></head><body>
+<w2:gridView id="grd" dataList="data:dlt"><w2:header><w2:row><w2:column id="a"/></w2:row></w2:header><w2:gBody><w2:row><w2:column id="a"/><w2:column id="a"/></w2:row></w2:gBody></w2:gridView>
+<xf:input id="dlt" ref="data:dlt.c"/><xf:input id="i2" ref="data:ldt.any"/><xf:input id="i3" ref="data:dma.a" ev:onclick="scwin.i3_onclick"/><xf:input id="i4" ev:onblur="scwin.gone"/>
+</body></html>`;
+		const root = parseXml(xml)!;
+		const byId = (id: string, tag?: string) => findNode(root, n => n.attrs.id === id && (!tag || n.tag === tag))!;
+		const problems = screenProblems(root, 'scwin.sbm_done = function () {};\nscwin.i3_onclick = async function () {};');
+		const of = (n: XmlNode) => problems.get(n.index);
+		assert.deepStrictEqual(of(byId('dlt', 'w2:dataList')), ['id가 겹칩니다: dlt (2곳)'], '화면 전체 범위');
+		assert.deepStrictEqual(of(byId('dlt', 'xf:input')), ['id가 겹칩니다: dlt (2곳)', 'ref: dlt에 없는 컬럼 c']);
+		const body = findNode(root, n => n.tag === 'w2:gBody')!;
+		assert.deepStrictEqual(body.children[0].children.map(of), [['id가 겹칩니다: a (2곳)'], ['id가 겹칩니다: a (2곳)']], '같은 gBody 안');
+		assert.strictEqual(of(findNode(root, n => n.tag === 'w2:header')!.children[0].children[0]), undefined, 'header·gBody·데이터 컬럼은 따로');
+		assert.strictEqual(of(byId('a', 'w2:column')), undefined);
+		assert.strictEqual(of(byId('sbm')), undefined, '화면에 없는 데이터(스크립트에서 만듦)는 경고 안 함, 정의된 함수는 통과');
+		assert.strictEqual(screenProblems(parseXml('<html><body><a ref="data:dlt_code.x"/><b nodeset="data:dlt_code"/></body></html>')!).size, 0, '동적 생성 데이터 바인딩');
+		assert.strictEqual(of(byId('i2')), undefined, '컬럼을 모르는 linkedDataList는 컬럼 안 봄');
+		assert.strictEqual(of(byId('i3')), undefined);
+		assert.deepStrictEqual(of(byId('i4')), ['ev:onblur: Script에 없는 함수 scwin.gone']);
+		// 바꾸기 검사: 같은 범위만
+		assert.strictEqual(idConflict(root, byId('i2').index, 'i3'), '이미 사용 중인 ID입니다: i3');
+		assert.strictEqual(idConflict(root, byId('i2').index, 'a'), undefined, '그리드·데이터 컬럼 id와는 안 겹침');
+		assert.strictEqual(idConflict(root, body.children[0].children[0].index, 'x'), undefined);
+		assert.strictEqual(idConflict(root, body.children[0].children[0].index, 'a'), '이미 사용 중인 ID입니다: a', '같은 gBody의 다른 칸');
+		assert.strictEqual(idConflict(root, findNode(root, n => n.tag === 'w2:header')!.children[0].children[0].index, 'a'), undefined, '자기 id 그대로');
+	});
+
+	test('겹치는 id로 바꾸기는 막고 알림(F2·Property·그리드 칸 편집의 also)', async () => {
+		const xml = '<html><body><a id="x"/><b id="y"/></body></html>';
+		const doc = await vscode.workspace.openTextDocument({ content: xml, language: 'xml' });
+		const b = parseXml(xml)!.children[0].children[1], notes: string[] = [];
+		assert.strictEqual(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: b.index, name: 'id', value: 'x' }, m => notes.push(m)), false);
+		assert.strictEqual(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: b.index, name: 'value', value: 'v', also: [{ name: 'id', value: 'x' }] }, m => notes.push(m)), false);
+		assert.strictEqual(doc.getText(), xml, '안 바뀜');
+		assert.deepStrictEqual(notes, ['이미 사용 중인 ID입니다: x', '이미 사용 중인 ID입니다: x']);
+		assert.ok(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: b.index, name: 'id', value: 'z' }));
+	});
+
+	test('데이터 컬럼·키 id 바꾸기: data:id.col·바인딩된 그리드 본문 column·itemset label/value도 같이(다른 데이터·헤더·더 긴 이름은 그대로)', async () => {
+		const xml = `<html xmlns:w2="http://www.inswave.com/websquare"><head><w2:dataCollection>
+<w2:dataList id="dataList1"><w2:columnInfo><w2:column id="testCol" dataType="text"/><w2:column id="b"/></w2:columnInfo></w2:dataList>
+<w2:dataMap id="dma"><w2:keyInfo><w2:key id="k"/></w2:keyInfo></w2:dataMap>
+</w2:dataCollection></head><body>
+<w2:gridView dataList="data:dataList1"><w2:header><w2:row><w2:column id="testCol"/></w2:row></w2:header><w2:gBody><w2:row><w2:column id="testCol"/><w2:column id="testCol2"/></w2:row></w2:gBody></w2:gridView>
+<w2:gridView dataList="data:other"><w2:gBody><w2:row><w2:column id="testCol"/></w2:row></w2:gBody></w2:gridView>
+<xf:input ref="data:dataList1.testCol"/><xf:input ref="data:dataList1.testCol2"/><xf:input ref="data:dma.k"/>
+<xf:select1><xf:choices><xf:itemset nodeset="data:dataList1"><xf:label ref="b"/><xf:value ref="testCol"/></xf:itemset></xf:choices></xf:select1>
+</body></html>`;
+		const doc = await vscode.workspace.openTextDocument({ content: xml, language: 'xml' });
+		const notes: string[] = [];
+		const col = findNode(parseXml(xml)!, n => n.tag === 'w2:column' && n.attrs.dataType === 'text')!;
+		assert.ok(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: col.index, name: 'id', value: 'testCol2x' }, m => notes.push(m)));
+		assert.strictEqual(doc.getText(), xml.replace('<w2:column id="testCol" dataType', '<w2:column id="testCol2x" dataType')
+			.replace('<w2:gBody><w2:row><w2:column id="testCol"/><w2:column id="testCol2"/>', '<w2:gBody><w2:row><w2:column id="testCol2x"/><w2:column id="testCol2"/>')
+			.replace('ref="data:dataList1.testCol"', 'ref="data:dataList1.testCol2x"').replace('<xf:value ref="testCol"/>', '<xf:value ref="testCol2x"/>'));
+		assert.deepStrictEqual(notes, ['dataList1.testCol → testCol2x: 바인딩 3곳도 바꿨습니다.']);
+		// 팝업: 데이터 id와 키를 한 번에(키 바꾸기)
+		const map = findNode(parseXml(doc.getText())!, n => n.attrs.id === 'dma')!;
+		const key = findNode(map, n => n.tag === 'w2:key')!;
+		assert.ok(await applyNodeEdit(doc, { type: 'editDataFields', version: doc.version, index: map.index, popup: 'p', id: 'dma2',
+			fields: [{ sourceIndex: key.index, id: 'k2', name: '', dataType: 'text', length: '', encYN: false }] }, m => notes.push(m)));
+		assert.ok(doc.getText().includes('ref="data:dma2.k2"'), doc.getText());
+		assert.strictEqual(notes.at(-1), 'dma → dma2, dma.k → k2: 바인딩 1곳도 바꿨습니다.');
+	});
+
 	test('setAttr more: 여러 노드를 한 편집으로(노드마다 다른 값), 하나라도 없으면 안 바꿈', async () => {
 		const doc = await vscode.workspace.openTextDocument({ content: '<html><body><a id="x" s="1"/><b id="y"/></body></html>', language: 'xml' });
 		const root = parseXml(doc.getText())!, [a, b] = root.children[0].children;
@@ -1242,6 +1341,57 @@ suite('palette', () => {
 			[['first', 'inside'], ['first', 'inside', 'before', 'after'], ['before', 'after']]);
 	});
 
+	test('즐겨찾기: 같은 select1의 종류·설치본 구분, 전역 저장·중복·동시 변경', async () => {
+		const values = new Map<string, unknown>();
+		const state: vscode.Memento = { keys: () => [...values.keys()], get: <T>(key: string, fallback?: T) => (values.get(key) as T) ?? fallback!, update: async (key, value) => { await Promise.resolve(); values.set(key, value); } };
+		const radio = def('select1', 'radio', 'urn:favorite-test'), select = def('select1', 'selectbox', 'urn:favorite-test');
+		const rk = paletteKey(radio), sk = paletteKey(select);
+		assert.notStrictEqual(rk, sk);
+		assert.notStrictEqual(rk, paletteKey({ ...radio, ns: 'urn:other-install' }));
+		const before = paletteFavorites(state);
+		try {
+			await Promise.all([savePaletteFavorite(state, radio, true), savePaletteFavorite(state, select, true), savePaletteFavorite(state, radio, true)]);
+			assert.strictEqual(paletteFavorites(state).filter(k => k === rk).length, 1);
+			assert.ok(paletteFavorites(state).includes(sk));
+			await reorderPaletteFavorites(state, [sk, sk, 'unknown']);
+			assert.deepStrictEqual(paletteFavorites(state), [sk, rk], '순서만 바꾸고 중복·모르는 항목은 제외, 누락 항목 유지');
+			await Promise.all([reorderPaletteFavorites(state, [rk, sk]), savePaletteFavorite(state, select, false)]);
+			assert.deepStrictEqual(paletteFavorites(state), [rk], '정렬 중 해제한 항목을 복구하지 않는다');
+			await savePaletteFavorite(state, select, true);
+			await savePaletteFavorite(state, radio, false);
+			assert.ok(!paletteFavorites(state).includes(rk));
+			assert.ok(paletteFavorites(state).includes(sk), '한 항목을 지워도 다른 즐겨찾기는 남는다');
+		} finally {
+			await savePaletteFavorite(state, radio, before.includes(rk));
+			await savePaletteFavorite(state, select, before.includes(sk));
+		}
+	});
+
+	test('드롭 자리: body는 안쪽, 그룹 중앙은 안쪽·가장자리는 앞뒤, 입력은 앞뒤', () => {
+		const root = parseXml(screen)!;
+		const body = root.children[1], grp = find(root, 'grp'), input = find(root, 'input1');
+		assert.deepStrictEqual([0, 0.25, 0.5, 0.75, 1].map(r => componentDropPosition(body, r)), Array(5).fill('inside'));
+		assert.deepStrictEqual([0.1, 0.25, 0.5, 0.75, 0.9].map(r => componentDropPosition(grp, r)), ['before', 'inside', 'inside', 'inside', 'after']);
+		assert.deepStrictEqual([0.1, 0.5, 0.9].map(r => componentDropPosition(input, r)), ['before', 'after', 'after']);
+	});
+
+	test('웹뷰 삽입: 지정한 자리·고유 id·오래된 버전·잘못된 대상·불가능한 자리', async () => {
+		for (const position of ['first', 'inside', 'before', 'after'] as const) {
+			const doc = await vscode.workspace.openTextDocument({ content: screen, language: 'xml' });
+			const root = parseXml(doc.getText())!, grp = find(root, 'grp');
+			const id = await insertFromPalette(doc, def('input', 'input', XF), grp.index, undefined, position, doc.version);
+			assert.strictEqual(id, 'input2');
+			const next = parseXml(doc.getText())!, added = find(next, id!), group = find(next, 'grp');
+			assert.ok(position === 'first' ? group.children[0] === added : position === 'inside' ? group.children.at(-1) === added
+				: position === 'before' ? added.end <= group.start : group.end <= added.start);
+			const text = doc.getText();
+			assert.strictEqual(await insertFromPalette(doc, def('input', 'input', XF), group.index, undefined, 'inside', doc.version - 1), undefined);
+			assert.strictEqual(await insertFromPalette(doc, def('input', 'input', XF), 99999, undefined, 'inside'), undefined);
+			assert.strictEqual(await insertFromPalette(doc, def('input', 'input', XF), next.children[1].index, undefined, 'before'), undefined);
+			assert.strictEqual(doc.getText(), text, '잘못된 요청은 XML을 바꾸지 않는다');
+		}
+	});
+
 	test('원문: 접두사·고유 id·기본 크기·최소 틀·자리·들여쓰기', () => {
 		const root = parseXml(screen)!;
 		const grp = find(root, 'grp'), input = find(root, 'input1');
@@ -1449,13 +1599,69 @@ statementType (STATEMENT|PREPARED) "PREPARED"
 		assert.strictEqual(linkIdOf('source'), undefined);
 	});
 
-	test('코드 편집기 테마: 저장값 검사, 명령과 코드 편집기 우클릭 메뉴 등록', async () => {
-		assert.strictEqual(readCodeTheme('dracula'), 'dracula');
-		assert.strictEqual(readCodeTheme('nope'), 'vscode');
+	test('코드 편집기 테마: id 중복 없음, 명령 등록(우클릭 메뉴 대신 탭 줄 톱니바퀴)', async () => {
 		assert.strictEqual(new Set(CODE_THEMES.map(t => t.id)).size, CODE_THEMES.length, 'id 중복 없음');
 		assert.ok((await vscode.commands.getCommands(true)).includes('websquare5-editor.codeTheme'));
-		const menus = vscode.extensions.all.find(e => e.packageJSON.name === 'websquare5-editor')?.packageJSON.contributes.menus['webview/context'];
-		assert.ok(menus?.some((m: { command: string; when: string }) => m.command === 'websquare5-editor.codeTheme' && m.when.includes("webviewSection == 'codeEditor'")));
+		assert.strictEqual(vscode.extensions.all.find(e => e.packageJSON.name === 'websquare5-editor')?.packageJSON.contributes.menus['webview/context'], undefined, '코드 편집기 우클릭 메뉴 항목 없음');
+		assert.ok((await vscode.commands.getCommands(true)).includes('websquare5-editor.importCodeTheme'));
+	});
+
+	test('코드 편집기 테마 가져오기: VS Code 테마 .json(JSONC) → 색·문법 색', () => {
+		assert.deepStrictEqual(parseJsonc('{\n // 주석\n "a": "http://x/*y*/", /* 블록 */ "b": [1, 2,],\n}'), { a: 'http://x/*y*/', b: [1, 2] }, '문자열 안 // /* 는 그대로');
+		const theme = fromVsCodeTheme({
+			type: 'dark',
+			colors: { 'editor.background': '#101010', 'editor.foreground': '#eeeeee', 'editorLineNumber.foreground': '#555555', 'editor.selectionBackground': 'nope' },
+			tokenColors: [
+				{ settings: { foreground: '#aaaaaa' } },
+				{ scope: 'keyword', settings: { foreground: '#ff0000' } },
+				{ scope: 'keyword.control', settings: { foreground: '#00ff00' } },
+				{ scope: ['comment'], settings: { foreground: '#777777' } },
+				{ scope: 'comment.line', settings: { fontStyle: 'italic' } },
+				{ scope: 'comment', settings: { fontStyle: 'italic' } },
+				{ scope: 'source.java keyword.control', settings: { foreground: '#123456' } },
+				{ scope: 'string, constant.numeric', settings: { foreground: '#ce9178' } },
+			],
+		});
+		assert.strictEqual(theme.dark, true);
+		assert.deepStrictEqual(theme.colors, { background: '#101010', foreground: '#eeeeee', gutterBackground: '#101010', gutterForeground: '#555555' }, '틀린 색은 버림');
+		assert.deepStrictEqual(theme.tokens?.keyword, { color: '#00ff00' }, '더 긴 scope(keyword.control)가 이김, 자손 선택자 규칙은 무시');
+		assert.deepStrictEqual(theme.tokens?.comment, { color: '#777777', fontStyle: 'italic' }, '색과 글꼴 모양은 따로');
+		assert.deepStrictEqual([theme.tokens?.string, theme.tokens?.number], [{ color: '#ce9178' }, { color: '#ce9178' }], '쉼표로 묶은 scope');
+		assert.strictEqual(fromVsCodeTheme({ colors: { 'editor.background': '#fafafa' } }).dark, false, 'type이 없으면 배경 밝기로');
+		assert.throws(() => fromVsCodeTheme({ tokenColors: './x.tmTheme' }), /tmTheme/);
+	});
+
+	test('확장에 든 테마(media/themes): 모두 읽히고 편집기 색·문법 색 14종이 다 있다', () => {
+		const dir = path.join(vscode.extensions.all.find(e => e.packageJSON.name === 'websquare5-editor')!.extensionPath, 'media', 'themes');
+		const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+		assert.deepStrictEqual(files.filter(f => f.startsWith('intellij-')).sort(), ['intellij-dark.json', 'intellij-light.json']);
+		for (const file of files) {
+			const theme = parseJsonc(fs.readFileSync(path.join(dir, file), 'utf8')) as VsTheme;
+			const converted = fromVsCodeTheme(theme);
+			assert.ok(theme.name, `${file}: 목록에 보일 이름`);
+			assert.strictEqual(Object.keys(converted.colors ?? {}).length, 7, `${file}: 편집기 색`);
+			assert.strictEqual(Object.keys(converted.tokens ?? {}).length, 14, `${file}: 문법 색`);
+		}
+	});
+
+	test('코드 편집기 테마 덮어쓰기: 공통 다음 [테마 id·이름], 틀린 값은 버림', () => {
+		const setting = {
+			colors: { background: '#000000', caret: 'red' },
+			tokens: { keyword: '#ff8800', comment: { color: '#888888', fontStyle: 'italic' }, unknown: '#111111' },
+			'[Dracula]': { tokens: { keyword: '#ff79c6' } },
+		};
+		assert.deepStrictEqual(customizationsFor(setting, 'dracula', 'Dracula'), {
+			common: { colors: { background: '#000000' }, tokens: { keyword: { color: '#ff8800' }, comment: { color: '#888888', fontStyle: 'italic' } } },
+			own: { tokens: { keyword: { color: '#ff79c6' } } },
+		});
+		assert.deepStrictEqual(Object.keys(customizationsFor(setting, 'amy', 'Amy')), ['common'], '다른 테마에는 공통만');
+		assert.deepStrictEqual(customizationsFor(undefined, 'amy', 'Amy'), {});
+		// 팝업 저장: 공통은 위에, 이 테마는 기존 키("[Dracula]") 그대로, 다른 테마 칸 유지, 빈 층은 지움
+		const other = { tokens: { string: '#00ff00' } };
+		const saved = withCustomizations({ ...setting, '[Amy]': other }, 'dracula', 'Dracula', { tokens: { number: { color: '#123456' } } }, { colors: { caret: '#ffffff' } });
+		assert.deepStrictEqual(saved, { tokens: { number: { color: '#123456' } }, '[Dracula]': { colors: { caret: '#ffffff' } }, '[Amy]': other });
+		assert.deepStrictEqual(withCustomizations(saved, 'dracula', 'Dracula', undefined, {}), { '[Amy]': other });
+		assert.deepStrictEqual(withCustomizations(undefined, 'custom:My', 'My', undefined, { tokens: { tag: { color: '#abcdef' } } }), { '[My]': { tokens: { tag: { color: '#abcdef' } } } });
 	});
 
 	test('변경 표시 기준: Git 저장소의 스테이지 내용, 저장소 밖이면 undefined', async function () {

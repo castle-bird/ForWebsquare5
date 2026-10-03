@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Group, Panel, Separator } from 'react-resizable-panels';
+import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
 import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
-import type { ToExtension, ToWebview } from '../core/protocol';
+import type { SettingsMenuItem, ToExtension, ToWebview } from '../core/protocol';
 import { defOf, findNode, findTag, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
 import { DATA_KINDS, type DataKind } from '../core/data';
 import { newSubmissionFields, submissionFields, type SubmissionFields } from '../core/submission';
@@ -17,10 +17,14 @@ import { xmlSupport } from './editor/xmlSupport';
 import { CodeEditor, type CodeEditorHandle } from './editor/codeEditor';
 import { lazy, scriptLanguage, scriptTools, xmlCompletions, xmlHover } from './editor/completions';
 import { Tabs } from './ui/tabs';
+import { PalettePane } from './ui/palette';
+import { ThemeColorsEditor } from './ui/themeColorsEditor';
+import { Toast } from './ui/toast';
 import { Menu } from './ui/menu';
 import { useLinkTabs } from './ui/linkedFile';
 import { FIXED_TABS } from '../core/links';
-import { dropZone, TreeItem, useDataReorder, useFold, useTreeRename, type DragData, type Fold } from './ui/tree';
+import { dropZone, TreeItem, useDataReorder, useFold, useTreeRename, type DragData, type Fold, type Problems } from './ui/tree';
+import { problemAncestors, screenProblems } from '../core/check';
 import { useEventHandler } from './eventHandler';
 import { canMerge, post, useEditorStore } from './store';
 import { isMergeCell } from '../core/merge';
@@ -30,6 +34,12 @@ import './style.css';
 
 const XML = xmlSupport();
 
+/** 탭 줄 톱니바퀴 메뉴(null은 구분선). 찾기 어려운 설정·명령을 한곳에 */
+const SETTINGS_MENU: ([SettingsMenuItem, string] | null)[] = [
+	['codeTheme', '코드 편집기 테마 변경…'], ['importCodeTheme', '테마 파일 가져오기…'], ['themeColors', '테마 색 덮어쓰기…'], null,
+	['sqlDialect', 'SQL 방언…'], ['setup', '도구 경로 설정…'], null,
+	['settings', '확장 설정 모두 보기…'],
+];
 const GRID_MENU = { columnLeft: '왼쪽에 Column 추가', column: 'Column 추가', row: 'Row 추가', header: 'Header 추가', subTotal: 'subTotal 추가', footer: 'footer 추가' } as const;
 
 const LOADING = <p className="empty">불러오는 중…</p>;
@@ -102,6 +112,11 @@ function App() {
 	const otherSide = tabPosition === 'top' ? 'bottom' : 'top';
 	const events = api?.events;
 	const [activeTab, setActiveTab] = useState('Design');
+	const [paletteOpen, setPaletteOpen] = useState(false);
+	const rightPanel = usePanelRef();
+	const [rightOpen, setRightOpen] = useState(true);
+	const [settingsMenu, setSettingsMenu] = useState<HTMLElement>();
+	const [themeColors, setThemeColors] = useState(false);
 	/** merge: 병합 메뉴를 보이고(값은 켜짐 여부). mergeOnly: 그 메뉴만(Outline·group 셀) */
 	const [dataMenu, setDataMenu] = useState<{ x: number; y: number; index: number; grid?: { hasFooter: boolean; at: number; onColumn: boolean }; merge?: boolean; mergeOnly?: boolean }>();
 	const [popups, setPopups] = useState<Popup[]>([]);
@@ -142,13 +157,6 @@ function App() {
 	}, [handleMessage]);
 
 	useComponentShortcuts();
-
-	const docVersion = useEditorStore(s => s.doc?.version);
-	useEffect(() => {
-		if (docVersion !== undefined) {
-			post({ type: 'selection', version: docVersion, index: selected });
-		}
-	}, [selected, docVersion]);
 
 	const root = doc?.root;
 	const xmlComplete = useMemo(() => lazy(() => xmlCompletions(root, defs?.defs ?? [])), [root, defs]);
@@ -288,8 +296,15 @@ function App() {
 	};
 	const dataReorder = useDataReorder(doc?.version, model, dataCollection);
 	const rename = useTreeRename(root, selected, (id, index) => editAttr('id', id, index));
+	// 화면 점검(겹치는 id·없는 데이터·컬럼 바인딩·Script에 없는 이벤트 함수): Outline·Data 줄에 경고 표시
+	const scriptText = doc?.script.text;
+	const problems = useMemo((): Problems | undefined => {
+		if (!root) { return undefined; }
+		const of = screenProblems(root, scriptText);
+		return { of, inside: problemAncestors(root, of) };
+	}, [root, scriptText]);
 	const tree = (tops: XmlNode[], fold: Fold, interactive?: boolean) => tops.length
-		? <div role="tree">{tops.map(top => <TreeItem key={top.index} node={top} depth={0} selected={selected} extra={extra} onSelect={setSelected} onContextMenu={interactive ? outlineContext : dataContext} onDoubleClick={interactive ? (n => openEditor(n.index)) : openDataEditor} fold={fold} defs={defs?.defs} interactive={interactive} bindRef={interactive ? undefined : refOf} reorder={interactive ? undefined : dataReorder} rename={rename} />)}</div>
+		? <div role="tree">{tops.map(top => <TreeItem key={top.index} node={top} depth={0} selected={selected} extra={extra} onSelect={setSelected} onContextMenu={interactive ? outlineContext : dataContext} onDoubleClick={interactive ? (n => openEditor(n.index)) : openDataEditor} fold={fold} defs={defs?.defs} interactive={interactive} bindRef={interactive ? undefined : refOf} reorder={interactive ? undefined : dataReorder} rename={rename} problems={problems} />)}</div>
 		: <p className="empty">없음</p>;
 	const foldButtons = (fold: Fold) => <>
 		<button className="icon codicon codicon-expand-all" title="모두 펼치기" onClick={() => fold.setAll(true)} />
@@ -311,15 +326,28 @@ function App() {
 		<Group orientation="horizontal" className="shell">
 			<Panel minSize={200}>
 				<div className="canvas-frame">
-					<Tabs position={tabPosition} start={<button className={`tab-move codicon codicon-arrow-${otherSide === 'top' ? 'up' : 'down'}`}
-						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} />} keepMounted={['Script', 'Source', ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={setActiveTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
+					<Tabs position={tabPosition} end={<><button className={`tab-settings codicon codicon-settings-gear${settingsMenu ? ' active' : ''}`} title="설정" aria-label="설정" aria-haspopup="menu" aria-expanded={!!settingsMenu} draggable={false}
+						// 열려 있을 때 누르면 닫기만(바깥 클릭으로 닫힌 뒤 다시 열리지 않게)
+						onPointerDown={e => { if (settingsMenu) { e.stopPropagation(); } }}
+						onClick={e => { const button = e.currentTarget; setSettingsMenu(open => open ? undefined : button); }} />
+						<button className={`tab-panel-right codicon codicon-layout-sidebar-right${rightOpen ? ' active' : ''}`}
+						title={rightOpen ? '우측 패널 접기' : '우측 패널 펼치기'} aria-label="우측 패널" aria-expanded={rightOpen} aria-controls="right-panel" draggable={false}
+						onClick={() => { if (rightPanel.current?.isCollapsed()) { rightPanel.current.expand(); } else { rightPanel.current?.collapse(); } }} /></>} start={<><button className={`tab-palette codicon codicon-layout-sidebar-left${paletteOpen ? ' active' : ''}`}
+						title={paletteOpen ? '팔레트 접기' : '팔레트 펼치기'} aria-label="팔레트" aria-expanded={paletteOpen} draggable={false} disabled={shownTab !== 'Design'} onClick={() => setPaletteOpen(open => !open)} />
+						<button draggable={false} className={`tab-move codicon codicon-arrow-${otherSide === 'top' ? 'up' : 'down'}`}
+						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} /></>} keepMounted={['Script', 'Source', ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={setActiveTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
 						Design: doc?.error ? <p className="error">{doc.error}</p>
-							: body && defs ? <>
-								{styles?.error && <p className="warning" title={styles.error}>{styles.error}</p>}
-								<Canvas body={body} defs={defs.defs} sheets={styles?.css} selected={selected} extra={extra} onSelect={setSelected} onEditText={editText}
-									onEditAttr={editAttr} onOpenFrame={openFrame} onOpenEditor={openEditor} onBindRef={bindRefTo} onContextMenu={canvasContext}
-									idChoices={i => { const at = root && pathTo(root, i); return at && boundColumnIds(root, at); }} />
-							</>
+							: body && defs ? <Group orientation="horizontal" className="design-layout">
+								{paletteOpen && <Panel key="palette" id="palette" defaultSize={220} minSize={150} maxSize={360}><PalettePane /></Panel>}
+								{paletteOpen && <Separator key="palette-resizer" className="resizer" />}
+								<Panel key="design-canvas" id="design-canvas" minSize={100}><div className="design-canvas">
+									{styles?.error && <p className="warning" title={styles.error}>{styles.error}</p>}
+									<Canvas body={body} defs={defs.defs} sheets={styles?.css} selected={selected} extra={extra} onSelect={setSelected} onEditText={editText}
+										onMove={move} onEditAttr={editAttr} onOpenFrame={openFrame} onOpenEditor={openEditor} onBindRef={bindRefTo} onContextMenu={canvasContext}
+										onInsertComponent={(drag, index, position) => post({ type: 'insertComponent', ...drag, index, position })}
+										idChoices={i => { const at = root && pathTo(root, i); return at && boundColumnIds(root, at); }} />
+								</div></Panel>
+							</Group>
 								: LOADING,
 						Script: doc ? <CodeEditor ref={scriptRef} target="script" lang={scriptLanguage} complete={jsTools.complete} hover={jsTools.hover} lint="js" text={doc.script.text} version={doc.version}
 							readOnly={!!doc.script.note} notes={[api?.error, modules?.error, doc.script.note]} post={post} /> : LOADING,
@@ -328,8 +356,9 @@ function App() {
 					}} />
 				</div>
 			</Panel>
-			<Separator className="resizer" />
-			<Panel defaultSize={320} minSize={220}>
+			<Separator className={`resizer${rightOpen ? '' : ' collapsed'}`} />
+			<Panel id="right-panel" className="right-panel" panelRef={rightPanel} defaultSize={320} minSize={220} collapsible collapsedSize={0} onResize={size => setRightOpen(size.asPercentage > 0)}>
+				<div className="right-panel-content" inert={!rightOpen}>
 				<Group orientation="vertical">
 					<Panel defaultSize="55%" minSize={120}>
 						<PropertyPane node={node} def={node && defOf(node, defs?.defs)} choices={cellIds ? { id: cellIds } : undefined} warning={defs?.error} onEdit={editSelected} onScript={eventName => node && openEventHandler(node, eventName)} />
@@ -345,6 +374,7 @@ function App() {
 						</div>
 					</Panel>
 				</Group>
+				</div>
 			</Panel>
 		</Group>
 		{dataMenu && <Menu key={`${dataMenu.x},${dataMenu.y}`} x={dataMenu.x} y={dataMenu.y} onClose={() => setDataMenu(undefined)}>
@@ -359,6 +389,17 @@ function App() {
 					<button role="menuitem" disabled={!dataMenu.merge} onClick={() => { setDataMenu(undefined); useEditorStore.getState().merge(); }}>병합<kbd>Ctrl+M</kbd></button>
 				</>}
 			</Menu>}
+		{settingsMenu && <Menu anchor={settingsMenu} placement="bottom-end" onClose={() => setSettingsMenu(undefined)}>
+			{SETTINGS_MENU.map((item, i) => item
+				? <button key={item[0]} role="menuitem" onClick={() => {
+					setSettingsMenu(undefined);
+					// 테마 색 덮어쓰기는 웹뷰 팝업(settings.json은 팝업 안 링크로)
+					if (item[0] === 'themeColors') { setThemeColors(true); } else { post({ type: 'settingsMenu', item: item[0] }); }
+				}}>{item[1]}</button>
+				: <div key={i} className="menu-separator" role="separator" />)}
+		</Menu>}
+		{themeColors && <ThemeColorsEditor onClose={() => setThemeColors(false)} />}
+		<Toast />
 		{linkTabs.menu}
 		{popups.map((p, offsetIndex) => {
 			const common = { externalError: p.error, offsetIndex, onClose: () => closePopup(p.key) };

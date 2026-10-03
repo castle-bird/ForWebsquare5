@@ -47,22 +47,12 @@
         "title": "WebSquare5: 코드 편집기 테마…"
       },
       {
+        "command": "websquare5-editor.importCodeTheme",
+        "title": "WebSquare5: 코드 편집기 테마 가져오기 (VS Code 테마 .json)…"
+      },
+      {
         "command": "websquare5-editor.choose",
         "title": "WebSquare5: 도구 경로 선택"
-      },
-      {
-        "command": "websquare5-editor.insertComponent",
-        "title": "WebSquare5: 팔레트 컴포넌트 넣기"
-      },
-      {
-        "command": "websquare5-editor.searchPalette",
-        "title": "WebSquare5: 팔레트 검색",
-        "icon": "$(search)"
-      },
-      {
-        "command": "websquare5-editor.clearPaletteSearch",
-        "title": "WebSquare5: 팔레트 검색 지우기",
-        "icon": "$(clear-all)"
       }
     ],
     "menus": {
@@ -70,64 +60,9 @@
         {
           "command": "websquare5-editor.choose",
           "when": "false"
-        },
-        {
-          "command": "websquare5-editor.insertComponent",
-          "when": "false"
-        },
-        {
-          "command": "websquare5-editor.searchPalette",
-          "when": "false"
-        },
-        {
-          "command": "websquare5-editor.clearPaletteSearch",
-          "when": "false"
-        }
-      ],
-      "webview/context": [
-        {
-          "command": "websquare5-editor.codeTheme",
-          "when": "webviewId == 'websquare5-editor.designer' && webviewSection == 'codeEditor'",
-          "group": "z_theme"
-        }
-      ],
-      "view/title": [
-        {
-          "command": "websquare5-editor.searchPalette",
-          "when": "view == websquare5-editor.palette",
-          "group": "navigation@1"
-        },
-        {
-          "command": "websquare5-editor.clearPaletteSearch",
-          "when": "view == websquare5-editor.palette && websquare5-editor.paletteFiltered",
-          "group": "navigation@2"
         }
       ]
     },
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "websquare5-editor",
-          "title": "WebSquare5",
-          "icon": "media/palette.svg"
-        }
-      ]
-    },
-    "views": {
-      "websquare5-editor": [
-        {
-          "id": "websquare5-editor.palette",
-          "name": "Palette",
-          "icon": "media/palette.svg"
-        }
-      ]
-    },
-    "viewsWelcome": [
-      {
-        "view": "websquare5-editor.palette",
-        "contents": "WebSquare 화면을 디자이너로 열면 넣을 수 있는 컴포넌트가 여기에 나옵니다.\n컴포넌트 정의 파일을 못 찾았다면 환경 설정부터 확인해 주세요.\n[환경 설정](command:websquare5-editor.setup)"
-      }
-    ],
     "walkthroughs": [
       {
         "id": "setup",
@@ -232,6 +167,251 @@
           ],
           "default": "standard",
           "markdownDescription": "**SQL 방언** — MyBatis 매퍼 XML 안의 SQL과 `.sql` 연결 파일의 색·키워드 자동완성에 쓰입니다."
+        },
+        "websquare5-editor.codeThemeCustomizations": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "코드 편집기(Script·Source·연결 탭) 테마 덮어쓰기. 지금 고른 테마 위에 적은 색만 바꿉니다. `\"[테마 이름]\": { ... }`로 그 테마에만 적용할 수도 있습니다(예: `\"[Dracula]\"`). VS Code의 `editor.tokenColorCustomizations`와 비슷합니다.",
+          "properties": {
+            "colors": {
+              "type": "object",
+              "description": "편집기 색",
+              "properties": {
+                "background": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "배경"
+                },
+                "foreground": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "기본 글자"
+                },
+                "caret": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "커서"
+                },
+                "selection": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "선택 영역"
+                },
+                "lineHighlight": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "현재 줄"
+                },
+                "gutterBackground": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "줄 번호 칸 배경"
+                },
+                "gutterForeground": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "줄 번호"
+                }
+              },
+              "additionalProperties": false
+            },
+            "tokens": {
+              "type": "object",
+              "description": "문법 색: \"#색\" 또는 { \"color\": \"#색\", \"fontStyle\": \"italic\" }",
+              "properties": {
+                "comment": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "주석"
+                },
+                "string": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "문자열"
+                },
+                "number": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "숫자"
+                },
+                "constant": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "true·false·null"
+                },
+                "keyword": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "키워드(if·return 등)"
+                },
+                "modifier": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "수식어·선언(public·static·class·var 등)"
+                },
+                "type": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "타입·클래스 이름"
+                },
+                "function": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "함수·메서드 이름"
+                },
+                "variable": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "변수"
+                },
+                "property": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "속성·필드"
+                },
+                "operator": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "연산자"
+                },
+                "tag": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "XML·HTML 태그"
+                },
+                "attribute": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "XML·HTML 속성"
+                },
+                "annotation": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "Java 어노테이션"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "patternProperties": {
+            "^[.+]$": {
+              "type": "object",
+              "markdownDescription": "이 테마에만 적용: 위와 같은 `colors`·`tokens`"
+            }
+          },
+          "additionalProperties": false
         }
       }
     }

@@ -5,12 +5,18 @@ import { gridColumnXml } from './grid';
 import { setStyle } from './style';
 import { localName, uniqueId, usedIds, XFORMS_NS, type XmlNode } from './xmlModel';
 
+export const paletteKey = (def: Pick<ComponentDef, 'id' | 'ns' | 'realType'>) => JSON.stringify([def.ns, def.id, def.realType]);
+
 const isBody = (n: XmlNode) => localName(n.tag) === 'body';
 
 const DATA_TYPE = /^(alias)?(linked)?data(map|list)$/i;
 
 export const paletteDefs = (defs: ComponentDef[]) =>
 	defs.filter(d => !d.hidden && d.category && d.display && !d.parents.length && d.realType !== 'body' && !DATA_TYPE.test(d.realType));
+
+/** 웹뷰가 보낸 컴포넌트(id·ns·realType)에 맞는 팔레트 정의 */
+export const findPaletteDef = (defs: ComponentDef[], component: Pick<ComponentDef, 'id' | 'ns' | 'realType'> | undefined) =>
+	component && paletteDefs(defs).find(d => paletteKey(d) === paletteKey(component));
 
 export function matchPalette(defs: ComponentDef[], query: string): ComponentDef[] {
 	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -31,6 +37,13 @@ export function insertTarget(root: XmlNode, path: XmlNode[] | undefined): XmlNod
 export const insertPositions = (target: XmlNode): InsertPosition[] =>
 	isBody(target) ? ['first', 'inside']
 		: isContainer(target) ? ['first', 'inside', 'before', 'after'] : ['before', 'after'];
+
+/** 컨테이너 중앙은 안쪽, 가장자리는 앞·뒤. body에는 형제를 만들지 않는다. */
+export function componentDropPosition(target: XmlNode, ratio: number): InsertPosition {
+	if (isBody(target)) { return 'inside'; }
+	if (isContainer(target) && ratio >= 0.25 && ratio <= 0.75) { return 'inside'; }
+	return ratio < 0.5 ? 'before' : 'after';
+}
 
 export function insertComponent(text: string, root: XmlNode, target: XmlNode, position: InsertPosition, def: ComponentDef, size?: Record<string, string>): { edit: TextEdit; id: string } {
 	const prefix = (ns: string) => {

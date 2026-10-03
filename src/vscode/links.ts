@@ -437,6 +437,7 @@ export class LinkedFiles {
 				?? (await isFile(uri) ? undefined : `파일을 찾지 못했습니다: ${uri.fsPath}`);
 		if (problem) {
 			void vscode.window.showWarningMessage(problem);
+			await this.post({ type: 'linkProblem', kind, message: problem });
 			return;
 		}
 		await workspaceState.update(this.key, { ...this.saved(), [kind]: uri.fsPath });

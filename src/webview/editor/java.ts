@@ -1,6 +1,7 @@
-import { java } from '@codemirror/lang-java';
+import { java, javaLanguage } from '@codemirror/lang-java';
 import { docComments } from './docComment';
 import { getIndentUnit, indentService, LanguageSupport, syntaxTree } from '@codemirror/language';
+import { styleTags, tags as t } from '@lezer/highlight';
 import { countColumn } from '@codemirror/state';
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 
@@ -24,7 +25,9 @@ const javaIndent = indentService.of((context, pos) => {
 });
 
 const base = java();
-export const javaSupport = new LanguageSupport(base.language, [base.support, javaIndent, docComments('java')]);
+// @lezer/java는 어노테이션(@Override)에 색 태그가 없어 이름이 변수 색으로 칠해진다 → @와 이름을 annotation으로(테마의 어노테이션 색)
+const language = javaLanguage.configure({ props: [styleTags({ 'MarkerAnnotation Annotation': t.annotation, 'MarkerAnnotation/Identifier Annotation/Identifier': t.annotation })] });
+export const javaSupport = new LanguageSupport(language, [base.support, javaIndent, docComments('java')]);
 
 const KEYWORDS: Completion[] = ('abstract assert boolean break byte case catch char class continue default do double else enum extends final finally float for '
 	+ 'if implements import instanceof int interface long native new package private protected public record return sealed short static super switch '

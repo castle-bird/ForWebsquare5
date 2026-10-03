@@ -53,13 +53,17 @@ export const REF_MIME = 'application/x-wse-ref';
 /** rename: F2로 id를 고치는 중인 노드(그 행의 id 자리가 입력칸) */
 export interface Rename { index?: number; commit(node: XmlNode, id: string): void; close(): void }
 
-export function TreeItem({ node, depth, selected, extra, onSelect, onContextMenu, onDoubleClick, fold, defs, interactive, bindRef, reorder, rename }: {
+/** 화면 점검(core/check): of 노드 → 문제들, inside 안쪽에 문제가 있는 노드 */
+export interface Problems { of: Map<number, string[]>; inside: Set<number> }
+
+export function TreeItem({ node, depth, selected, extra, onSelect, onContextMenu, onDoubleClick, fold, defs, interactive, bindRef, reorder, rename, problems }: {
 	node: XmlNode; depth: number; selected?: number;
 	extra?: number[]; onSelect(i: number, additive?: boolean): void; onContextMenu?(e: MouseEvent<HTMLDivElement>, node: XmlNode): void; onDoubleClick?(node: XmlNode): void;
 	fold: Fold; defs?: ComponentDef[]; interactive?: boolean;
 	bindRef?(node: XmlNode): string | undefined;
 	reorder?: Reorder;
 	rename?: Rename;
+	problems?: Problems;
 }) {
 	const ref = bindRef?.(node);
 	const cls = interactive ? classLabel(node) : '';
@@ -128,14 +132,18 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onContextMenu
 					? <EditBox value={node.attrs.id ?? ''} multiline={false} className="tree-rename" onCommit={v => rename.commit(node, v)} onClose={rename.close} />
 					: node.attrs.id && <span className="id">{node.attrs.id}</span>}
 				{cls && <span className="cls">{cls}</span>}
+				{problems?.of.has(node.index)
+					? <span className="codicon codicon-warning tree-problem" role="img" aria-label="점검 문제" title={problems.of.get(node.index)!.join('\n')} />
+					// 묶음 줄(Data의 Submission 등)은 문서 노드가 아니라 자식으로 본다
+					: !open && problems && [node, ...children].some(c => problems.inside.has(c.index) || c !== node && problems.of.has(c.index)) && <span className="codicon codicon-warning tree-problem inside" role="img" aria-label="안쪽 점검 문제" title="안쪽에 점검 문제가 있습니다" />}
 				{!interactive && node.attrs.name && <span className="name">{node.attrs.name}</span>}
 			</div>
-			{open && children.map(c => <TreeItem key={c.index} node={c} depth={depth + 1} selected={selected} extra={extra} onSelect={onSelect} onContextMenu={onContextMenu} onDoubleClick={onDoubleClick} fold={fold} defs={defs} interactive={interactive} bindRef={bindRef} reorder={reorder} rename={rename} />)}
+			{open && children.map(c => <TreeItem key={c.index} node={c} depth={depth + 1} selected={selected} extra={extra} onSelect={onSelect} onContextMenu={onContextMenu} onDoubleClick={onDoubleClick} fold={fold} defs={defs} interactive={interactive} bindRef={bindRef} reorder={reorder} rename={rename} problems={problems} />)}
 		</>
 	);
 }
 
-function setDragGhost(transfer: DataTransfer, icon: string, text: string) {
+export function setDragGhost(transfer: DataTransfer, icon: string, text: string) {
 	const ghost = document.createElement('div');
 	ghost.className = 'drag-ghost';
 	ghost.append(Object.assign(document.createElement('span'), { className: `codicon codicon-${icon}` }), text);
