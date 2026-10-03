@@ -93,7 +93,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 [Releases](https://github.com/castle-bird/ForWebsquare5/releases)에서 `.vsix`를 받아 설치합니다.
 
 ```bash
-code --install-extension websquare5-editor-0.2.0.vsix
+code --install-extension websquare5-editor-0.3.0.vsix
 ```
 
 ## 사용 방법
