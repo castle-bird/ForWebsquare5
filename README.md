@@ -86,17 +86,19 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 
 이 확장은 **사용 권한이 있는 WebSquare5 환경** 위에서 동작합니다.
 
-- VS Code 1.138 이상
+- VS Code 1.125 이상, 또는 VS Code 기반 편집기(Cursor·Antigravity 등, 바탕 VS Code 1.125 이상)
 - WebSquare5 프로젝트 (작업 폴더에 `websquare/config.xml`이 있는 구조)
 - WebSquare5 설정 파일이 들어 있는 폴더 (컴포넌트 정의 `WebSquareConfig.xml`, wpack 변환기, API 문서를 이 폴더 밑에서 읽습니다. 예: 전자정부프레임워크 4.1 기준 `eclipse_egov4.1/`). 못 찾으면 팔레트와 Property·Event 패널이 비고, 저장 시 wpack 변환을 건너뜁니다.
 - (선택) 연결 파일의 Java 자동완성을 위한 Java 확장
 
 ### 설치
 
-[Releases](https://github.com/castle-bird/ForWebsquare5/releases)에서 `.vsix`를 받아 설치합니다.
+- **VS Code**: 확장 탭에서 "For Websquare5"를 검색해 설치합니다(VS Code Marketplace).
+- **Cursor·Antigravity 등**: 확장 탭에서 같은 이름으로 검색합니다([Open VSX](https://open-vsx.org)).
+- **직접 설치**: [Releases](https://github.com/castle-bird/ForWebsquare5/releases)에서 `.vsix`를 받아 설치합니다.
 
 ```bash
-code --install-extension websquare5-editor-0.4.0.vsix
+code --install-extension websquare5-editor-0.4.1.vsix
 ```
 
 ## 사용 방법

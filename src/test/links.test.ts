@@ -115,7 +115,7 @@ statementType (STATEMENT|PREPARED) "PREPARED"
 			this.skip();
 		}
 		await api!.openRepository(vscode.Uri.file(dir));
-		assert.strictEqual((await stagedText(vscode.Uri.file(file)))?.replace(/\r\n/g, '\n'), 'class A {}\n', '작업 중 내용이 아니라 스테이지 내용');
+		assert.strictEqual((await stagedText(vscode.Uri.file(file)))?.replace(/\r\n/g, '\n'), 'class A {}\n', `작업 중 내용이 아니라 스테이지 내용: ${JSON.stringify(await stagedText(vscode.Uri.file(file)))}`);
 	});
 
 	test('탭 순서: 저장된 순서대로, 모르는 이름은 무시하고 새 탭은 뒤에', () => {
