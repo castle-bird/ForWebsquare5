@@ -1,7 +1,7 @@
 import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
-import { autoUpdate } from '@floating-ui/dom';
+import { autoUpdate, getOverflowAncestors } from '@floating-ui/dom';
 import type { ComponentDef } from '../../core/protocol';
 import { defOf, EV, localName, nodeAt, pathTo, type XmlNode } from '../../core/xmlModel';
 import { setStyle } from '../../core/style';
@@ -51,7 +51,22 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onS
 	const changes = editing?.form ? formAttrs(editing.form, draft) : [];
 	const columnResize = useColumnResize((index, width) => { onSelect(index); onEditAttr('width', String(width)); });
 	const cellRange = useCellRange(body, page, onSelectCells);
-	const gridOf = (index: number | undefined) => index === undefined ? undefined : pathTo(body, index)?.find(n => localName(n.tag) === 'gridView');
+	// 끌기·놓기 단위(그리드 안 칸은 그리드 전체)를 문서당 한 번만 찾는다.
+	const units = useMemo(() => {
+		const out = new Map<number, XmlNode>();
+		const walk = (n: XmlNode, grid?: XmlNode) => {
+			grid ??= localName(n.tag) === 'gridView' ? n : undefined;
+			out.set(n.index, grid ?? n);
+			n.children.forEach(c => walk(c, grid));
+		};
+		walk(body);
+		return out;
+	}, [body]);
+	const unitAt = (index: number) => units.get(index);
+	const gridOf = (index: number | undefined) => {
+		const unit = index === undefined ? undefined : unitAt(index);
+		return unit && localName(unit.tag) === 'gridView' ? unit : undefined;
+	};
 	/** 컴포넌트 옮기기 시작(캔버스 끌기·그리드 손잡이 공통) */
 	const startMove = (e: ReactDragEvent, n: XmlNode) => {
 		if (n.index !== selected && !extra.includes(n.index)) { onSelect(n.index); }
@@ -87,11 +102,6 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onS
 		return () => cancelAnimationFrame(frame);
 	}, [tree, shadow, sheets]);
 	const target = (e: { target: EventTarget }) => pick(e.target as Element);
-	/** 끌기·놓기 단위: 그리드 안 칸은 그리드 전체 */
-	const unitAt = (index: number) => {
-		const path = pathTo(body, index);
-		return path?.find(n => localName(n.tag) === 'gridView') ?? path?.at(-1);
-	};
 	/** 놓을 자리(팔레트 넣기·이동 공통): 단위의 위·아래 비율로 안쪽·앞·뒤 */
 	const dropAt = (e: { target: EventTarget; clientY: number }) => {
 		const hit = target(e);
@@ -364,12 +374,25 @@ function Badges({ page, body, tree }: { page: RefObject<HTMLDivElement | null>; 
 			setRects([]);
 			return;
 		}
-		const measure = () => marked.flatMap(m => {
-			const el = p.querySelector(node(m.index));
-			const r = el && visibleRect(el, p);
-			return r ? [{ ...m, left: r.left, top: r.top }] : [];
-		});
-		return watchLayout(marked.flatMap(m => p.querySelector(node(m.index)) ?? []), p, measure, setRects);
+		let stop: (() => void) | undefined;
+		const sync = () => {
+			stop?.();
+			const elements = new Map([...p.querySelectorAll<HTMLElement>('[data-wse]:not([data-wse-frame] *)')].map(el => [wseIndex(el), el]));
+			const targets = marked.flatMap(m => {
+				const el = elements.get(m.index);
+				return el ? [{ ...m, el }] : [];
+			});
+			const measure = () => targets.flatMap(({ el, ...m }) => {
+				const r = visibleRect(el, p);
+				return r ? [{ ...m, left: r.left, top: r.top }] : [];
+			});
+			stop = watchLayout(targets.map(t => t.el), p, measure, setRects);
+		};
+		// 탭 content처럼 DOM만 바뀔 때도 새 요소를 찾아 감시한다.
+		const observer = new MutationObserver(sync);
+		observer.observe(p, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-wse'] });
+		sync();
+		return () => { observer.disconnect(); stop?.(); };
 	}, [page, marked, tree]);
 	return <>{rects.map(r => (
 		<div key={r.index} className="wse-badges" style={{ left: r.left, top: r.top }}>
@@ -392,9 +415,20 @@ function watchLayout<T>(elements: Element[], page: HTMLElement, measure: () => T
 		}
 	};
 	const schedule = () => { pending ||= requestAnimationFrame(() => { pending = 0; update(); }); };
-	const stops = elements.map(el => autoUpdate(el, page, schedule));
+	// 같은 page와 스크롤 조상에 요소 수만큼 observer/listener를 붙이지 않는다.
+	const ancestors = new Set([...elements, page].flatMap(el => getOverflowAncestors(el)));
+	ancestors.forEach(el => { el.addEventListener('scroll', schedule, { passive: true }); el.addEventListener('resize', schedule); });
+	const observer = new ResizeObserver(schedule);
+	new Set([...elements, page]).forEach(el => observer.observe(el));
+	// 요소별 위치 이동 감시는 유지한다(크기가 그대로인 레이아웃 이동 포함).
+	const stops = elements.map(el => autoUpdate(el, page, schedule, { ancestorScroll: false, ancestorResize: false, elementResize: false }));
 	update();
-	return () => { stops.forEach(stop => stop()); cancelAnimationFrame(pending); };
+	return () => {
+		stops.forEach(stop => stop());
+		observer.disconnect();
+		ancestors.forEach(el => { el.removeEventListener('scroll', schedule); el.removeEventListener('resize', schedule); });
+		cancelAnimationFrame(pending);
+	};
 }
 
 function Frame({ page, index, kind, tree, onResize, label }: {
@@ -549,14 +583,15 @@ function visibleRect(el: Element, page: HTMLElement): Rect | undefined {
 		left = Math.max(left, c.left); top = Math.max(top, c.top);
 		right = Math.min(right, c.right); bottom = Math.min(bottom, c.bottom);
 	};
+	const b = page.getBoundingClientRect();
+	const x = b.left + page.clientLeft, y = b.top + page.clientTop;
+	clip({ left: x, top: y, right: x + page.clientWidth, bottom: y + page.clientHeight });
+	if (right <= left || bottom <= top) { return undefined; }
 	for (let p = el.parentElement; p && p !== page; p = p.parentElement) {
 		if (getComputedStyle(p).overflow !== 'visible') {
 			clip(p.getBoundingClientRect());
 		}
 	}
-	const b = page.getBoundingClientRect();
-	const x = b.left + page.clientLeft, y = b.top + page.clientTop;
-	clip({ left: x, top: y, right: x + page.clientWidth, bottom: y + page.clientHeight });
 	if (right <= left || bottom <= top) {
 		return undefined;
 	}

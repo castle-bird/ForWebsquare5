@@ -2,9 +2,19 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { findNode, parseXml, type XmlNode } from '../core/xmlModel';
 import { applyNodeEdit } from '../vscode/documentEdit';
-import { idConflict, screenProblems } from '../core/check';
+import { idConflict, problemAncestors, screenProblems } from '../core/check';
 
 suite('화면 점검·중복 id', () => {
+	test('경고 조상: 여러 가지·부모 자체 경고·없는 index를 포함해 기존 경로 탐색과 동일', () => {
+		const root = parseXml('<html><body><a><b/><c/></a><d><e/></d><f/></body></html>')!;
+		const a = root.children[0].children[0], d = root.children[0].children[1];
+		const problems = new Map([a.index, a.children[0].index, a.children[1].index, d.children[0].index, 999].map(i => [i, ['경고']]));
+		assert.deepStrictEqual(problemAncestors(root, problems), new Set([root.index, root.children[0].index, a.index, d.index]));
+		assert.deepStrictEqual(problemAncestors(root, new Map([[a.index, ['경고']]])), new Set([root.index, root.children[0].index]), '자기 경고만 있으면 자기 자신은 조상에서 제외');
+		assert.deepStrictEqual(problemAncestors(root, new Map([[root.index, ['경고']]])), new Set());
+		assert.deepStrictEqual(problemAncestors(root, new Map()), new Set());
+	});
+
 	test('화면 점검: id 범위(화면·그리드 부분·데이터 컬럼), 없는 데이터·컬럼 바인딩, Script에 없는 이벤트 함수', () => {
 		const xml = `<html xmlns:w2="http://www.inswave.com/websquare" xmlns:ev="urn:ev"><head><w2:dataCollection>
 <w2:dataList id="dlt"><w2:columnInfo><w2:column id="a"/><w2:column id="b"/></w2:columnInfo></w2:dataList>

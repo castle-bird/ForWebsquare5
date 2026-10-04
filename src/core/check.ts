@@ -111,5 +111,16 @@ export function screenProblems(root: XmlNode, script = ''): Map<number, string[]
 
 /** 문제가 있는 노드의 조상들(접힌 줄에도 안쪽 문제를 표시) */
 export function problemAncestors(root: XmlNode, problems: Map<number, string[]>): Set<number> {
-	return new Set([...problems.keys()].flatMap(index => pathTo(root, index)?.slice(0, -1).map(n => n.index) ?? []));
+	const ancestors = new Set<number>();
+	if (!problems.size) { return ancestors; }
+	const visit = (n: XmlNode): boolean => {
+		let inside = false;
+		for (const child of n.children) {
+			if (visit(child)) { inside = true; }
+		}
+		if (inside) { ancestors.add(n.index); }
+		return inside || problems.has(n.index);
+	};
+	visit(root);
+	return ancestors;
 }

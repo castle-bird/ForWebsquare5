@@ -40,8 +40,10 @@ export function useFold() {
 		toggle: (n: XmlNode, open: boolean) => setState(s => ({ ...s, overrides: new Map(s.overrides).set(n.index, open) })),
 		setAll: (all: boolean) => setState({ all, overrides: new Map() }),
 		reveal: (nodes: XmlNode[]) => setState(s => {
+			const closed = nodes.filter(n => !(s.overrides.get(n.index) ?? s.all ?? false));
+			if (!closed.length) { return s; }
 			const overrides = new Map(s.overrides);
-			nodes.forEach(n => overrides.set(n.index, true));
+			closed.forEach(n => overrides.set(n.index, true));
 			return { ...s, overrides };
 		}),
 	};
