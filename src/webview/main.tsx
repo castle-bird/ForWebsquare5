@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
-import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import type { SettingsMenuItem, ToExtension, ToWebview } from '../core/protocol';
 import { defOf, findNode, findTag, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
-import { DATA_KINDS, type DataKind } from '../core/data';
+import { DATA_KINDS, isDataNode, type DataKind } from '../core/data';
 import { newSubmissionFields, submissionFields, type SubmissionFields } from '../core/submission';
 import { Canvas } from './design/canvas';
 import { PropertyPane } from './ui/properties';
@@ -12,7 +11,7 @@ import { DataEditor } from './ui/dataEditor';
 import { SubmissionEditor } from './ui/submissionEditor';
 import { GridBindDialog } from './ui/gridBindDialog';
 import { ChoicesEditor, choicesKind, type ChoicesKind } from './ui/choicesEditor';
-import { boundColumnIds, listColumns } from '../core/grid';
+import { boundColumnIds, canMoveGridColumn, listColumns } from '../core/grid';
 import { xmlSupport } from './editor/xmlSupport';
 import { CodeEditor, type CodeEditorHandle } from './editor/codeEditor';
 import { lazy, scriptLanguage, scriptTools, xmlCompletions, xmlHover } from './editor/completions';
@@ -23,12 +22,11 @@ import { Toast } from './ui/toast';
 import { Menu } from './ui/menu';
 import { useLinkTabs } from './ui/linkedFile';
 import { FIXED_TABS } from '../core/links';
-import { dropZone, TreeItem, useDataReorder, useFold, useTreeRename, type DragData, type Fold, type Problems } from './ui/tree';
-import { problemAncestors, screenProblems } from '../core/check';
+import { useFold } from './ui/tree';
+import { TreePane } from './ui/treePane';
 import { useEventHandler } from './eventHandler';
-import { canMerge, post, useEditorStore } from './store';
+import { canMerge, canUnmerge, gridOfCells, post, targets, useEditorStore } from './store';
 import { isMergeCell } from '../core/merge';
-import { isModKey } from './keys';
 import '@vscode/codicons/dist/codicon.css';
 import './style.css';
 
@@ -43,8 +41,6 @@ const SETTINGS_MENU: ([SettingsMenuItem, string] | null)[] = [
 const GRID_MENU = { columnLeft: '왼쪽에 Column 추가', column: 'Column 추가', row: 'Row 추가', header: 'Header 추가', subTotal: 'subTotal 추가', footer: 'footer 추가' } as const;
 
 const LOADING = <p className="empty">불러오는 중…</p>;
-
-const isDataNode = (n: XmlNode) => /:(dataMap|dataList)$/.test(n.tag);
 
 type Popup = { key: string; error?: string; busy?: boolean } & (
 	| { kind: 'data'; id: string }
@@ -71,9 +67,6 @@ function useComponentShortcuts() {
 		};
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === 'Delete' && !inEditable(e) && useEditorStore.getState().del()) {
-				e.preventDefault();
-			} else if (isModKey(e, 'm') && !inEditable(e) && useEditorStore.getState().merge()) {
-				// 셀 병합(Ctrl+M)
 				e.preventDefault();
 			}
 		};
@@ -117,8 +110,12 @@ function App() {
 	const [rightOpen, setRightOpen] = useState(true);
 	const [settingsMenu, setSettingsMenu] = useState<HTMLElement>();
 	const [themeColors, setThemeColors] = useState(false);
-	/** merge: 병합 메뉴를 보이고(값은 켜짐 여부). mergeOnly: 그 메뉴만(Outline·group 셀) */
-	const [dataMenu, setDataMenu] = useState<{ x: number; y: number; index: number; grid?: { hasFooter: boolean; at: number; onColumn: boolean }; merge?: boolean; mergeOnly?: boolean }>();
+	/**
+	 * merge: 병합 메뉴를 보이고(값은 켜짐 여부). unmerge: 병합 해제 대상 셀(있으면 메뉴를 보임). mergeOnly: 그 메뉴들만(Outline·group 셀).
+	 * grid.column: 누른 칸의 열 옮기기·지우기(cells: 지울 칸들, left·right: 옮길 수 있는지)
+	 */
+	const [dataMenu, setDataMenu] = useState<{ x: number; y: number; index: number; merge?: boolean; unmerge?: number[]; mergeOnly?: boolean;
+		grid?: { hasFooter: boolean; at: number; onColumn: boolean; column?: { index: number; cells: number[]; left: boolean; right: boolean } } }>();
 	const [popups, setPopups] = useState<Popup[]>([]);
 	const [gridBind, setGridBind] = useState<{ grid: number; list: number }>();
 	const linkTabs = useLinkTabs(activeTab, LOADING);
@@ -236,19 +233,6 @@ function App() {
 			updatePopup(key, { error: '원래 Submission을 찾지 못했어. 다시 열어 줘.' });
 		}
 	};
-	useEffect(() => {
-		const path = body && pathTo(body, selected);
-		if (path) {
-			outline.reveal(path.slice(0, -1));
-		}
-	}, [selected, body]); // outline 객체는 매 렌더 새로 만들어지므로 선택이 바뀔 때만 실행
-
-	const refOf = (n: XmlNode) => {
-		if (n.attrs.id && /:dataList$/.test(n.tag)) { return `data:${n.attrs.id}`; }
-		if (!root || !n.attrs.id || !/:(key|column)$/.test(n.tag)) { return undefined; }
-		const owner = pathTo(root, n.index)?.at(-3);
-		return owner?.attrs.id && isDataNode(owner) ? `data:${owner.attrs.id}.${n.attrs.id}` : undefined;
-	};
 	const bindRefTo = (index: number, value: string) => {
 		if (!doc || !root) { return; }
 		const target = nodeAt(root, index);
@@ -284,43 +268,23 @@ function App() {
 		const path = body && pathTo(body, index);
 		const grid = path?.filter(n => n.tag.endsWith(':gridView')).at(-1), cell = path?.filter(isMergeCell).at(-1);
 		if (!grid && !cell) { return; }
-		if (!(cell && keepsSelection(cell.index))) { setSelected(grid ? grid.index : cell!.index); }
-		setDataMenu({ x, y, index: (grid ?? cell)!.index, merge: cell ? canMerge() : undefined, mergeOnly: !grid,
-			...grid && { grid: { hasFooter: grid.children.some(c => c.tag.endsWith(':footer')), at: index, onColumn: !!path?.at(-1)?.tag.endsWith(':column') } } });
+		// 여러 칸을 골라 둔 채 그 안에서 열었으면 고른 칸들, 아니면 누른 칸
+		const multi = !!cell && keepsSelection(cell.index), picked = multi ? targets(useEditorStore.getState()) : cell ? [cell] : [];
+		const column = grid && path?.at(-1)?.tag.endsWith(':column') ? path.at(-1) : undefined;
+		if (!multi) { setSelected(grid ? grid.index : cell!.index); }
+		setDataMenu({ x, y, index: (grid ?? cell)!.index, merge: cell ? canMerge() : undefined, unmerge: cell ? picked.map(n => n.index) : undefined, mergeOnly: !grid,
+			...grid && { grid: { hasFooter: grid.children.some(c => c.tag.endsWith(':footer')), at: index, onColumn: !!column,
+				column: column && { index: column.index, cells: (multi && root && gridOfCells(root, picked) === grid ? picked : [column]).map(n => n.index),
+					left: canMoveGridColumn(grid, column.index, 'left'), right: canMoveGridColumn(grid, column.index, 'right') } } } });
 	};
 	const outlineContext = (e: MouseEvent<HTMLDivElement>, n: XmlNode) => {
 		if (!isMergeCell(n)) { return; }
 		e.preventDefault();
+		const unmerge = keepsSelection(n.index) ? targets(useEditorStore.getState()).map(t => t.index) : [n.index];
 		if (!keepsSelection(n.index)) { setSelected(n.index); }
-		setDataMenu({ x: e.clientX, y: e.clientY, index: n.index, merge: canMerge(), mergeOnly: true });
+		setDataMenu({ x: e.clientX, y: e.clientY, index: n.index, merge: canMerge(), unmerge, mergeOnly: true });
 	};
-	const dataReorder = useDataReorder(doc?.version, model, dataCollection);
-	const rename = useTreeRename(root, selected, (id, index) => editAttr('id', id, index));
-	// 화면 점검(겹치는 id·없는 데이터·컬럼 바인딩·Script에 없는 이벤트 함수): Outline·Data 줄에 경고 표시
-	const scriptText = doc?.script.text;
-	const problems = useMemo((): Problems | undefined => {
-		if (!root) { return undefined; }
-		const of = screenProblems(root, scriptText);
-		return { of, inside: problemAncestors(root, of) };
-	}, [root, scriptText]);
-	const tree = (tops: XmlNode[], fold: Fold, interactive?: boolean) => tops.length
-		? <div role="tree">{tops.map(top => <TreeItem key={top.index} node={top} depth={0} selected={selected} extra={extra} onSelect={setSelected} onContextMenu={interactive ? outlineContext : dataContext} onDoubleClick={interactive ? (n => openEditor(n.index)) : openDataEditor} fold={fold} defs={defs?.defs} interactive={interactive} bindRef={interactive ? undefined : refOf} reorder={interactive ? undefined : dataReorder} rename={rename} problems={problems} />)}</div>
-		: <p className="empty">없음</p>;
-	const foldButtons = (fold: Fold) => <>
-		<button className="icon codicon codicon-expand-all" title="모두 펼치기" onClick={() => fold.setAll(true)} />
-		<button className="icon codicon codicon-collapse-all" title="모두 접기" onClick={() => fold.setAll(false)} />
-	</>;
-
 	const openEventHandler = useEventHandler({ doc, defs: defs?.defs, events, scriptRef, editAttr, showScript: () => setActiveTab('Script') });
-
-	const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor));
-	const handleDragEnd = (e: DragEndEvent) => {
-		const dragged = e.active.data.current as DragData | undefined;
-		const over = e.over?.data.current as DragData | undefined;
-		if (dragged && over && over.index !== dragged.index) {
-			move(dragged.index, over.index, dropZone(e.active.rect.current.translated, e.over!.rect, over.container, over.depth));
-		}
-	};
 
 	return (<>
 		<Group orientation="horizontal" className="shell">
@@ -343,6 +307,7 @@ function App() {
 								<Panel key="design-canvas" id="design-canvas" minSize={100}><div className="design-canvas">
 									{styles?.error && <p className="warning" title={styles.error}>{styles.error}</p>}
 									<Canvas body={body} defs={defs.defs} sheets={styles?.css} selected={selected} extra={extra} onSelect={setSelected} onEditText={editText}
+										onSelectCells={(primary, cells) => useEditorStore.setState({ selected: primary, extra: cells.filter(i => i !== primary) })}
 										onMove={move} onEditAttr={editAttr} onOpenFrame={openFrame} onOpenEditor={openEditor} onBindRef={bindRefTo} onContextMenu={canvasContext}
 										onInsertComponent={(drag, index, position) => post({ type: 'insertComponent', ...drag, index, position })}
 										idChoices={i => { const at = root && pathTo(root, i); return at && boundColumnIds(root, at); }} />
@@ -365,13 +330,8 @@ function App() {
 					</Panel>
 					<Separator className="resizer" />
 					<Panel defaultSize="45%" minSize={120}>
-						<div className="pane">
-							<Tabs order={tabOrder} onReorder={setTabOrder} items={{
-								Outline: <DndContext sensors={sensors} onDragEnd={handleDragEnd}>{tree(body ? [body] : [], outline, true)}</DndContext>,
-								Data: tree(dataRoots, data),
-							}}
-								actions={{ Outline: foldButtons(outline), Data: foldButtons(data) }} />
-						</div>
+						<TreePane body={body} dataRoots={dataRoots} model={model} dataCollection={dataCollection} outline={outline} data={data}
+							onOutlineContext={outlineContext} onDataContext={dataContext} onOpenEditor={openEditor} onOpenDataEditor={openDataEditor} />
 					</Panel>
 				</Group>
 				</div>
@@ -380,13 +340,21 @@ function App() {
 		{dataMenu && <Menu key={`${dataMenu.x},${dataMenu.y}`} x={dataMenu.x} y={dataMenu.y} onClose={() => setDataMenu(undefined)}>
 				{dataMenu.mergeOnly ? null : dataMenu.grid ? (Object.keys(GRID_MENU) as (keyof typeof GRID_MENU)[]).filter(part => part !== 'columnLeft' || dataMenu.grid!.onColumn).map(part => <button key={part} role="menuitem" disabled={part === 'footer' && dataMenu.grid!.hasFooter}
 					onClick={() => { if (doc) { post({ type: 'addGridPart', version: doc.version, index: dataMenu.index, part, at: dataMenu.grid!.at }); } setDataMenu(undefined); }}>
-					{part === 'column' && dataMenu.grid!.onColumn ? '오른쪽에 Column 추가' : GRID_MENU[part]}</button>)
+					{part === 'column' && dataMenu.grid!.onColumn ? '오른쪽에 Column 추가' : GRID_MENU[part]}</button>).concat(dataMenu.grid.column ? [
+						<div key="column-separator" className="menu-separator" role="separator" />,
+						...(['left', 'right'] as const).map(dir => <button key={dir} role="menuitem" disabled={!dataMenu.grid!.column![dir]}
+							onClick={() => { setDataMenu(undefined); useEditorStore.getState().gridColumns(dir, dataMenu.index, [dataMenu.grid!.column!.index]); }}>
+							열 {dir === 'left' ? '왼쪽' : '오른쪽'}으로 이동</button>),
+						<button key="delete" role="menuitem" onClick={() => { setDataMenu(undefined); useEditorStore.getState().gridColumns('delete', dataMenu.index, dataMenu.grid!.column!.cells); }}>
+							열 삭제<kbd>Delete</kbd></button>,
+					] : [])
 				: dataMenu.index === -1
 					? <button role="menuitem" onClick={() => { setDataMenu(undefined); openSubmissionEditor(); }}>Submission 추가</button>
 					: DATA_KINDS.map(kind => <button key={kind} role="menuitem" onClick={() => addData(kind)}>{kind[0].toUpperCase() + kind.slice(1)} 추가</button>)}
 				{dataMenu.merge !== undefined && <>
 					{!dataMenu.mergeOnly && <div className="menu-separator" role="separator" />}
-					<button role="menuitem" disabled={!dataMenu.merge} onClick={() => { setDataMenu(undefined); useEditorStore.getState().merge(); }}>병합<kbd>Ctrl+M</kbd></button>
+					<button role="menuitem" disabled={!dataMenu.merge} onClick={() => { setDataMenu(undefined); useEditorStore.getState().merge(); }}>병합</button>
+					{dataMenu.unmerge && <button role="menuitem" disabled={!canUnmerge(dataMenu.unmerge)} onClick={() => { setDataMenu(undefined); useEditorStore.getState().unmerge(dataMenu.unmerge); }}>병합 해제</button>}
 				</>}
 			</Menu>}
 		{settingsMenu && <Menu anchor={settingsMenu} placement="bottom-end" onClose={() => setSettingsMenu(undefined)}>

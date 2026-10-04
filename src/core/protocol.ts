@@ -119,6 +119,8 @@ export type ToExtension =
 	| { type: 'paste'; version: number; index: number; xml: string | string[] }
 	| { type: 'delete'; version: number; index: number; more?: number[] }
 	| { type: 'mergeCells'; version: number; index: number; more: number[] } // 고른 셀(index 포함)을 하나로 병합
+	| { type: 'unmergeCells'; version: number; index: number; more: number[] } // 고른 셀 중 병합된 셀을 원래 칸 수로 나눔
+	| { type: 'gridColumns'; version: number; index: number; cells: number[]; op: 'delete' | 'left' | 'right' } // 그리드(index)에서 칸들의 열 지우기, 또는 첫 칸의 열을 왼쪽·오른쪽으로 옮기기
 	| { type: 'move'; version: number; dragged: number; target: number; position: DropPosition; more?: number[] }
 	| { type: 'addData'; version: number; index: number; kind: DataKind }
 	| { type: 'editDataFields'; version: number; index: number; popup: string; fields: DataField[]; id?: string }

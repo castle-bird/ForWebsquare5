@@ -6,15 +6,15 @@ import { nodeAt, parseXml, pathTo, type XmlNode } from '../core/xmlModel';
 import { applyEdits, applyLineChanges, deleteNode, editableScript, encodeScript, setAttribute, setText, sourceChange, type TextEdit } from '../core/edit';
 import { pasteNode } from '../core/paste';
 import { moveNode } from '../core/move';
-import { mergeCells } from '../core/merge';
+import { mergeCells, unmergeCells } from '../core/merge';
 import { idConflict } from '../core/check';
 import { addDataNode, editDataFields, isDataKind, renameDataRefs, type DataRename } from '../core/data';
 import { addSubmissionNode, editSubmissionNode } from '../core/submission';
 import { editChoices } from '../core/choices';
-import { addGridColumn, addGridPart, addGridRow, bindGridView } from '../core/grid';
+import { addGridColumn, addGridPart, addGridRow, bindGridView, deleteGridColumns, moveGridColumn } from '../core/grid';
 import type { CodeChange, CodeTarget, ToExtension } from '../core/protocol';
 
-type NodeEdit = Extract<ToExtension, { type: 'setAttr' | 'setText' | 'paste' | 'delete' | 'move' | 'addData' | 'editDataFields' | 'addSubmission' | 'editSubmission' | 'editChoices' | 'bindGrid' | 'addGridPart' | 'mergeCells' }>;
+type NodeEdit = Extract<ToExtension, { type: 'setAttr' | 'setText' | 'paste' | 'delete' | 'move' | 'addData' | 'editDataFields' | 'addSubmission' | 'editSubmission' | 'editChoices' | 'bindGrid' | 'addGridPart' | 'mergeCells' | 'unmergeCells' | 'gridColumns' }>;
 
 /** notify: 같이 바꾼 것(데이터·컬럼 id를 바꿔 바인딩도 바꿈)·막은 이유(겹치는 id)를 알린다 */
 export async function applyNodeEdit(document: vscode.TextDocument, msg: NodeEdit, notify?: (message: string) => void): Promise<boolean> {
@@ -36,8 +36,8 @@ export async function applyNodeEdit(document: vscode.TextDocument, msg: NodeEdit
 	const ok = !changes.length || await applyTextEdits(document, [...changes, ...refs]);
 	if (ok && rename && refs.length) {
 		const { from, to, columns = new Map<string, string>() } = rename;
-		const what = [...from !== to ? [`${from} → ${to}`] : [], ...[...columns].map(([a, b]) => `${from}.${a} → ${b}`)];
-		notify?.(`${what.join(', ')}: 바인딩 ${refs.length}곳도 바꿨습니다.`);
+		const what = [...from !== to ? [`\`${from}\` → \`${to}\``] : [], ...[...columns].map(([a, b]) => `\`${from}.${a}\` → \`${b}\``)];
+		notify?.(`바인딩 ${refs.length}곳도 함께 변경했습니다. ${what.join(', ')}`);
 	}
 	return ok;
 }
@@ -91,9 +91,9 @@ function nodeChanges(text: string, root: XmlNode, msg: NodeEdit): TextEdit[] | u
 		const dragged = all([msg.dragged, ...msg.more ?? []]), target = find(msg.target);
 		return dragged && target && moveNode(text, dragged, target, msg.position);
 	}
-	if (msg.type === 'mergeCells') {
+	if (msg.type === 'mergeCells' || msg.type === 'unmergeCells') {
 		const cells = [msg.index, ...msg.more].map(find);
-		return cells.every(c => c) ? mergeCells(text, root, cells as XmlNode[]) : undefined;
+		return cells.every(c => c) ? (msg.type === 'mergeCells' ? mergeCells : unmergeCells)(text, root, cells as XmlNode[]) : undefined;
 	}
 	const path = pathTo(root, msg.index), node = path?.at(-1);
 	if (!path || !node) {
@@ -112,6 +112,7 @@ function nodeChanges(text: string, root: XmlNode, msg: NodeEdit): TextEdit[] | u
 		case 'editDataFields': return one(editDataFields(text, root, node, msg.fields, msg.id));
 		case 'editSubmission': return one(editSubmissionNode(text, root, node, msg.fields));
 		case 'editChoices': return one(editChoices(text, root, node, msg.fields));
+		case 'gridColumns': return msg.op === 'delete' ? deleteGridColumns(text, node, msg.cells) : moveGridColumn(text, node, msg.cells[0], msg.op);
 		case 'setAttr': {
 			if (msg.also?.length) {
 				// 같은 시작 태그를 여러 번 고치므로 차례로 적용한 뒤 바뀐 범위 하나로

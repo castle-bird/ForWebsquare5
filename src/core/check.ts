@@ -32,16 +32,16 @@ export function idConflict(root: XmlNode, index: number, id: string): string | u
 	const scope = scopeOf(path);
 	const clash = (n: XmlNode, inScope: boolean): boolean =>
 		inScope && n.index !== index && n.attrs.id === id || n.children.some(c => clash(c, n === scope || inScope && !SCOPE.test(n.tag)));
-	return clash(scope, false) ? `이미 사용 중인 ID입니다: ${id}` : undefined;
+	return clash(scope, false) ? `이미 사용 중인 ID입니다. \`${id}\`` : undefined;
 }
 
-/** 데이터 id → 컬럼·키 id들(columnInfo·keyInfo가 없는 linkedDataList·alias는 undefined: 컬럼은 안 본다) */
-function dataColumns(root: XmlNode): Map<string, Set<string> | undefined> {
-	const data = new Map<string, Set<string> | undefined>();
+/** 데이터 id → 종류(dataList 등)·컬럼·키 id들(columnInfo·keyInfo가 없는 linkedDataList·alias는 columns 없음: 컬럼은 안 본다) */
+function dataColumns(root: XmlNode): Map<string, { kind: string; columns?: Set<string> }> {
+	const data = new Map<string, { kind: string; columns?: Set<string> }>();
 	const visit = (n: XmlNode) => {
 		if (isDataKind(n) && n.attrs.id) {
 			const info = n.children.find(c => /:(columnInfo|keyInfo)$/.test(c.tag));
-			data.set(n.attrs.id, info && new Set(info.children.flatMap(c => c.attrs.id ? [c.attrs.id] : [])));
+			data.set(n.attrs.id, { kind: n.tag.slice(n.tag.indexOf(':') + 1), columns: info && new Set(info.children.flatMap(c => c.attrs.id ? [c.attrs.id] : [])) });
 		}
 		n.children.forEach(visit);
 	};
@@ -82,7 +82,7 @@ export function screenProblems(root: XmlNode, script = ''): Map<number, string[]
 	for (const group of idGroups(root)) {
 		for (const [id, nodes] of group) {
 			if (nodes.length > 1) {
-				nodes.forEach(n => add(n, `id가 겹칩니다: ${id} (${nodes.length}곳)`));
+				nodes.forEach(n => add(n, `ID가 중복되었습니다. \`${id}\` (${nodes.length}곳)`));
 			}
 		}
 	}
@@ -92,15 +92,15 @@ export function screenProblems(root: XmlNode, script = ''): Map<number, string[]
 		for (const [name, value] of Object.entries(n.attrs)) {
 			if (value.startsWith('data:')) {
 				for (const ref of dataRefs(value)) {
-					const columns = data.get(ref.id);
-					if (ref.column && columns && !columns.has(ref.column)) {
-						add(n, `${name}: ${ref.id}에 없는 컬럼 ${ref.column}`);
+					const target = data.get(ref.id);
+					if (ref.column && target?.columns && !target.columns.has(ref.column)) {
+						add(n, `${target.kind}에 존재하지 않는 ID입니다. \`${ref.id}.${ref.column}\``);
 					}
 				}
 			}
 			const handler = name.startsWith('ev:') ? /^scwin\.([\w$]+)$/.exec(value.trim())?.[1] : undefined;
 			if (handler && !defined.has(handler)) {
-				add(n, `${name}: Script에 없는 함수 scwin.${handler}`);
+				add(n, `등록되지 않은 handler가 적용되어 있습니다. \`scwin.${handler}\``);
 			}
 		}
 		n.children.forEach(visit);

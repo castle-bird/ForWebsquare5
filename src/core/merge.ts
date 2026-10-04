@@ -1,9 +1,9 @@
 // 셀 병합: gridView 컬럼, 또는 group(tagname th·td)으로 만든 표의 셀. 고른 셀이 직사각형으로 빈틈없이 붙어 있을 때만.
 // 왼쪽 위 셀에 합친 칸 수(colSpan·rowSpan)를 넣고 나머지 셀은 지운다. 지워지는 group 셀 안의 컴포넌트는 왼쪽 위 셀로 옮겨 잃지 않는다
-import { applyEdits, deleteNode, eolOf, leadOf, lineIndent, setAttribute, setText, sourceChange, startTagEnd, type TextEdit } from './edit';
-import { columnLayout } from './grid';
+import { applyEdits, deleteNode, eolOf, escape, leadOf, lineIndent, setAttribute, setText, sourceChange, startTagEnd, type TextEdit } from './edit';
+import { columnLayout, gridColumnXml } from './grid';
 import { insertNode, reindentLines } from './paste';
-import { kid, kids, localName, nodeAt, parseXml, pathTo, WEBSQUARE_NS, type XmlNode } from './xmlModel';
+import { kid, kids, localName, nodeAt, parseXml, pathTo, prefixOf, uniqueId, usedIds, WEBSQUARE_NS, type XmlNode } from './xmlModel';
 
 const CELL_TAGS = ['th', 'td'];
 const tagnameOf = (n: XmlNode) => n.attrs.tagname?.toLowerCase();
@@ -154,6 +154,81 @@ export function mergeCells(text: string, root: XmlNode, cells: XmlNode[]): TextE
 			throw new Error('병합 결과를 읽지 못했습니다.');
 		}
 		current = applyEdits(current, [grid ? setAttribute(current, kept, name === 'colspan' ? 'colSpan' : 'rowSpan', value) : setHtmlAttr(current, tree, kept, name, value)]);
+	}
+	const change = sourceChange(text, current);
+	return change ? [change] : [];
+}
+
+/** 가로·세로로 2칸 이상 합친 셀인지(병합 풀기 대상) */
+export function isMerged(root: XmlNode, cell: XmlNode): boolean {
+	const path = pathTo(root, cell.index), table = path && tableOf(path);
+	const span = table?.spanOf(cell);
+	return !!span && ((span.across || 1) > 1 || (span.down || 1) > 1);
+}
+
+/** 병합 풀기 때 새로 넣는 빈 셀: 그리드는 "Column 추가"와 같은 컬럼, group은 같은 태그·속성(id·이벤트 빼고)의 빈 셀 */
+function blankCell(cell: XmlNode, used: Set<string>): string {
+	if (isGridCell(cell)) {
+		return gridColumnXml(prefixOf(cell.tag), `id="${uniqueId(used, 'column')}"`);
+	}
+	const attrs = Object.entries(cell.attrs).filter(([name]) => name !== 'id' && !name.startsWith('ev:')).map(([name, value]) => ` ${name}="${escape(value, '"')}"`).join('');
+	return `<${cell.tag}${attrs}></${cell.tag}>`;
+}
+
+/**
+ * 병합 풀기: 합쳤던 칸 수만큼 빈 셀을 다시 만들고 colSpan·rowSpan(group은 colspan·rowspan)을 지운다(하나의 변경).
+ * 고른 셀 중 병합된 셀만, 문서 뒤쪽 셀부터(새 셀은 그 셀 뒤에 들어가 앞 셀의 번호가 안 바뀐다)
+ */
+export function unmergeCells(text: string, root: XmlNode, cells: XmlNode[]): TextEdit[] {
+	const targets = cells.filter(c => isMerged(root, c)).map(c => c.index).filter((i, n, all) => all.indexOf(i) === n).sort((a, b) => b - a);
+	if (!targets.length) {
+		throw new Error('병합된 셀을 골라 주세요.');
+	}
+	let current = text;
+	for (const index of targets) {
+		const tree = parseXml(current), path = tree && pathTo(tree, index), cell = path?.at(-1), table = path && tableOf(path);
+		if (!tree || !cell || !table) {
+			throw new Error('병합을 풀 셀을 찾지 못했습니다.');
+		}
+		const { cells: layout } = columnLayout([table.rows], table.cellsOf, table.spanOf);
+		const at = layout.get(cell)!, used = usedIds(tree), eol = eolOf(current);
+		/** 셀 n개(줄을 나눠 쓴 행이면 같은 들여쓰기로 줄마다) */
+		const cellsXml = (n: number, lead: string | undefined) => Array.from({ length: n }, () => blankCell(cell, used)).join(lead === undefined ? '' : eol + lead);
+		const edits: TextEdit[] = [];
+		for (let r = at.row; r < at.row + at.down; r++) {
+			const row = table.rows[r], count = r === at.row ? at.span - 1 : at.span;
+			if (!count) { continue; }
+			if (r === at.row) {
+				const lead = leadOf(current, cell.start);
+				edits.push({ start: cell.end, end: cell.end, replacement: (lead === undefined ? '' : eol + lead) + cellsXml(count, lead) });
+				continue;
+			}
+			// 아랫줄: 합친 칸 오른쪽 첫 셀 앞, 없으면 줄 끝
+			const rowCells = table.cellsOf(row), next = rowCells.find(c => layout.get(c)!.start > at.start), last = rowCells.at(-1);
+			if (next) {
+				const lead = leadOf(current, next.start);
+				edits.push({ start: next.start, end: next.start, replacement: cellsXml(count, lead) + (lead === undefined ? '' : eol + lead) });
+			} else if (last) {
+				const lead = leadOf(current, last.start);
+				edits.push({ start: last.end, end: last.end, replacement: (lead === undefined ? '' : eol + lead) + cellsXml(count, lead) });
+			} else {
+				const open = startTagEnd(current, row.start);
+				if (current[open - 1] === '/') {
+					throw new Error('빈 행(<row/>)이 있어 병합을 풀 수 없습니다. Source 탭에서 확인해 주세요.');
+				}
+				const lead = lineIndent(current, row.start) + '\t';
+				edits.push({ start: open + 1, end: open + 1, replacement: eol + lead + cellsXml(count, lead) });
+			}
+		}
+		current = applyEdits(current, edits);
+		// 합친 칸 수 지우기(새 셀은 이 셀 뒤라 번호 그대로). 하나 지울 때마다 다시 읽는다(group은 attributes 안 요소)
+		for (const [attr, html] of [['colSpan', 'colspan'], ['rowSpan', 'rowspan']] as const) {
+			const reread = parseXml(current), kept = reread && nodeAt(reread, index);
+			if (!reread || !kept) {
+				throw new Error('병합 풀기 결과를 읽지 못했습니다.');
+			}
+			current = applyEdits(current, [isGridCell(kept) ? setAttribute(current, kept, attr, undefined) : setHtmlAttr(current, reread, kept, html, undefined)]);
+		}
 	}
 	const change = sourceChange(text, current);
 	return change ? [change] : [];

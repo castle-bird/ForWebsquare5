@@ -7,7 +7,7 @@ import { findNode, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
 import type { DropPosition } from '../core/paste';
 import { leadOf } from '../core/edit';
 import { isStructure } from '../core/paste';
-import { mergeProblem } from '../core/merge';
+import { isMerged, mergeProblem } from '../core/merge';
 import { setStyle, styleChanges } from '../core/style';
 import type { TextTarget } from './design/renderers';
 import { paletteKey } from '../core/palette';
@@ -69,6 +69,10 @@ interface EditorState {
 	cut: (clip?: DataTransfer | null) => boolean;
 	/** 고른 셀을 하나로 병합(표·그리드). 못 하면 이유를 알리고 false */
 	merge: () => boolean;
+	/** 병합 풀기: cells(없으면 고른 노드) 중 병합된 셀 */
+	unmerge: (cells?: number[]) => boolean;
+	/** 그리드(grid) 칸들의 열 지우기, 또는 첫 칸의 열 옮기기 */
+	gridColumns: (op: 'delete' | 'left' | 'right', grid: number, cells: number[]) => void;
 	del: () => boolean;
 	move: (dragged: number, target: number, position: DropPosition) => void;
 	setTabOrder: (order: string[]) => void;
@@ -246,10 +250,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	},
 
 	del: () => {
-		const { doc } = get();
+		const { doc, gridColumns } = get();
 		const [node, ...more] = targets(get());
 		if (!doc || !node) {
 			return false;
+		}
+		// 그리드 칸만 골랐으면 칸 하나가 아니라 그 열을 지운다(header·gBody 등 모든 행, 행·열이 어긋나지 않게)
+		const grid = gridOfCells(doc.root!, [node, ...more]);
+		if (grid) {
+			gridColumns('delete', grid.index, [node, ...more].map(n => n.index));
+			return true;
 		}
 		post({ type: 'delete', version: doc.version, index: node.index, ...more.length && { more: more.map(n => n.index) } });
 		set({ selected: pathTo(doc.root!, node.index)!.at(-2)!.index, extra: [] });
@@ -259,6 +269,28 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	cut: (clip) => {
 		const { copy, del } = get();
 		return copy(clip) && del();
+	},
+
+	unmerge: (cells) => {
+		const { doc } = get(), root = doc?.root;
+		const merged = root && (cells?.map(i => nodeAt(root, i)).filter((n): n is XmlNode => !!n) ?? targets(get())).filter(n => isMerged(root, n));
+		if (!doc || !merged?.length) {
+			if (doc) { post({ type: 'warn', message: '병합된 셀을 골라 주세요.' }); }
+			return false;
+		}
+		post({ type: 'unmergeCells', version: doc.version, index: merged[0].index, more: merged.slice(1).map(n => n.index) });
+		set({ selected: merged[0].index, extra: [] });
+		return true;
+	},
+
+	gridColumns: (op, grid, cells) => {
+		const { doc } = get();
+		if (!doc || !cells.length) {
+			return;
+		}
+		post({ type: 'gridColumns', version: doc.version, index: grid, cells, op });
+		// 지우면 그리드를, 옮기면 그 칸을 고른 채로(옮긴 뒤 번호가 바뀌므로 그리드)
+		set({ selected: grid, extra: [] });
 	},
 
 	merge: () => {
@@ -314,6 +346,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 export function canMerge(): boolean {
 	const state = useEditorStore.getState(), root = state.doc?.root;
 	return !!root && !mergeProblem(root, targets(state));
+}
+
+/** 모두 같은 gridView의 칸(column)이면 그 그리드 */
+export function gridOfCells(root: XmlNode, cells: XmlNode[]): XmlNode | undefined {
+	const grids = cells.map(c => { const path = pathTo(root, c.index); return path?.at(-1)?.tag.endsWith(':column') ? path.find(n => n.tag.endsWith(':gridView')) : undefined; });
+	return grids[0] && grids.every(g => g === grids[0]) ? grids[0] : undefined;
+}
+
+/** 병합을 풀 수 있는 셀이 있는지(메뉴 켜짐). cells가 없으면 고른 노드 */
+export function canUnmerge(cells?: number[]): boolean {
+	const state = useEditorStore.getState(), root = state.doc?.root;
+	return !!root && (cells?.map(i => nodeAt(root, i)).filter((n): n is XmlNode => !!n) ?? targets(state)).some(n => isMerged(root, n));
 }
 
 /** 지금 고른 노드들(문서 순서, 안에 든 것은 제외) */

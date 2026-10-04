@@ -1,4 +1,4 @@
-import { applyEdits, eolOf, escape, lineIndent, setAttribute, sourceChange, startTagEnd, type TextEdit } from './edit';
+import { applyEdits, deleteNode, eolOf, escape, lineIndent, setAttribute, sourceChange, startTagEnd, type TextEdit } from './edit';
 import { prefixOf, uniqueId, usedIds, WEBSQUARE_NS, type XmlNode } from './xmlModel';
 
 export const GRID_BIND_MODES = { new: '신규 생성', header: '헤더만 업데이트', body: '바디만 업데이트', all: '모두 업데이트', bind: '바인드 업데이트' } as const;
@@ -190,4 +190,90 @@ export function bindGridView(text: string, root: XmlNode, grid: XmlNode, list: X
 	const after = `${open.replace(/\s*\/>$/, '>')}${inner}</${grid.tag}>`;
 	const change = sourceChange(before, after);
 	return change && { ...change, start: change.start + grid.start, end: change.end + grid.start };
+}
+
+/** 그리드의 모든 구역(header·gBody·subTotal·footer) 행과 셀 배치. 열 번호는 구역마다 0부터라 같은 번호가 같은 열 */
+function gridLayout(grid: XmlNode) {
+	if (grid.ns !== WEBSQUARE_NS || !grid.tag.endsWith(':gridView')) { throw new Error('gridView에서만 할 수 있습니다.'); }
+	const p = prefixOf(grid.tag);
+	const rowsOf = (s: XmlNode) => s.children.filter(c => c.tag === `${p}row`);
+	const columnsOf = (r: XmlNode) => r.children.filter(c => c.tag === `${p}column`);
+	const sections = grid.children.filter(s => SECTION_ORDER.some(name => s.tag === p + name));
+	const { cells } = columnLayout(sections.map(rowsOf), columnsOf);
+	return { rows: sections.flatMap(rowsOf), columnsOf, cells };
+}
+
+interface ColumnRange { start: number; end: number }
+type Layout = Map<XmlNode, ColumnSpan>;
+
+/** 붙어 있는 열 범위 a·b를 바꿔도 되는지: 모든 셀이 a 안·b 안·둘 다 덮음·바깥 중 하나(걸치면 그 셀이 쪼개진다) */
+const swappable = (cells: Layout, a: ColumnRange, b: ColumnRange) => [...cells.values()].every(({ start, span }) => {
+	const end = start + span;
+	return end <= a.start || start >= b.end || start >= a.start && end <= a.end || start >= b.start && end <= b.end || start <= a.start && end >= b.end;
+});
+
+/** 셀이 있는 열(합친 칸이면 그 칸 전부)을 왼쪽·오른쪽 이웃 열(묶음 머리 칸이 있으면 그 묶음)과 바꿀 범위. 못 옮기면 undefined */
+function columnSwap(cells: Layout, cellIndex: number, dir: 'left' | 'right'): { a: ColumnRange; b: ColumnRange } | undefined {
+	const at = [...cells].find(([c]) => c.index === cellIndex)?.[1];
+	if (!at) { return undefined; }
+	const block = { start: at.start, end: at.start + at.span };
+	const width = Math.max(0, ...[...cells.values()].map(c => c.start + c.span));
+	if (dir === 'left') {
+		for (let t = block.start - 1; t >= 0; t--) {
+			const a = { start: t, end: block.start };
+			if (swappable(cells, a, block)) { return { a, b: block }; }
+		}
+	} else {
+		for (let t = block.end + 1; t <= width; t++) {
+			const b = { start: block.end, end: t };
+			if (swappable(cells, block, b)) { return { a: block, b }; }
+		}
+	}
+	return undefined;
+}
+
+/** 그리드 칸의 열을 그 방향으로 옮길 수 있는지(우클릭 메뉴 켜짐). WebSquare gridView가 아니면 false */
+export function canMoveGridColumn(grid: XmlNode, cellIndex: number, dir: 'left' | 'right'): boolean {
+	try {
+		return !!columnSwap(gridLayout(grid).cells, cellIndex, dir);
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * 그리드 열 옮기기: 셀이 있는 열을 이웃 열과 바꾼다(header·gBody·subTotal·footer 모든 행). 행마다 셀 순서만 바꾸고 사이 공백은 그대로.
+ * 합친 칸이 걸쳐 쪼개지면(묶음 머리 칸 밖으로 빼기 등) 못 옮긴다
+ */
+export function moveGridColumn(text: string, grid: XmlNode, cellIndex: number, dir: 'left' | 'right'): TextEdit[] {
+	const { rows, columnsOf, cells } = gridLayout(grid);
+	const swap = columnSwap(cells, cellIndex, dir);
+	if (!swap) { throw new Error(`합친 칸이 걸쳐 있거나 더 ${dir === 'left' ? '왼쪽' : '오른쪽'}에 열이 없어 옮길 수 없습니다.`); }
+	const inside = (c: XmlNode, r: ColumnRange) => { const p = cells.get(c)!; return p.start >= r.start && p.start + p.span <= r.end; };
+	return rows.flatMap(row => {
+		const cols = columnsOf(row), a = cols.filter(c => inside(c, swap.a)), b = cols.filter(c => inside(c, swap.b));
+		if (!a.length || !b.length) { return []; }
+		const list = [...a, ...b], gaps = list.slice(1).map((c, i) => text.slice(list[i].end, c.start));
+		const replacement = [...b, ...a].map((c, i) => text.slice(c.start, c.end) + (gaps[i] ?? '')).join('');
+		return [{ start: list[0].start, end: list.at(-1)!.end, replacement }];
+	});
+}
+
+/**
+ * 그리드 열 지우기: 고른 칸들이 있는 열을 header·gBody·subTotal·footer 모든 행에서 지운다(행·열이 어긋나지 않게).
+ * 그 열을 넘어 더 넓게 합친 칸(묶음 머리 칸)은 지우지 않고 colSpan만 줄인다
+ */
+export function deleteGridColumns(text: string, grid: XmlNode, cellIndexes: number[]): TextEdit[] {
+	const { cells } = gridLayout(grid);
+	const gone = new Set<number>();
+	for (const index of cellIndexes) {
+		const p = [...cells].find(([c]) => c.index === index)?.[1];
+		for (let x = p?.start ?? 0; p && x < p.start + p.span; x++) { gone.add(x); }
+	}
+	if (!gone.size) { throw new Error('지울 그리드 열을 찾지 못했습니다.'); }
+	return [...cells].flatMap(([cell, p]) => {
+		const hit = Array.from({ length: p.span }, (_, i) => p.start + i).filter(x => gone.has(x)).length;
+		const left = p.span - hit;
+		return !hit ? [] : !left ? [deleteNode(text, cell)] : [setAttribute(text, cell, 'colSpan', left > 1 ? String(left) : undefined)!];
+	});
 }

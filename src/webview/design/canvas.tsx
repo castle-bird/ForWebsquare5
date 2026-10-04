@@ -1,4 +1,4 @@
-import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
+import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { autoUpdate } from '@floating-ui/dom';
@@ -17,10 +17,12 @@ import canvasCss from './canvas.css';
 const MOVE_MIME = 'application/x-websquare5-canvas-move';
 let renders = 0;
 
-export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onEditText, onEditAttr, onOpenFrame, onOpenEditor, onBindRef, onContextMenu, onInsertComponent, onMove, idChoices }: {
+export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onSelectCells, onEditText, onEditAttr, onOpenFrame, onOpenEditor, onBindRef, onContextMenu, onInsertComponent, onMove, idChoices }: {
 	body: XmlNode; defs: ComponentDef[]; sheets?: string[]; selected?: number;
 	extra?: number[];
-	onSelect(i: number, additive?: boolean): void; onEditText(target: TextTarget, value: string, also?: { name: string; value?: string }[]): void;
+	onSelect(i: number, additive?: boolean): void;
+	/** 그리드 칸을 끌어 여러 칸 고름: primary는 누른 칸 */
+	onSelectCells?(primary: number, cells: number[]): void; onEditText(target: TextTarget, value: string, also?: { name: string; value?: string }[]): void;
 	onEditAttr(name: string, value: string | undefined): void; onOpenFrame(index: number): void;
 	onOpenEditor?(index: number): boolean;
 	onBindRef?(index: number, value: string): void;
@@ -34,6 +36,13 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 	const page = useRef<HTMLDivElement>(null);
 	const [shadow, setShadow] = useState<ShadowRoot>();
 	const [hover, setHover] = useState<number>();
+	// 이동 손잡이를 보일 그리드: 마우스가 그리드 위에 있었거나(손잡이로 가는 동안 잠깐 벗어나도 유지) 고른 칸이 그리드 안
+	const [hoverGrid, setHoverGrid] = useState<number>();
+	const hoverGridTimer = useRef<number>(undefined);
+	const keepHoverGrid = (grid: number | undefined) => {
+		clearTimeout(hoverGridTimer.current);
+		if (grid !== undefined) { setHoverGrid(grid); } else { hoverGridTimer.current = window.setTimeout(() => setHoverGrid(undefined), 400); }
+	};
 	const [drop, setDrop] = useState<{ index: number; position: InsertPosition; moving?: boolean }>();
 	const moving = useRef<{ index: number; body: XmlNode }>(undefined);
 	// form: 그리드 칸이면 문구 아래 입력(헤더: 너비·높이, 본문: 자주 고치는 속성). draft: 그 입력 값
@@ -41,6 +50,17 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 	const [draft, setDraft] = useState<Record<string, string>>({});
 	const changes = editing?.form ? formAttrs(editing.form, draft) : [];
 	const columnResize = useColumnResize((index, width) => { onSelect(index); onEditAttr('width', String(width)); });
+	const cellRange = useCellRange(body, page, onSelectCells);
+	const gridOf = (index: number | undefined) => index === undefined ? undefined : pathTo(body, index)?.find(n => localName(n.tag) === 'gridView');
+	/** 컴포넌트 옮기기 시작(캔버스 끌기·그리드 손잡이 공통) */
+	const startMove = (e: ReactDragEvent, n: XmlNode) => {
+		if (n.index !== selected && !extra.includes(n.index)) { onSelect(n.index); }
+		moving.current = { index: n.index, body };
+		e.dataTransfer.effectAllowed = 'move';
+		e.dataTransfer.setData(MOVE_MIME, String(n.index));
+		setDragGhost(e.dataTransfer, outlineIcon(n, defs), n.attrs.id ?? defOf(n, defs)?.display ?? localName(n.tag));
+	};
+	const handleGrid = gridOf(hoverGrid) ?? gridOf(selected);
 	useEffect(() => setShadow(host.current!.shadowRoot ?? host.current!.attachShadow({ mode: 'open' })), []);
 	// CSP상 <style> 태그는 막혀 있어서 생성한 스타일시트(adoptedStyleSheets)로 붙인다.
 	useEffect(() => {
@@ -112,11 +132,14 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 				<div ref={page} className="wse-page"
 					onClick={e => {
 						const el = target(e);
-						if (el) {
+						if (el && !cellRange.takeClick()) {
 							onSelect(wseIndex(el), e.ctrlKey || e.metaKey);
 						}
 					}}
-					{...columnResize}
+					// 열 너비 끌기(머리 칸 오른쪽 끝)가 먼저, 아니면 칸 범위 고르기
+					onPointerDown={e => { columnResize.onPointerDown(e); cellRange.onPointerDown(e); }}
+					onPointerMove={e => { columnResize.onPointerMove(e); cellRange.onPointerMove(e); }}
+					onPointerUp={e => { columnResize.onPointerUp(e); cellRange.onPointerUp(); }}
 					onContextMenu={e => {
 						const el = target(e);
 						if (el && onContextMenu) {
@@ -155,12 +178,8 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 					onDragStart={e => {
 						const el = target(e);
 						const n = el && unitAt(wseIndex(el));
-						if (!onMove || !n || n.index === body.index || editing) { e.preventDefault(); return; }
-						if (n.index !== selected && !extra.includes(n.index)) { onSelect(n.index); }
-						moving.current = { index: n.index, body };
-						e.dataTransfer.effectAllowed = 'move';
-						e.dataTransfer.setData(MOVE_MIME, String(n.index));
-						setDragGhost(e.dataTransfer, outlineIcon(n, defs), n.attrs.id ?? defOf(n, defs)?.display ?? localName(n.tag));
+						if (!onMove || !n || n.index === body.index || editing || cellRange.active()) { e.preventDefault(); return; }
+						startMove(e, n);
 					}}
 					onDragOver={e => {
 						if (e.dataTransfer.types.includes(MOVE_MIME)) {
@@ -206,8 +225,8 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 							onBindRef?.(wseIndex(el), value);
 						}
 					}}
-					onMouseOver={e => { const el = target(e); setHover(el ? wseIndex(el) : undefined); }}
-					onMouseLeave={() => setHover(undefined)}>
+					onMouseOver={e => { const el = target(e); setHover(el ? wseIndex(el) : undefined); keepHoverGrid(el ? gridOf(wseIndex(el))?.index : undefined); }}
+					onMouseLeave={() => { setHover(undefined); keepHoverGrid(undefined); }}>
 					<Boundary key={generation}>{tree}</Boundary>
 					{editing && (
 						<EditBox key={editing.target.index} style={editing.rect} value={editing.target.value ?? ''}
@@ -226,6 +245,8 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
 					{extra.map(i => <Frame key={i} page={page} index={i} kind="selected extra" tree={tree} />)}
 					<Frame page={page} index={selected} kind="selected" tree={tree} onResize={commitStyle}
 						label={selectedNode && label(selectedNode, defOf(selectedNode, defs))} />
+					{handleGrid && onMove && <GridHandle page={page} index={handleGrid.index} tree={tree} onEnter={() => keepHoverGrid(handleGrid.index)}
+						onSelect={() => onSelect(handleGrid.index)} onDragStart={e => startMove(e, handleGrid)} />}
 				</div>
 			</div>, shadow)}
 		</div>
@@ -237,6 +258,58 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onE
  * 기준은 화면 폭이 아니라 <col>의 width(=XML 값). autoFit(100%)이면 화면 폭이 비율로 늘어나 있어서
  * 화면 폭을 넣으면 그 열만 몇 배로 커진다 → 마우스 이동량도 같은 비율(scale)로 나눠 XML 단위로 바꾼다
  */
+/**
+ * 그리드 칸을 누른 채 끌면 누른 칸부터 지금 칸까지 직사각형 안의 칸을 모두 고른다(엑셀처럼, 같은 header·gBody 등 안에서만).
+ * 그리드 옮기기는 이동 손잡이(GridHandle)로만. 끌어서 고른 뒤 따라오는 click은 선택을 덮지 않게 무시
+ */
+function useCellRange(body: XmlNode, page: RefObject<HTMLDivElement | null>, onSelectCells?: (primary: number, cells: number[]) => void) {
+	const drag = useRef<{ anchor: number; owner: number; last: number }>(undefined);
+	const swallowClick = useRef(false);
+	const cellAt = (t: EventTarget) => {
+		const el = pick(t as Element), path = el ? pathTo(body, wseIndex(el)) : undefined, grid = path?.find(n => localName(n.tag) === 'gridView');
+		return path && grid && localName(path.at(-1)!.tag) === 'column' && path.length > 3 ? { path, grid } : undefined;
+	};
+	return {
+		/** 끌어서 고르는 중(그리드 옮기기 native drag를 막는다) */
+		active: () => !!drag.current,
+		/** 방금 끌어서 골랐으면 이번 click은 건너뛴다 */
+		takeClick: () => { const swallow = swallowClick.current; swallowClick.current = false; return swallow; },
+		onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => {
+			swallowClick.current = false;
+			const cell = !e.defaultPrevented && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && onSelectCells ? cellAt(e.target) : undefined;
+			if (!cell) { return; }
+			// 글자 선택·그리드 끌기가 시작되지 않게(click·dblclick은 그대로 온다)
+			e.preventDefault();
+			const index = cell.path.at(-1)!.index;
+			drag.current = { anchor: index, owner: cell.path.at(-3)!.index, last: index };
+		},
+		onPointerMove: (e: ReactPointerEvent<HTMLDivElement>) => {
+			// 다른 칸으로 넘어가면(끌기 시작) 캔버스 밖에서 놓아도 끝나게 포인터를 잡는다. 누르자마자 잡으면 click이 칸 대신 캔버스로 가 선택이 안 됨.
+			// 잡은 뒤에는 target이 캔버스라 커서 아래 칸은 좌표로 찾는다
+			const under = drag.current && (page.current?.getRootNode() as ShadowRoot | undefined)?.elementFromPoint(e.clientX, e.clientY);
+			const d = drag.current, cell = d && under ? cellAt(under) : undefined;
+			const index = cell?.path.at(-1)!.index;
+			if (!d || !cell || index === undefined || cell.path.at(-3)!.index !== d.owner || index === d.last) { return; }
+			d.last = index;
+			const rect = (i: number) => page.current?.querySelector(`[data-wse="${i}"]`)?.getBoundingClientRect();
+			const a = rect(d.anchor), b = rect(index), owner = nodeAt(body, d.owner);
+			if (!a || !b || !owner) { return; }
+			const box = { left: Math.min(a.left, b.left), right: Math.max(a.right, b.right), top: Math.min(a.top, b.top), bottom: Math.max(a.bottom, b.bottom) };
+			// 칸 가운데가 상자 안이면 고름(병합 칸처럼 여러 줄·칸을 차지해도)
+			const cells = owner.children.flatMap(row => row.children).filter(c => localName(c.tag) === 'column').flatMap(c => {
+				const r = rect(c.index), x = r && (r.left + r.right) / 2, y = r && (r.top + r.bottom) / 2;
+				return r && x! >= box.left && x! <= box.right && y! >= box.top && y! <= box.bottom ? [c.index] : [];
+			});
+			if (!swallowClick.current) {
+				try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 합성 이벤트 등 활성 포인터가 없으면 캡처 없이 */ }
+			}
+			swallowClick.current = true;
+			onSelectCells!(d.anchor, cells);
+		},
+		onPointerUp: () => { drag.current = undefined; },
+	};
+}
+
 function useColumnResize(onResized: (index: number, width: number) => void) {
 	const drag = useRef<{ index: number; col?: HTMLElement; table?: HTMLElement; tableWidth?: number; startX: number; width: number; scale: number }>(undefined);
 	const widthAt = (d: NonNullable<typeof drag.current>, x: number) => Math.max(20, Math.round(d.width + (x - d.startX) / d.scale));
@@ -349,6 +422,32 @@ function Frame({ page, index, kind, tree, onResize, label }: {
 		</div>
 		{label && <Chip page={page} rect={rect} text={label} />}
 	</>;
+}
+
+/**
+ * 그리드 이동 손잡이(Word 표처럼): 그리드 왼쪽 위 바깥(자리가 없으면 안쪽 모서리). 끌면 그리드 이동, 누르면 그리드 선택.
+ * 칸을 끄는 것은 칸 범위 고르기라서 그리드는 이걸로만 옮긴다. 캔버스는 Shadow DOM이라 codicon 대신 SVG
+ */
+function GridHandle({ page, index, tree, onDragStart, onSelect, onEnter }: {
+	page: RefObject<HTMLDivElement | null>; index: number; tree: ReactNode; onDragStart(e: ReactDragEvent): void; onSelect(): void; onEnter(): void;
+}) {
+	const [rect, setRect] = useState<Rect>();
+	useLayoutEffect(() => {
+		const p = page.current, el = p?.querySelector(node(index));
+		if (!p || !el) {
+			setRect(undefined);
+			return;
+		}
+		return watchLayout([el], p, () => visibleRect(el, p), setRect);
+	}, [page, index, tree]);
+	if (!rect) {
+		return null;
+	}
+	const size = 18, left = rect.left >= size ? rect.left - size : rect.left, top = rect.top >= size ? rect.top - size : rect.top;
+	return <div className="wse-grid-handle" style={{ left, top, width: size, height: size }} draggable role="button" title="그리드 이동(끌기) · 선택(클릭)" aria-label="그리드 이동"
+		onDragStart={onDragStart} onClick={onSelect} onMouseEnter={onEnter}>
+		<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M8 1l2.5 2.5H8.75v3.75h3.75V5.5L15 8l-2.5 2.5V8.75H8.75v3.75h1.75L8 15l-2.5-2.5h1.75V8.75H3.5v1.75L1 8l2.5-2.5v1.75h3.75V3.5H5.5z" /></svg>
+	</div>;
 }
 
 const label = (n: XmlNode, def?: ComponentDef) => [def?.display || localName(n.tag), n.attrs.id && `#${n.attrs.id}`, classLabel(n)].filter(Boolean).join(' ');

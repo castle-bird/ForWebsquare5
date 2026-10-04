@@ -310,8 +310,8 @@ try {
 			cell.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, clientX: 50, clientY: 50 }));
 		});
 		await page.waitForSelector('.context-menu');
-		assert.equal(await page.$eval('.context-menu button:last-child', b => b.disabled), true, 'footer 있으면 footer 추가 비활성');
-		assert.deepEqual(await page.$$eval('.context-menu button', bs => bs.map(b => b.textContent)), ['왼쪽에 Column 추가', '오른쪽에 Column 추가', 'Row 추가', 'Header 추가', 'subTotal 추가', 'footer 추가']);
+		assert.equal(await page.$$eval('.context-menu button', bs => bs.find(b => b.textContent === 'footer 추가').disabled), true, 'footer 있으면 footer 추가 비활성');
+		assert.deepEqual(await page.$$eval('.context-menu button', bs => bs.map(b => b.textContent)), ['왼쪽에 Column 추가', '오른쪽에 Column 추가', 'Row 추가', 'Header 추가', 'subTotal 추가', 'footer 추가', '열 왼쪽으로 이동', '열 오른쪽으로 이동', '열 삭제Delete']);
 		await page.$eval('.context-menu button:nth-child(2)', b => b.click());
 		const addPart = await page.evaluate(() => window.sent.find(m => m.type === 'addGridPart'));
 		assert.equal(addPart?.part, 'column');
@@ -1646,8 +1646,16 @@ try {
 	assert.equal(await page.$('.context-menu'), null, 'Esc로 닫힘');
 	console.log('Settings: 탭 줄 톱니바퀴 메뉴 passed');
 	// 잠깐 뜨는 알림: 확장이 보내면 오른쪽 아래에 떴다가 사라짐
-	await page.evaluate(() => window.send({ type: 'toast', message: 'dlt_a → dlt_b: 바인딩 2곳도 바꿨습니다.' }));
-	await page.waitForFunction(() => document.querySelector('.toast[role="status"]')?.textContent === 'dlt_a → dlt_b: 바인딩 2곳도 바꿨습니다.', { timeout: 3000 });
+	await page.evaluate(() => window.send({ type: 'toast', message: '바인딩 2곳도 함께 변경했습니다. `dlt_a` → `dlt_b`' }));
+	await page.waitForFunction(() => document.querySelector('.toast[role="status"]')?.textContent === '바인딩 2곳도 함께 변경했습니다. dlt_a → dlt_b', { timeout: 3000 });
+	assert.deepEqual(await page.$$eval('.toast code', cs => cs.map(c => c.textContent)), ['dlt_a', 'dlt_b'], '`값`은 코드 모양');
+	// 마우스를 올려 둔 동안은 안 사라짐, 떼면 다시 3초 뒤 사라짐
+	await page.hover('.toast');
+	await new Promise(resolve => setTimeout(resolve, 3600));
+	assert.ok(await page.$('.toast'), '마우스를 올려 둔 동안 유지');
+	assert.equal(await page.$eval('.toast code', c => getComputedStyle(c).backgroundColor), 'rgb(255, 255, 255)', '값은 흰 칩(웹뷰 기본 노란 code 색 아님)');
+	await page.screenshot({path:path.join(tmpdir(), 'ws5-toast-code.png')});
+	await page.mouse.move(5, 5);
 	await new Promise(resolve => setTimeout(resolve, 300));
 	assert.equal(await page.$eval('.toast', e => getComputedStyle(e).backgroundColor), 'color(srgb 0.85 0.924706 0.974706)', '캔버스 hover와 같은 파란 파스텔');
 	await page.screenshot({path:path.join(tmpdir(), 'ws5-toast.png')});
@@ -1774,26 +1782,52 @@ try {
 	await (await (await cell('c2')).asElement()).click({ button: 'right' });
 	await page.waitForSelector('.context-menu');
 	const gridMenu = await menuItems();
-	assert.deepEqual(gridMenu.at(-1), { text: '병합Ctrl+M', disabled: false }, '그리드 우클릭: 붙은 셀 → 병합 켜짐');
+	assert.deepEqual(gridMenu.find(i => i.text === '병합'), { text: '병합', disabled: false }, '그리드 우클릭: 붙은 셀 → 병합 켜짐');
 	assert.ok(gridMenu.length > 2, '그리드 메뉴(컬럼·행 추가 등)는 그대로');
 	await page.evaluate(() => { window.sent.length = 0; });
-	await page.$$eval('.context-menu button', bs => bs.at(-1).click());
+	await page.$$eval('.context-menu button', bs => bs.find(b => b.textContent === '병합').click());
 	assert.deepEqual(await lastMerge(), { type: 'mergeCells', version: 900, index: mergeDoc.c1, more: [mergeDoc.c2] }, '병합 요청(왼쪽 위 셀이 대표)');
 	// 떨어진 두 컬럼 → 병합 꺼짐(요청 없음)
 	await (await (await cell('c1')).asElement()).click();
 	await ctrlClick(await cell('c3'));
 	await (await (await cell('c3')).asElement()).click({ button: 'right' });
 	await page.waitForSelector('.context-menu');
-	assert.deepEqual((await menuItems()).at(-1), { text: '병합Ctrl+M', disabled: true }, '그리드 우클릭: 떨어진 셀 → 병합 꺼짐');
+	assert.deepEqual((await menuItems()).find(i => i.text === '병합'), { text: '병합', disabled: true }, '그리드 우클릭: 떨어진 셀 → 병합 꺼짐');
 	await page.keyboard.press('Escape');
 	await page.waitForFunction(() => !document.querySelector('.context-menu'));
-	console.log('Design: 그리드 셀 병합(붙은 셀만) passed');
+	// 칸을 누른 채 끌기: 지나간 범위의 칸을 모두 고르고(누른 칸이 대표), 그리드는 안 옮김. 이어 우클릭 병합
+	const centerOf = async id => { const b = await (await cell(id)).asElement().boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+	const [from, to] = [await centerOf('c1'), await centerOf('c3')];
+	await page.evaluate(() => { window.sent.length = 0; });
+	await page.mouse.move(from.x, from.y); await page.mouse.down();
+	await page.mouse.move(to.x, to.y, { steps: 12 }); await page.mouse.up();
+	const picked = () => page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-frame.selected').length);
+	await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-frame.selected').length === 3, { timeout: 3000 })
+		.catch(async () => assert.fail(`끌어서 고른 칸 수: ${await picked()}`));
+	assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'move')), false, '그리드는 안 옮김');
+	await (await (await cell('c2')).asElement()).click({ button: 'right' });
+	await page.waitForSelector('.context-menu');
+	await page.$$eval('.context-menu button', bs => bs.find(b => b.textContent === '병합').click());
+	assert.deepEqual(await lastMerge(), { type: 'mergeCells', version: 900, index: mergeDoc.c1, more: [mergeDoc.c2, mergeDoc.c3] }, '끌어 고른 칸을 우클릭 병합');
+	// 끌지 않은 클릭은 그 칸 하나만
+	await (await (await cell('c2')).asElement()).click();
+	await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-frame.selected').length === 1, { timeout: 3000 });
+	// 손잡이를 누르면 그리드 선택, 그리드를 고른 상태에서도 칸 끌기는 범위 고르기(그리드 이동 아님)
+	await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-grid-handle').click());
+	await page.waitForFunction(() => /gridView|grd/.test(document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-chip')?.textContent ?? ''), { timeout: 3000 })
+		.catch(async () => assert.fail(`손잡이 클릭 뒤 선택: ${await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-chip')?.textContent)}`));
+	await page.evaluate(() => { window.sent.length = 0; });
+	await page.mouse.move(from.x, from.y); await page.mouse.down();
+	await page.mouse.move(to.x, to.y, { steps: 12 }); await page.mouse.up();
+	await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-frame.selected').length === 3, { timeout: 3000 });
+	assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'move')), false, '그리드를 골라도 칸 끌기는 이동 아님');
+	console.log('Design: 그리드 셀 병합(붙은 셀만), 끌어서 여러 칸 고르기 passed');
 	// group 표의 th·td: Design 우클릭 → 병합만 있는 메뉴, Outline 우클릭·Ctrl+M도 같은 요청
 	await (await (await cell('th1')).asElement()).click();
 	await ctrlClick(await cell('td1'));
 	await (await (await cell('td1')).asElement()).click({ button: 'right' });
 	await page.waitForSelector('.context-menu');
-	assert.deepEqual(await menuItems(), [{ text: '병합Ctrl+M', disabled: false }], 'group th·td 우클릭: 병합 메뉴');
+	assert.deepEqual(await menuItems(), [{ text: '병합', disabled: false }, { text: '병합 해제', disabled: true }], 'group th·td 우클릭: 병합 메뉴');
 	await page.evaluate(() => { window.sent.length = 0; });
 	await page.$eval('.context-menu button', b => b.click());
 	assert.deepEqual(await lastMerge(), { type: 'mergeCells', version: 900, index: mergeDoc.th1, more: [mergeDoc.td1] }, 'group 셀 병합 요청');
@@ -1803,15 +1837,53 @@ try {
 	await page.keyboard.down('Control'); await clickRow('td1'); await page.keyboard.up('Control');
 	await clickRow('td1', { button: 'right' });
 	await page.waitForSelector('.context-menu');
-	assert.deepEqual(await menuItems(), [{ text: '병합Ctrl+M', disabled: false }], 'Outline 우클릭: 병합 메뉴');
+	assert.deepEqual(await menuItems(), [{ text: '병합', disabled: false }, { text: '병합 해제', disabled: true }], 'Outline 우클릭: 병합 메뉴');
 	await page.$eval('.context-menu button', b => b.click());
 	assert.deepEqual(await lastMerge(), { type: 'mergeCells', version: 900, index: mergeDoc.th1, more: [mergeDoc.td1] }, 'Outline 병합 요청');
+	console.log('Design·Outline: group th·td 병합(우클릭 메뉴) passed');
+	// 병합 풀기(우클릭)와 열 옮기기·지우기(우클릭·Delete): 합친 머리 칸 c1(2칸) + c3, 본문 b1 b2 b3
+	const colDoc = await page.evaluate((WS, XF) => {
+		const text = `<html xmlns:w2="${WS}" xmlns:xf="${XF}"><body><w2:gridView id="grd"><w2:header id="h"><w2:row id="r1"><w2:column id="c1" value="A" colSpan="2"/><w2:column id="c3" value="C"/></w2:row></w2:header>`
+			+ '<w2:gBody id="gb"><w2:row id="br"><w2:column id="b1"/><w2:column id="b2"/><w2:column id="b3"/></w2:row></w2:gBody></w2:gridView></body></html>';
+		const root = window.parseXml(text), first = window.testDefs.length;
+		const walk = n => { n.def = n.tag === 'w2:gridView' ? first : n.def; n.children.forEach(walk); };
+		walk(root);
+		window.send({ type: 'document', version: 900, text, root, script: { text: '' } });
+		const ids = {}; const index = n => { if (n.attrs.id) { ids[n.attrs.id] = n.index; } n.children.forEach(index); };
+		index(root);
+		return ids;
+	}, WS, XF);
+	const colCell = id => page.evaluateHandle(i => document.querySelector('.canvas-host').shadowRoot.querySelector(`[data-wse="${i}"]`), colDoc[id]);
+	await page.waitForFunction(i => document.querySelector('.canvas-host')?.shadowRoot?.querySelector(`[data-wse="${i}"]`), { timeout: 5000 }, colDoc.b3);
+	const lastOf = type => page.evaluate(type => window.sent.findLast(m => m.type === type), type);
+	const openMenu = async id => {
+		await (await (await colCell(id)).asElement()).click({ button: 'right' });
+		await page.waitForSelector('.context-menu');
+		return menuItems();
+	};
+	const pickMenu = async text => { await page.$$eval('.context-menu button', (bs, text) => bs.find(b => b.textContent.startsWith(text)).click(), text); await page.waitForFunction(() => !document.querySelector('.context-menu')); };
+	const c1Menu = await openMenu('c1');
+	assert.deepEqual(c1Menu.filter(i => /열|병합/.test(i.text)), [
+		{ text: '열 왼쪽으로 이동', disabled: true }, { text: '열 오른쪽으로 이동', disabled: false }, { text: '열 삭제Delete', disabled: false },
+		{ text: '병합', disabled: true }, { text: '병합 해제', disabled: false }], '합친 칸 우클릭: 맨 왼쪽이라 왼쪽 이동 꺼짐, 병합 해제 켜짐');
+	await pickMenu('병합 해제');
+	assert.deepEqual(await lastOf('unmergeCells'), { type: 'unmergeCells', version: 900, index: colDoc.c1, more: [] }, '우클릭 병합 해제');
+	await openMenu('c1');
+	await pickMenu('열 삭제');
+	assert.deepEqual(await lastOf('gridColumns'), { type: 'gridColumns', version: 900, index: colDoc.grd, cells: [colDoc.c1], op: 'delete' }, '우클릭 열 삭제');
+	assert.deepEqual((await openMenu('b2')).find(i => i.text === '병합 해제'), { text: '병합 해제', disabled: true }, '합치지 않은 칸은 병합 해제 꺼짐');
+	await pickMenu('열 왼쪽으로 이동');
+	assert.deepEqual(await lastOf('gridColumns'), { type: 'gridColumns', version: 900, index: colDoc.grd, cells: [colDoc.b2], op: 'left' }, '우클릭 열 왼쪽으로');
+	assert.equal((await openMenu('b2')).find(i => i.text === '열 오른쪽으로 이동').disabled, true, 'c1 묶음(2칸) 밖으로는 못 옮김');
+	await page.keyboard.press('Escape');
+	await page.waitForFunction(() => !document.querySelector('.context-menu'));
+	// Delete: 그리드 칸이면 칸 하나가 아니라 그 열
+	await (await (await colCell('b3')).asElement()).click();
 	await page.evaluate(() => { window.sent.length = 0; });
-	await clickRow('th1');
-	await page.keyboard.down('Control'); await clickRow('td1'); await page.keyboard.up('Control');
-	await page.keyboard.down('Control'); await page.keyboard.press('m'); await page.keyboard.up('Control');
-	assert.deepEqual(await lastMerge(), { type: 'mergeCells', version: 900, index: mergeDoc.th1, more: [mergeDoc.td1] }, 'Ctrl+M 병합 요청');
-	console.log('Design·Outline: group th·td 병합(우클릭 메뉴·Ctrl+M) passed');
+	await page.keyboard.press('Delete');
+	assert.deepEqual(await lastOf('gridColumns'), { type: 'gridColumns', version: 900, index: colDoc.grd, cells: [colDoc.b3], op: 'delete' }, 'Delete는 열 삭제');
+	assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'delete')), false, '칸만 지우지 않음');
+	console.log('Design: 병합 풀기·열 옮기기·열 삭제(우클릭·Delete) passed');
 	// Data 트리 끌어 옮기기: submission끼리·dataMap/dataList끼리만, 루트에 놓으면 맨 뒤, 다른 종류에는 못 놓음
 	const dataIds = await page.evaluate(() => {
 		const text = '<html xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms"><head><xf:model><w2:dataCollection baseNode="map"><w2:dataMap id="dm1"/><w2:dataList id="dl1"/></w2:dataCollection><xf:submission id="s1"/><xf:submission id="s2"/></xf:model></head><body/></html>';
@@ -1844,11 +1916,22 @@ try {
 	const problemOf = id => page.evaluate(id => [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.id')?.textContent === id)?.querySelector('.tree-problem')?.title ?? null, id);
 	await page.waitForFunction(() => document.querySelectorAll('.pane .tree-row .tree-problem').length >= 3, {timeout: 3000})
 		.catch(async () => assert.fail(`경고 수: ${await page.$$eval('.pane .tree-row .tree-problem', e => e.length)}`));
-	assert.equal(await problemOf('dm1'), 'id가 겹칩니다: dm1 (2곳)');
-	assert.equal(await problemOf('s1'), 'ev:submitdone: Script에 없는 함수 scwin.s1_done');
+	assert.equal(await problemOf('dm1'), 'ID가 중복되었습니다. dm1 (2곳)');
+	assert.equal(await problemOf('s1'), '등록되지 않은 handler가 적용되어 있습니다. scwin.s1_done');
 	assert.equal(await problemOf('s2'), null, '화면에 없는 데이터(스크립트에서 만듦)는 경고 안 함');
 	await page.evaluate(() => [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.tag')?.textContent === 'Submission')?.querySelector('.chevron').click());
 	await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.tag')?.textContent === 'Submission')?.querySelector('.tree-problem.inside'), {timeout: 3000});
+	// 경고 개수 버튼: 누를 때마다 다음 경고 줄을 펼쳐 선택하고 이유를 알림으로(마지막 다음은 처음)
+	assert.equal(await page.evaluate(() => [...document.querySelectorAll('.pane .tree-problems')].find(b => b.offsetParent)?.textContent), '3');
+	const nextProblemRow = async () => {
+		await page.evaluate(() => [...document.querySelectorAll('.pane .tree-problems')].find(b => b.offsetParent).click());
+		return page.evaluate(() => ({ id: document.querySelector('.pane .tree-row.selected .id')?.textContent, toast: document.querySelector('.toast')?.textContent }));
+	};
+	assert.deepEqual(await nextProblemRow(), { id: 'dm1', toast: '경고 1/3\nID가 중복되었습니다. dm1 (2곳)' });
+	assert.deepEqual(await nextProblemRow(), { id: 'dm1', toast: '경고 2/3\nID가 중복되었습니다. dm1 (2곳)' });
+	await page.screenshot({path:path.join(tmpdir(), 'ws5-problem-toast.png')});
+	assert.deepEqual(await nextProblemRow(), { id: 's1', toast: '경고 3/3\n등록되지 않은 handler가 적용되어 있습니다. scwin.s1_done' }, '접힌 Submission을 펼쳐 선택');
+	assert.equal((await nextProblemRow()).toast, '경고 1/3\nID가 중복되었습니다. dm1 (2곳)', '마지막 다음은 처음');
 	await page.evaluate(() => window.tab('Outline', '.pane').click());
 	console.log('Data: 트리 끌어 옮기기, 화면 점검 경고 passed');
 	await clickTab('Script');
@@ -2027,7 +2110,18 @@ try {
 	await page.setDragInterception(false);
 	await page.waitForFunction(() => window.sent.some(m => m.type === 'move'));
 	assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'editAttr' || m.type === 'insertComponent')), false, '이동으로 좌표/스타일 변경·새 컴포넌트 삽입 없음');
-	console.log('Design: 기존 컴포넌트 실제 드래그·앞/뒤/그룹 이동·자기 자신/자손 거부 passed');
+	// 그리드는 이동 손잡이로: 칸에 마우스를 올리면 왼쪽 위에 손잡이, 끌면 그리드 이동(실제 마우스 끌기)
+	const shadowQuery = sel => page.evaluateHandle(sel => document.querySelector('.canvas-host').shadowRoot.querySelector(sel), sel);
+	await (await shadowQuery(`[data-wse="${canvasNodes.grid}"] td[data-wse], [data-wse="${canvasNodes.grid}"] th[data-wse]`)).asElement().hover();
+	await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-grid-handle'), { timeout: 3000 });
+	await page.screenshot({path:path.join(tmpdir(), 'ws5-grid-handle.png')});
+	await page.evaluate(() => { window.sent.length = 0; });
+	await page.setDragInterception(true);
+	await (await shadowQuery('.wse-grid-handle')).asElement().dragAndDrop((await shadowQuery(`[data-wse="${canvasNodes.input}"]`)).asElement());
+	await page.setDragInterception(false);
+	await page.waitForFunction(g => window.sent.some(m => m.type === 'move' && m.dragged === g), { timeout: 3000 }, canvasNodes.grid)
+		.catch(async () => assert.fail(`그리드 이동 안 됨: ${JSON.stringify(await page.evaluate(() => window.sent))}`));
+	console.log('Design: 기존 컴포넌트 실제 드래그·앞/뒤/그룹 이동·자기 자신/자손 거부, 그리드 이동 손잡이 passed');
 	await page.evaluate(i => document.querySelector('.canvas-host').shadowRoot.querySelector(`[data-wse="${i}"]`).click(), paletteIds.group);
 	await page.evaluate(() => { window.sent.length = 0; });
 	const categoryStar = type => `.palette-list section:not(.palette-favorites) .palette-row:has([data-component="${type}"]) .palette-star`;

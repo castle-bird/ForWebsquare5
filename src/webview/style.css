@@ -373,6 +373,8 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 /* 화면 점검 경고(core/check): 마우스를 올리면 이유. 접힌 줄은 안쪽 문제를 흐리게 */
 .tree-row .tree-problem { flex: none; margin-left: 4px; font-size: 13px; color: var(--vscode-editorWarning-foreground, var(--vscode-problemsWarningIcon-foreground, #cca700)); }
 .tree-row .tree-problem.inside { opacity: .55; }
+/* 트리 위 경고 개수: 누르면 다음 경고 줄로 */
+button.icon.tree-problems { display: inline-flex; align-items: center; gap: 3px; padding: 2px 5px; font: inherit; font-size: 12px; color: var(--vscode-editorWarning-foreground, var(--vscode-problemsWarningIcon-foreground, #cca700)); opacity: 1; }
 .drag-ghost { position: fixed; top: -100px; left: 0; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; color: var(--vscode-list-activeSelectionForeground, #fff); background: var(--vscode-list-activeSelectionBackground, #0e639c); }
 .tree-row .name::before { content: '· '; }
 .context-menu { position: fixed; z-index: 200; min-width: 170px; padding: 4px; border-radius: 5px; background: var(--vscode-menu-background, var(--vscode-dropdown-background)); color: var(--vscode-menu-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border)); box-shadow: 0 4px 16px var(--vscode-widget-shadow, rgba(0, 0, 0, .25)); }
@@ -648,8 +650,10 @@ textarea.edit.style-value {
 /* 잠깐 뜨는 알림(ui/toast.tsx): 캔버스 hover와 같은 파란 파스텔(focusBorder 15% + 흰색)이라 어두운 테마에서도 눈에 띈다 */
 .toast {
 	position: fixed; right: 16px; bottom: 16px; z-index: 1000; max-width: min(420px, calc(100vw - 32px)); box-sizing: border-box; padding: 12px 16px; border-radius: 6px;
-	font-size: calc(var(--vscode-font-size) + 2px); line-height: 1.4; color: color-mix(in srgb, var(--vscode-focusBorder) 45%, #000);
+	font-size: calc(var(--vscode-font-size) + 2px); line-height: 1.4; color: color-mix(in srgb, var(--vscode-focusBorder) 30%, #000);
 	background: color-mix(in srgb, var(--vscode-focusBorder) 15%, #fff); border: 1px solid color-mix(in srgb, var(--vscode-focusBorder) 45%, #fff);
-	box-shadow: 0 2px 10px var(--vscode-widget-shadow, #0006); animation: toast-in .15s ease-out;
+	box-shadow: 0 2px 10px var(--vscode-widget-shadow, #0006); animation: toast-in .15s ease-out; white-space: pre-line;
 }
+/* 값: 웹뷰 기본 code 색(노란 textPreformat)은 연한 배경에서 안 보여서 흰 칩에 진한 남색 */
+.toast code { padding: 1px 6px; border-radius: 3px; font-family: var(--vscode-editor-font-family, monospace); font-size: .92em; font-weight: 600; color: color-mix(in srgb, var(--vscode-focusBorder) 55%, #000); background: #fff; border: 1px solid color-mix(in srgb, var(--vscode-focusBorder) 35%, #fff); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } }

@@ -26,6 +26,9 @@
 .wse-handle.s { left: calc(50% - 3px); bottom: -4px; cursor: ns-resize; }
 .wse-handle.e { top: calc(50% - 3px); right: -4px; cursor: ew-resize; }
 .wse-handle.se { right: -4px; bottom: -4px; cursor: nwse-resize; }
+/* 그리드 이동 손잡이(GridHandle): 끌면 이동, 누르면 그리드 선택 */
+.wse-grid-handle { position: absolute; display: flex; align-items: center; justify-content: center; box-sizing: border-box; border-radius: 3px; color: var(--vscode-button-foreground, #fff); background: var(--vscode-focusBorder); cursor: move; pointer-events: auto; opacity: .85; }
+.wse-grid-handle:hover { opacity: 1; }
 .wse-error { color: #c00; white-space: pre-wrap; }
 
 .wse-image-empty { display: inline-block; vertical-align: baseline; overflow: hidden; box-sizing: border-box; background: #ebebeb; color: #888; font: 600 13px sans-serif; }

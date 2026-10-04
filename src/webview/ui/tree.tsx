@@ -133,7 +133,7 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onContextMenu
 					: node.attrs.id && <span className="id">{node.attrs.id}</span>}
 				{cls && <span className="cls">{cls}</span>}
 				{problems?.of.has(node.index)
-					? <span className="codicon codicon-warning tree-problem" role="img" aria-label="점검 문제" title={problems.of.get(node.index)!.join('\n')} />
+					? <span className="codicon codicon-warning tree-problem" role="img" aria-label="점검 문제" title={problems.of.get(node.index)!.join('\n').replaceAll('`', '')} />
 					// 묶음 줄(Data의 Submission 등)은 문서 노드가 아니라 자식으로 본다
 					: !open && problems && [node, ...children].some(c => problems.inside.has(c.index) || c !== node && problems.of.has(c.index)) && <span className="codicon codicon-warning tree-problem inside" role="img" aria-label="안쪽 점검 문제" title="안쪽에 점검 문제가 있습니다" />}
 				{!interactive && node.attrs.name && <span className="name">{node.attrs.name}</span>}

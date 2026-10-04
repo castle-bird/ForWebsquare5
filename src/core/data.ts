@@ -106,6 +106,9 @@ export function editDataFields(text: string, root: XmlNode, node: XmlNode, field
 	return change && { ...change, start: change.start + node.start, end: change.end + node.start };
 }
 
+/** 컬럼·키를 직접 갖는 데이터(dataMap·dataList) */
+export const isDataNode = (n: XmlNode) => /:(dataMap|dataList)$/.test(n.tag);
+
 /** 데이터 노드(dataList·dataMap·linkedDataList·alias…) */
 export const isDataKind = (node: XmlNode) => node.ns === WEBSQUARE_NS && DATA_KINDS.some(kind => node.tag.endsWith(':' + kind));
 
