@@ -21,7 +21,7 @@ import { ThemeColorsEditor } from './ui/themeColorsEditor';
 import { Toast } from './ui/toast';
 import { Menu } from './ui/menu';
 import { useLinkTabs } from './ui/linkedFile';
-import { FIXED_TABS } from '../core/links';
+import { FIXED_TABS, linkTarget } from '../core/links';
 import { useFold } from './ui/tree';
 import { TreePane } from './ui/treePane';
 import { useEventHandler } from './eventHandler';
@@ -139,6 +139,13 @@ function App() {
 				const before = useEditorStore.getState().linkTabs;
 				const renamed = (label: string) => msg.tabs.find(t => t.id === before.find(b => b.label === label)?.id)?.label;
 				setActiveTab(active => msg.select ?? renamed(active) ?? active);
+			}
+			if (msg.type === 'reveal') {
+				// 정의로 이동: 그 편집기 탭을 보인다(자리 이동은 편집기가 같은 메시지로)
+				const label = useEditorStore.getState().linkTabs.find(t => linkTarget(t.id) === msg.target)?.label;
+				if (label) {
+					setActiveTab(label);
+				}
 			}
 			if (msg.type === 'popupAck') {
 				const { popup, ok, error } = msg;
@@ -306,7 +313,7 @@ function App() {
 								{paletteOpen && <Separator key="palette-resizer" className="resizer" />}
 								<Panel key="design-canvas" id="design-canvas" minSize={100}><div className="design-canvas">
 									{styles?.error && <p className="warning" title={styles.error}>{styles.error}</p>}
-									<Canvas body={body} defs={defs.defs} sheets={styles?.css} selected={selected} extra={extra} onSelect={setSelected} onEditText={editText}
+									<Canvas body={body} dataCollection={dataCollection} defs={defs.defs} sheets={styles?.css} selected={selected} extra={extra} onSelect={setSelected} onEditText={editText}
 										onSelectCells={(primary, cells) => useEditorStore.setState({ selected: primary, extra: cells.filter(i => i !== primary) })}
 										onMove={move} onEditAttr={editAttr} onOpenFrame={openFrame} onOpenEditor={openEditor} onBindRef={bindRefTo} onContextMenu={canvasContext}
 										onInsertComponent={(drag, index, position) => post({ type: 'insertComponent', ...drag, index, position })}
@@ -314,7 +321,7 @@ function App() {
 								</div></Panel>
 							</Group>
 								: LOADING,
-						Script: doc ? <CodeEditor ref={scriptRef} target="script" lang={scriptLanguage} complete={jsTools.complete} hover={jsTools.hover} lint="js" text={doc.script.text} version={doc.version}
+						Script: doc ? <CodeEditor ref={scriptRef} target="script" lang={scriptLanguage} complete={jsTools.complete} hover={jsTools.hover} definition={jsTools.definition} signature={jsTools.signature} lint="js" text={doc.script.text} version={doc.version}
 							readOnly={!!doc.script.note} notes={[api?.error, modules?.error, doc.script.note]} post={post} /> : LOADING,
 						Source: doc ? <CodeEditor target="source" lang={XML} complete={xmlComplete} hover={xmlHoverSource} lint="xml" text={doc.text} version={doc.version} post={post} /> : LOADING,
 						...linkTabs.items,

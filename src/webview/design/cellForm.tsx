@@ -3,14 +3,13 @@ import { clsx } from 'clsx';
 import type { ComponentDef } from '../../core/protocol';
 import { setStyle, styleChanges } from '../../core/style';
 import type { XmlNode } from '../../core/xmlModel';
-import { ChoiceSelect } from '../ui/choiceSelect';
 import { ComboInput } from '../ui/combo';
 
 /**
- * 그리드 칸 더블클릭 때 문구 상자 아래 입력. options: 정의의 정해진 값(select), suggestions: 고를 값(직접 입력도),
+ * 그리드 칸 더블클릭 때 문구 상자 아래 입력. suggestions: 고를 값(정의의 정해진 값 포함, 직접 입력도),
  * numeric: 숫자만, styleHeight: 속성이 아니라 style의 height(px)
  */
-type Field = { name: string; label: string; title: string; options?: string[]; suggestions?: string[]; numeric?: boolean; unit?: string; styleHeight?: boolean; placeholder?: string };
+type Field = { name: string; label: string; title: string; suggestions?: string[]; numeric?: boolean; unit?: string; styleHeight?: boolean; placeholder?: string };
 /** part: 칸 종류(헤더 칸 등, 편집 상자 위에 표시) */
 export type Form = { fields: Field[]; values: Record<string, string>; style?: string; part: string };
 
@@ -35,7 +34,7 @@ export function cellForm(n: XmlNode, def: ComponentDef | undefined, r: { width: 
 		...Number(n.attrs.colSpan) > 1 ? [] : [{ name: 'width', label: 'width', title: '너비(width)', numeric: true, unit: 'px', placeholder: String(Math.round(r.width)) }],
 		{ name: 'height', label: 'height', title: '높이(style height)', numeric: true, unit: 'px', styleHeight: true, placeholder: String(Math.round(r.height)) },
 		...CELL_PROPS.map(name => ({
-			name, label: name, title: prop(name)?.description || name, numeric: NUMERIC.has(name), options: prop(name)?.options, suggestions: name === 'id' ? ids : undefined,
+			name, label: name, title: prop(name)?.description || name, numeric: NUMERIC.has(name), suggestions: name === 'id' ? ids : prop(name)?.options,
 		})),
 	];
 	const height = styleChanges(undefined, n.attrs.style).height?.replace(/px$/, '') ?? '';
@@ -68,9 +67,7 @@ export function FormFields({ form, values, onChange }: { form: Form; values: Rec
 			<label key={f.name} title={f.title} className={clsx({ set: value !== '' })}>
 				<span className="name">{f.label}</span>
 				<span className="edit-control">
-					{f.options
-						? <ChoiceSelect value={value} options={['', ...f.options]} label={v => v || '선택 안 함'} className={clsx({ empty: !value })} aria-label={f.name} onChange={e => set(e.target.value)} />
-						: f.suggestions?.length
+					{f.suggestions?.length
 							? <ComboInput value={value} options={f.suggestions} aria-label={f.name} onValue={set} onPick={set} />
 							: <input value={value} placeholder={f.placeholder} aria-label={f.name} inputMode={f.numeric ? 'numeric' : undefined} onChange={e => set(e.target.value)} />}
 					{f.unit && <span className="unit">{f.unit}</span>}

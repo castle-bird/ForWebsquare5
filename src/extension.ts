@@ -159,7 +159,20 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		const loadApi = () => resolvePath('apiDocumentationPath', document.uri, webRoot).then(loadApiDocs);
 		let api = loadApi();
 		const styles = loadStyles(document, panel.webview, webRoot);
-		const modules = loadModules(webRoot);
+		let modules = loadModules(webRoot);
+		// 공통 JS(config.xml engine module)·config.xml이 저장되면 다시 읽어 자동완성·설명에 반영. 어떤 .js가 공통인지는 config.xml이 정하므로 다 받고 모아서 다시 읽는다
+		const moduleWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(webRoot), '{**/*.js,websquare/config.xml}'));
+		let moduleTimer: NodeJS.Timeout | undefined;
+		const reloadModules = () => {
+			clearTimeout(moduleTimer);
+			moduleTimer = setTimeout(() => {
+				modules = loadModules(webRoot);
+				void modules.then(post);
+			}, 300);
+		};
+		moduleWatcher.onDidChange(reloadModules);
+		moduleWatcher.onDidCreate(reloadModules);
+		moduleWatcher.onDidDelete(reloadModules);
 		const udcs = udcNames(webRoot).catch(() => new Set<string>());
 		// 문서 보내기는 wframe 화면 읽기 등으로 걸리는 시간이 다르다: 늦게 끝난 옛 요청이 새 문서를 덮지 않게 마지막 요청만 보낸다
 		let latest = 0;
@@ -198,6 +211,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		const codeQueues = new Map<string, Promise<unknown>>();
 		const queue = (target: CodeTarget, job: () => Promise<void>) => serial(codeQueues, linkIdOf(target) === undefined ? 'xml' : target, job);
 		const subs = [
+			moduleWatcher,
 			vscode.workspace.onDidChangeConfiguration(e => {
 				const changed = (key: SetupKey) => e.affectsConfiguration(`websquare5-editor.${key}`, document.uri);
 				if (affectsCodeOptions(e)) {
@@ -291,6 +305,13 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 					void vscode.window.showWarningMessage(msg.message);
 				} else if (msg.type === 'openFrame') {
 					void openFrame(document, msg.index, webRoot);
+				} else if (msg.type === 'openModule') {
+					// Script 정의로 이동(공통 JS): config.xml에서 읽은 공통 JS 목록에 있는 경로만 연다
+					void modules.then(async ({ files }) => {
+						if (!files.some(f => f.path === msg.path)) { return; }
+						const range = new vscode.Range(msg.line, msg.ch, msg.endLine, msg.endCh);
+						await vscode.window.showTextDocument(vscode.Uri.file(fromWebPath(webRoot, msg.path, ENGINE_PAGE)), { selection: range });
+					}).catch(e => vscode.window.showErrorMessage(`공통 JS 열기 실패: ${errorMessage(e)}`));
 				} else if (links.handle(msg)) {
 					// 연결 탭(연결·해제·열기·저장·탭 추가/이름/삭제·자동완성)
 				} else if (msg.type === 'setTabOrder') {
@@ -328,6 +349,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			panels.delete(panel);
 			clearTimeout(timer);
 			clearTimeout(gitTimer);
+			clearTimeout(moduleTimer);
 			subs.forEach(s => s.dispose());
 			void links.dispose();
 		});

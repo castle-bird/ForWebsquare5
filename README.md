@@ -31,8 +31,8 @@ Eclipse + WebSquare 환경의 사용 흐름을 참고해 VS Code 확장으로 �
 
 `*.xml`을 열면 WebSquare 화면은 디자이너로, 그 외 XML은 일반 텍스트 편집기로 열립니다.
 
-- **Design 탭**: 프로젝트 CSS를 적용한 화면 미리보기, 컴포넌트 선택·크기 조절, 복사·붙여넣기·삭제, 그리드 열 너비 조절
-- **Property / Event 패널**: 속성·이벤트 검색과 편집, 여러 컴포넌트 동시 편집
+- **Design 탭**: 프로젝트 CSS를 적용한 화면 미리보기, 컴포넌트 선택·크기 조절, 복사·붙여넣기·삭제, 그리드 열 너비 조절. fusionchart는 바인딩한 dataList 값으로 차트(선·막대·원·영역)를 그립니다(엔진 모양과 다른 미리보기)
+- **Property / Event 패널**: 속성·이벤트 검색과 편집, 여러 컴포넌트 동시 편집. 정해진 값이 있는 속성도 입력칸 + 목록이라 직접 입력할 수 있습니다
 - **Outline / Data 패널**: 컴포넌트 트리, DataCollection·Submission 트리, 드래그 앤 드롭 이동·바인딩, F2로 id 바꾸기
 - **더블클릭 편집**(캔버스·Outline): 글자 바로 고치기(버튼·textbox·output 등), 그리드 칸 속성, 선택 항목(selectbox·checkcombobox·multiselect·radio·checkbox), DataList·DataMap·Submission, multiupload 파라미터
 - **Design 이동**: 이미 배치된 컴포넌트를 끌어 순서·부모 그룹을 변경합니다. 그룹 중앙은 안쪽 맨 뒤, 가장자리는 앞·뒤로 이동하며 놓을 위치를 표시합니다. 그리드는 칸에 마우스를 올리면 왼쪽 위에 나오는 이동 손잡이나, 칸이 아닌 빈 곳을 끌어 옮깁니다(손잡이를 누르면 그리드 선택). Outline과 같은 XML 이동·Undo를 사용합니다.
@@ -52,7 +52,9 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 
 ![Source 탭](images/sourceTab.png)
 
-- XML·WebSquare API·공통 JS 자동완성과 마우스 오버 설명
+- XML·WebSquare API·공통 JS 자동완성과 마우스 오버 설명(공통 JS·같은 Script 함수의 JSDoc 포함). 공통 JS를 저장하면 바로 반영됩니다
+- 정의로 이동(Ctrl+클릭·F12): 같은 Script 함수는 그 자리로, 공통 JS 함수는 그 파일을 VS Code로 엽니다. 커서 추가는 Alt+클릭
+- 파라미터 힌트: `(`·`,`를 치거나 Ctrl+Shift+Space를 누르면 함수 모양과 지금 파라미터를 보여 줍니다(WebSquare API 문서·JSDoc)
 - 문법 오류 표시, 포맷(VS Code에 설정한 포매터, 없으면 VS Code 내장), 검색, 줄바꿈(VS Code 설정을 따름)
 - 코드 편집기 테마 선택(탭 줄 오른쪽 톱니바퀴 메뉴, "IntelliJ Dark"·"IntelliJ Light" 포함), Git 변경 줄 표시
 - 테마 색 덮어쓰기: 톱니바퀴 메뉴의 "테마 색 덮어쓰기…" 팝업에서 색칸·색 코드·기울임/굵게/밑줄로 바꾸면 바로 미리 보이고, 확인하면 저장됩니다(지금 테마만 또는 모든 테마). 저장 위치는 설정 `websquare5-editor.codeThemeCustomizations`라 직접 적어도 됩니다. 예:
@@ -73,7 +75,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 ![Java 자동완성](images/java2.png)
 
 - 작업 폴더 안 파일을 이름으로 검색해 연결
-- VS Code에 설치된 언어 확장(Java 등)의 자동완성·포맷 결과 사용
+- VS Code에 설치된 언어 확장(Java 등)의 자동완성·포맷·마우스 오버 설명(Javadoc)·정의로 이동(Ctrl+클릭·F12)·파라미터 힌트 사용
 - MyBatis 매퍼의 SQL 색·키워드 자동완성. 설정 `websquare5-editor.sqlDialect`로 DB 방언을 고릅니다 (`standard`(기본)·`oracle`·`mysql`·`mariadb`·`postgresql`·`mssql`·`sqlite`)
 
 ### 저장
@@ -98,7 +100,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 - **직접 설치**: [Releases](https://github.com/castle-bird/ForWebsquare5/releases)에서 `.vsix`를 받아 설치합니다.
 
 ```bash
-code --install-extension websquare5-editor-0.4.2.vsix
+code --install-extension websquare5-editor-0.5.0.vsix
 ```
 
 ## 사용 방법

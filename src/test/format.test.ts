@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { formatCode } from '../vscode/documentEdit';
-import { remoteCompletions } from '../vscode/completion';
+import { remoteCompletions, remoteSignature } from '../vscode/completion';
 
 suite('format', () => {
 	// 문서 전체를 fn 결과로 바꾸는 가짜 포매터
@@ -60,6 +60,27 @@ suite('format', () => {
 				{ label: 'BigDecimal', type: 'class', detail: 'java.math', snippet: false, insert: 'BigDecimal', edits: [{ fromLine: 0, fromCh: 0, toLine: 0, toCh: 0, insert: 'import java.math.BigDecimal;\n' }] },
 				{ label: 'forEach', type: 'method', detail: undefined, snippet: true, insert: 'forEach(${1:action})', edits: undefined },
 			]);
+		} finally {
+			sub.dispose();
+		}
+	});
+
+	test('파라미터 힌트: 언어 확장 Signature Help의 고른 것 하나, 파라미터 이름은 label 안 자리로, 지금 파라미터·설명', async () => {
+		const sub = vscode.languages.registerSignatureHelpProvider({ language: 'java' }, {
+			provideSignatureHelp: () => {
+				const one = new vscode.SignatureInformation('find(int id)');
+				one.parameters = [new vscode.ParameterInformation('int id')];
+				const two = new vscode.SignatureInformation('find(int id, String id2)', new vscode.MarkdownString('Finds'));
+				// 같은 글자가 앞에 또 있어도(id·id2) 차례대로 자리를 찾는다. 범위로 온 것은 그대로
+				two.parameters = [new vscode.ParameterInformation('int id'), new vscode.ParameterInformation([13, 23], new vscode.MarkdownString('the **id2**'))];
+				return Object.assign(new vscode.SignatureHelp(), { signatures: [one, two], activeSignature: 1, activeParameter: 1 });
+			},
+		}, '(', ',');
+		try {
+			const doc = await vscode.workspace.openTextDocument({ content: 'class A { void f() { find(1, ); } }\n', language: 'java' });
+			assert.deepStrictEqual(await remoteSignature(doc, 0, 29, ','), {
+				label: 'find(int id, String id2)', params: [[5, 11], [13, 23]], index: 2, count: 2, active: 1, paramDoc: 'the **id2**', doc: 'Finds',
+			});
 		} finally {
 			sub.dispose();
 		}

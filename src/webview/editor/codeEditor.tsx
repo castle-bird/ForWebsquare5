@@ -9,20 +9,26 @@ import { acceptCompletion, autocompletion, type CompletionContext, type Completi
 import { getIndentUnit, indentUnit, type LanguageSupport } from '@codemirror/language';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { diff } from '@codemirror/merge';
-import type { CodeChange, CodeTarget, ToExtension, ToWebview } from '../../core/protocol';
+import type { CodeChange, CodeTarget, SignatureInfo, ToExtension, ToWebview } from '../../core/protocol';
 import type { LintSource } from '@codemirror/lint';
-import { fromRemote, lintFor, remoteProblemsChanged, type LintMode } from './lint';
-import { codeVars, editorBase, editorClass, followsVsCode, themeOf } from './themes';
+import { fromRemote, lintFor, posAt, remoteProblemsChanged, type LintMode } from './lint';
+import { codeVars, editorBase, editorClass, followsVsCode, keepSearchMatchColors, themeOf } from './themes';
 import { baseEffect, gitChanges } from './changes';
-import { remoteCompletion } from './remoteCompletion';
+import { markdownDoc, remoteCompletion, remoteHover, remoteSignature } from './remoteCompletion';
+import { signatureHelp } from './signatureHelp';
 import { notInComment } from './docComment';
+import type { ScriptDefinition } from './completions';
 import { isModKey } from '../keys';
 import { useEditorStore } from '../store';
 
 const theme = new Compartment(), readOnlyConf = new Compartment(), wrapConf = new Compartment(), langConf = new Compartment();
 
 /** 마우스를 올린 자리의 설명(WebSquare API 등). 없으면 null */
-export type HoverSource = (view: EditorView, pos: number, side: -1 | 1) => Tooltip | null;
+export type HoverSource = (view: EditorView, pos: number, side: -1 | 1) => Tooltip | null | Promise<Tooltip | null>;
+/** 정의로 이동(언어 확장이 없는 편집기, Script): 그 자리의 정의 위치. 없으면 undefined */
+export type DefinitionSource = (state: EditorState, pos: number) => ScriptDefinition | undefined;
+/** 파라미터 힌트(언어 확장이 없는 편집기, Script): 그 자리의 함수 모양. 없으면 undefined */
+export type LocalSignatureSource = (state: EditorState, pos: number) => SignatureInfo | undefined;
 
 /**
  * 지금 내용을 next로 바꾸는 편집을 바뀐 곳만 잘게(글자 단위 비교, 아주 크면 300ms 뒤 덜 정밀하게).
@@ -90,15 +96,17 @@ export interface CodeEditorHandle {
 }
 
 export const CodeEditor = forwardRef<CodeEditorHandle, {
-	target: CodeTarget; lang: LanguageSupport; complete: CompletionSource; hover?: HoverSource; lint?: LintMode; text: string; version: number;
+	target: CodeTarget; lang: LanguageSupport; complete: CompletionSource; hover?: HoverSource; definition?: DefinitionSource; signature?: LocalSignatureSource; lint?: LintMode; text: string; version: number;
 	/** VS Code 언어 확장의 자동완성을 먼저 쓴다(연결 탭). 없으면 complete */
 	remote?: boolean;
 	readOnly?: boolean; notes?: (string | undefined)[]; post(msg: ToExtension): void;
-}>(function CodeEditor({ target, lang, complete, hover, lint, text, version, remote = false, readOnly = false, notes = [], post }, ref) {
+}>(function CodeEditor({ target, lang, complete, hover, definition, signature, lint, text, version, remote = false, readOnly = false, notes = [], post }, ref) {
 	const host = useRef<HTMLDivElement>(null);
 	const view = useRef<EditorView>(null);
 	const source = useRef(complete);
 	const hoverSource = useRef(hover);
+	const definitionSource = useRef(definition);
+	const signatureSource = useRef(signature);
 	const languageOf = useRef<(l: LanguageSupport) => Extension>(() => []);
 	const sync = useRef<{ base: number; inFlight: boolean; remote: boolean; conflict: boolean; queued?: [ChangeSet, Text]; formatting?: Text; formatAfter?: boolean }>(
 		{ base: version, inFlight: false, remote: false, conflict: false });
@@ -171,6 +179,61 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 			}
 			return remoteProblems.current ? fromRemote(view.state.doc, remoteProblems.current.items) : [];
 		} : undefined;
+		// 연결 탭 마우스 올림 설명·정의로 이동은 언어 확장 결과. 보낸 편집이 아직 반영 전이면 묻지 않는다(위치가 어긋남)
+		const syncedNow = () => {
+			const s = sync.current;
+			return s.inFlight || s.queued || s.conflict ? undefined : s.base;
+		};
+		/** 방금 입력한 편집이 반영될 때까지 잠깐 기다린 뒤(최대 1초, 자동완성과 같음) 그 버전. 충돌 중이면 undefined */
+		const whenSynced = async () => {
+			const s = sync.current;
+			for (let i = 0; i < 50 && (s.inFlight || s.queued); i++) {
+				await new Promise(r => setTimeout(r, 20));
+			}
+			return syncedNow();
+		};
+		const remoteHoverSource = remote ? remoteHover(target, post, syncedNow) : undefined;
+		// 파라미터 힌트: 연결 탭은 언어 확장, 그 밖(Script 등)은 signature가 있을 때
+		const signatures: Extension = remote ? signatureHelp(remoteSignature(target, post, whenSynced), markdownDoc)
+			: signature ? signatureHelp((view, pos) => signatureSource.current?.(view.state, pos), markdownDoc) : [];
+		// 정의로 이동. Script 등(definition): 이 편집기 안이면 그 이름을 선택, 공통 JS면 확장이 그 파일을 연다.
+		// 연결 탭(remote): 방금 입력한 편집이 반영된 뒤 언어 확장에 묻는다
+		const goToDefinition = async (view: EditorView, pos: number) => {
+			if (!remote) {
+				const found = definitionSource.current?.(view.state, pos);
+				if (!found) {
+					useEditorStore.setState({ toast: { message: '정의를 찾지 못했습니다.', key: Date.now() } });
+				} else if ('from' in found) {
+					view.dispatch({ selection: { anchor: found.from, head: found.to }, effects: EditorView.scrollIntoView(found.from, { y: 'center' }) });
+					view.focus();
+				} else {
+					post({ type: 'openModule', ...found });
+				}
+				return;
+			}
+			const version = await whenSynced();
+			if (version !== undefined) {
+				const line = view.state.doc.lineAt(pos);
+				post({ type: 'definition', target, version, line: line.number - 1, ch: pos - line.from });
+			}
+		};
+		// VS Code처럼 Ctrl(macOS Cmd)+클릭·F12 = 정의로 이동, 커서 추가는 Alt+클릭
+		const definitionKeys: Extension = remote || definition ? [
+			EditorView.clickAddsSelectionRange.of(e => e.altKey),
+			Prec.high(keymap.of([{ key: 'F12', run: view => (void goToDefinition(view, view.state.selection.main.head), true) }])),
+			EditorView.domEventHandlers({
+				mousedown: (e, view) => {
+					const pos = e.button === 0 && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey ? view.posAtCoords({ x: e.clientX, y: e.clientY }) : null;
+					if (pos === null) {
+						return false;
+					}
+					e.preventDefault();
+					view.dispatch({ selection: { anchor: pos } });
+					void goToDefinition(view, pos);
+					return true;
+				},
+			}),
+		] : [];
 		const editor = new EditorView({
 			parent: host.current!,
 			doc: text,
@@ -178,7 +241,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 				basicSetup, searchTop, selectionClass, keys, completion, indent, indentGuides, lintFor(lint, remoteLint), gitChanges,
 				langConf.of(languageOf.current(lang)),
 				wrapConf.of(wordWrap ? EditorView.lineWrapping : []),
-				hoverTooltip((view, pos, side) => hoverSource.current?.(view, pos, side) ?? null),
+				hoverTooltip((view, pos, side) => hoverSource.current?.(view, pos, side) ?? remoteHoverSource?.(view, pos) ?? null),
+				definitionKeys, signatures,
 				theme.of(themeOf(codeTheme)),
 				readOnlyConf.of(EditorState.readOnly.of(readOnly)),
 				// 실행 취소·다시 실행은 CodeMirror만: VS Code 웹뷰는 키를 VS Code에도 넘겨서 문서까지 한 번 더 되돌리고
@@ -207,11 +271,35 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 			],
 		});
 		view.current = editor;
+		keepSearchMatchColors();
 		// VS Code 테마를 따라갈 때만 VS Code 밝음/어두움 전환을 따른다
-		const observer = new MutationObserver(() => followsVsCode(themeState.current) && editor.dispatch({ effects: theme.reconfigure(themeOf(themeState.current)) }));
+		const observer = new MutationObserver(() => {
+			if (followsVsCode(themeState.current)) {
+				editor.dispatch({ effects: theme.reconfigure(themeOf(themeState.current)) });
+				keepSearchMatchColors();
+			}
+		});
 		observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 		const onMessage = ({ data }: MessageEvent<ToWebview>) => {
 			const s = sync.current;
+			// 정의로 이동: 다른 탭이면 탭이 보이게 바뀐 뒤(숨은 편집기는 스크롤 위치를 못 잰다) 그 자리로
+			if (data.type === 'reveal' && data.target === target) {
+				// 범위를 선택(끝이 없거나 빈 범위면 그 자리 단어): 커서만 가면 어디로 갔는지 잘 안 보인다
+				const pos = posAt(editor.state.doc, data.line, data.ch);
+				const given = data.endLine !== undefined && data.endCh !== undefined ? posAt(editor.state.doc, data.endLine, data.endCh) : pos;
+				const word = given > pos ? undefined : editor.state.wordAt(pos);
+				const anchor = word?.from ?? pos, head = word?.to ?? given;
+				const show = (tries: number) => {
+					if (!editor.dom.offsetParent && tries > 0) {
+						requestAnimationFrame(() => show(tries - 1));
+						return;
+					}
+					editor.dispatch({ selection: { anchor, head }, effects: EditorView.scrollIntoView(anchor, { y: 'center' }) });
+					editor.focus();
+				};
+				show(30);
+				return;
+			}
 			// 숨은 탭(display:none)이면 offsetParent가 없다
 			if (data.type === 'formatKey') {
 				if (editor.dom.offsetParent) {
@@ -282,6 +370,10 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 	useEffect(() => {
 		hoverSource.current = hover;
 	}, [hover]);
+	useEffect(() => {
+		definitionSource.current = definition;
+		signatureSource.current = signature;
+	}, [definition, signature]);
 	// 처음 값은 편집기를 만들 때 이미 넣었다
 	const applied = useRef({ lang, wordWrap });
 	useEffect(() => {
@@ -307,6 +399,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 		if (themeState.current !== codeTheme) {
 			themeState.current = codeTheme;
 			view.current?.dispatch({ effects: theme.reconfigure(themeOf(codeTheme)) });
+			keepSearchMatchColors();
 		}
 	}, [codeTheme]);
 	useEffect(() => {

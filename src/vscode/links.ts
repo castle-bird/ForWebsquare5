@@ -6,7 +6,7 @@ import { errorMessage } from '../core/errors';
 import { serial } from '../project/paths';
 import type { CodeChange, RemoteCompletions, ToExtension, ToWebview } from '../core/protocol';
 import { closeAutoTabs, isOpenByUser, registerAutoTabs } from './autoTabs';
-import { RESOLVE, remoteCompletions } from './completion';
+import { RESOLVE, remoteCompletions, remoteDefinition, remoteHover, remoteSignature } from './completion';
 import { applyCodeEdit, formatCode } from './documentEdit';
 import { stagedText } from './gitBase';
 import { xmlSchemaOf } from './xmlSchema';
@@ -15,7 +15,7 @@ import { addLinkTab, LINK_EXTS_SETTING, linkExts, linkTab, linkTabs, onTabsChang
 
 type Saved = Record<string, string>;
 /** LinkedFiles.handle이 맡는 메시지 */
-type LinkMessage = Extract<ToExtension, { type: 'link' | 'unlink' | 'openLink' | 'saveLink' | 'addTab' | 'renameTab' | 'removeTab' | 'complete' | 'findFiles' }>;
+type LinkMessage = Extract<ToExtension, { type: 'link' | 'unlink' | 'openLink' | 'saveLink' | 'addTab' | 'renameTab' | 'removeTab' | 'complete' | 'hover' | 'signature' | 'definition' | 'findFiles' }>;
 
 const KEY = 'websquare5-editor.links:';
 /** 경로 입력 파일 검색: 확장자별 최대 개수 */
@@ -167,6 +167,26 @@ export class LinkedFiles {
 				const list = ask(0), full = ask();
 				void list.then(r => this.post({ type: 'completions', id: msg.id, ...r }));
 				void full.then(r => this.post({ type: 'completionDetails', id: msg.id, items: r?.items.slice(0, RESOLVE).map(({ label, info, edits }) => ({ label, info, edits })) ?? [] }));
+				return true;
+			}
+			case 'hover': {
+				const id = linkIdOf(msg.target);
+				const text = id === undefined ? Promise.resolve(undefined) : this.docAt(id, msg.version).then(doc => doc && remoteHover(doc, msg.line, msg.ch)).catch(() => undefined);
+				void text.then(t => this.post({ type: 'hoverResult', id: msg.id, text: t }));
+				return true;
+			}
+			case 'signature': {
+				const id = linkIdOf(msg.target);
+				const signature = id === undefined ? Promise.resolve(undefined)
+					: this.docAt(id, msg.version).then(doc => doc && remoteSignature(doc, msg.line, msg.ch, msg.trigger)).catch(() => undefined);
+				void signature.then(s => this.post({ type: 'signatureResult', id: msg.id, signature: s }));
+				return true;
+			}
+			case 'definition': {
+				const id = linkIdOf(msg.target);
+				if (id !== undefined) {
+					run(this.goToDefinition(id, msg.version, msg.line, msg.ch));
+				}
 				return true;
 			}
 			default: return false;
@@ -383,6 +403,29 @@ export class LinkedFiles {
 	async format(kind: string, version: number): Promise<string | undefined> {
 		const doc = await this.docAt(kind, version);
 		return doc && formatCode(doc, linkTarget(kind));
+	}
+
+	/**
+	 * 정의로 이동: 연결 탭 파일(같은 파일 포함)이면 그 탭 편집기에서, 아니면 VS Code 편집기로 연다(디자이너는 그대로).
+	 * 버전이 다르면(보낸 편집이 아직 반영 전) 아무것도 안 한다
+	 */
+	private async goToDefinition(kind: string, version: number, line: number, ch: number): Promise<void> {
+		const doc = await this.docAt(kind, version);
+		if (!doc) {
+			return;
+		}
+		const found = await remoteDefinition(doc, line, ch);
+		if (!found) {
+			void this.post({ type: 'toast', message: '정의를 찾지 못했습니다.' });
+			return;
+		}
+		// 커서만 가면 잘 안 보여서 정의 이름 범위를 선택한다(VS Code 편집기로 열 때도 같게)
+		const { start, end } = found.range, linked = this.kindOf(found.uri);
+		if (linked) {
+			await this.post({ type: 'reveal', target: linkTarget(linked), line: start.line, ch: start.character, endLine: end.line, endCh: end.character });
+		} else {
+			await vscode.window.showTextDocument(found.uri, { selection: found.range });
+		}
 	}
 
 	/** VS Code 언어 확장의 자동완성 */

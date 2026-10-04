@@ -176,6 +176,58 @@ statementType (STATEMENT|PREPARED) "PREPARED"
 		}
 	});
 
+	test('hover: 연결 파일 위치로 언어 확장 hover를 물어 마크다운 하나로(여럿이면 구분선)', async () => {
+		const posted: ToWebview[] = [];
+		const { links, last } = await linked(dir => ({ controller: path.join(dir, 'AController.java') }), msg => posted.push(msg));
+		const sub = vscode.languages.registerHoverProvider({ language: 'java' }, { provideHover: () => new vscode.Hover([new vscode.MarkdownString('```java\nclass A\n```'), new vscode.MarkdownString('asdasd')]) });
+		try {
+			await links.reload();
+			links.handle({ type: 'hover', target: 'link:controller', id: 1, version: last('controller')!.version!, line: 0, ch: 7 });
+			assert.ok(await waitFor(() => posted.some(m => m.type === 'hoverResult')));
+			const hover = posted.find(m => m.type === 'hoverResult') as Extract<ToWebview, { type: 'hoverResult' }>;
+			assert.match(hover.text ?? '', /```java\nclass A\n```[\s\S]*asdasd/);
+		} finally {
+			sub.dispose();
+			await links.dispose();
+		}
+	});
+
+	test('정의로 이동: 연결 파일 안이면 그 탭에 reveal, 다른 파일이면 VS Code 편집기로, 없으면 알림', async () => {
+		const posted: ToWebview[] = [];
+		const { dir, links, last } = await linked(dir => ({ controller: path.join(dir, 'AController.java') }), msg => posted.push(msg));
+		const other = vscode.Uri.file(path.join(dir, 'Other.java'));
+		fs.writeFileSync(other.fsPath, 'class Other {\n    void run() {}\n}\n');
+		let answer: vscode.Location | undefined;
+		const subs = [vscode.languages.registerDefinitionProvider({ language: 'java' }, { provideDefinition: () => answer })];
+		try {
+			await links.reload();
+			const { version, path: file } = last('controller')!;
+			const ask = () => links.handle({ type: 'definition', target: 'link:controller', version: version!, line: 0, ch: 7 });
+			answer = new vscode.Location(vscode.Uri.file(file!), new vscode.Position(0, 6));
+			ask();
+			assert.ok(await waitFor(() => posted.some(m => m.type === 'reveal')), '같은 연결 파일 → reveal');
+			assert.deepStrictEqual(posted.find(m => m.type === 'reveal'), { type: 'reveal', target: 'link:controller', line: 0, ch: 6, endLine: 0, endCh: 6 });
+			answer = new vscode.Location(other, new vscode.Position(1, 9));
+			ask();
+			assert.ok(await waitFor(() => vscode.window.activeTextEditor?.document.uri.fsPath === other.fsPath), '다른 파일 → VS Code 편집기');
+			assert.deepStrictEqual(vscode.window.activeTextEditor!.selection.active, new vscode.Position(1, 9));
+			answer = undefined;
+			ask();
+			assert.ok(await waitFor(() => posted.some(m => m.type === 'toast')), '없으면 알림');
+			posted.length = 0;
+			answer = new vscode.Location(vscode.Uri.file(file!), new vscode.Position(0, 6));
+			links.handle({ type: 'definition', target: 'link:controller', version: version! + 99, line: 0, ch: 7 });
+			await new Promise(r => setTimeout(r, 300));
+			assert.ok(!posted.some(m => m.type === 'reveal' || m.type === 'toast'), '옛 버전이면 아무것도 안 함');
+		} finally {
+			subs.forEach(s => s.dispose());
+			// 연 탭만 닫는다(전부 닫으면 그룹이 비어, 뒤 테스트에서 VS Code가 배경으로 여는 탭이 활성 탭이 된다)
+			const opened = vscode.window.tabGroups.all.flatMap(g => g.tabs).filter(t => t.input instanceof vscode.TabInputText && t.input.uri.fsPath === other.fsPath);
+			await vscode.window.tabGroups.close(opened);
+			await links.dispose();
+		}
+	});
+
 	test('연결 파일을 보내고, 본 버전에서만 고치고, 저장은 그 파일만', async () => {
 		const { screen, java, links, last } = await linked(dir => ({ controller: path.join(dir, 'AController.java') }));
 		try {

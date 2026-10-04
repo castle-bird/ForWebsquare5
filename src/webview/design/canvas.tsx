@@ -13,12 +13,13 @@ import { PALETTE_MIME, readPaletteDrag, type PaletteDrag } from '../ui/palette';
 import { componentDropPosition, findPaletteDef, insertPositions } from '../../core/palette';
 import type { InsertPosition } from '../../core/paste';
 import canvasCss from './canvas.css';
+import { DataCollection } from './chart';
 
 const MOVE_MIME = 'application/x-websquare5-canvas-move';
 let renders = 0;
 
-export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onSelectCells, onEditText, onEditAttr, onOpenFrame, onOpenEditor, onBindRef, onContextMenu, onInsertComponent, onMove, idChoices }: {
-	body: XmlNode; defs: ComponentDef[]; sheets?: string[]; selected?: number;
+export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [], onSelect, onSelectCells, onEditText, onEditAttr, onOpenFrame, onOpenEditor, onBindRef, onContextMenu, onInsertComponent, onMove, idChoices }: {
+	body: XmlNode; dataCollection?: XmlNode; defs: ComponentDef[]; sheets?: string[]; selected?: number;
 	extra?: number[];
 	onSelect(i: number, additive?: boolean): void;
 	/** 그리드 칸을 끌어 여러 칸 고름: primary는 누른 칸 */
@@ -237,7 +238,7 @@ export function Canvas({ body, defs, sheets, selected, extra = [], onSelect, onS
 					}}
 					onMouseOver={e => { const el = target(e); setHover(el ? wseIndex(el) : undefined); keepHoverGrid(el ? gridOf(wseIndex(el))?.index : undefined); }}
 					onMouseLeave={() => { setHover(undefined); keepHoverGrid(undefined); }}>
-					<Boundary key={generation}>{tree}</Boundary>
+					<Boundary key={generation}><DataCollection.Provider value={dataCollection}>{tree}</DataCollection.Provider></Boundary>
 					{editing && (
 						<EditBox key={editing.target.index} style={editing.rect} value={editing.target.value ?? ''}
 							header={editing.form && <FormHeader form={editing.form} />}

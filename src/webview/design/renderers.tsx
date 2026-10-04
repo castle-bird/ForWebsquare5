@@ -20,6 +20,7 @@ import type { ComponentDef } from '../../core/protocol';
 import { defOf, kid, kids, localName, WEBSQUARE_NS, XFORMS_NS, type XmlNode } from '../../core/xmlModel';
 import { columnLayout } from '../../core/grid';
 import { COMPONENT_ICONS } from '../../core/icons';
+import { FusionChart } from './chart';
 
 const CLASS: Record<string, string> = { gridView: 'grid', tabControl: 'tabcontrol', anchor: 'anchor2' };
 const CONTAINERS = new Set(['group', 'section', 'article', 'nav', 'aside']);
@@ -70,6 +71,7 @@ const RENDERERS: Record<string, Renderer> = {
 	upload,
 	treeview: (n, c) => el(n, 'div', c, treeNodes(kids(n, 'node'), 1)),
 	accordion: (n, c, d) => <Accordion key={n.index} node={n} className={c} defs={d} />,
+	fusionchart: (n, c) => el(n, 'div', c, <FusionChart node={n} />),
 };
 
 export function render(node: XmlNode, defs: ComponentDef[]): ReactNode {

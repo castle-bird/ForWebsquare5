@@ -31,9 +31,26 @@ export type ToWebview =
 	| { type: 'gitBase'; target: CodeTarget; text?: string } // 변경 표시 기준(Git 스테이지 내용). 없으면 표시 안 함
 	| ({ type: 'completions'; id: number } & Partial<RemoteCompletions>)
 	| { type: 'completionDetails'; id: number; items: RemoteCompletionDetail[] } // 같은 요청의 앞쪽 항목을 푼 결과(늦게 옴)
+	| { type: 'signatureResult'; id: number; signature?: SignatureInfo } // 파라미터 힌트(없으면 닫음)
+	| { type: 'hoverResult'; id: number; text?: string } // 연결 탭 마우스 올림 설명(언어 확장의 마크다운, 없으면 text 없음)
+	| { type: 'reveal'; target: CodeTarget; line: number; ch: number; endLine?: number; endCh?: number } // 그 편집기 탭을 보이고 그 범위를 선택·스크롤(정의로 이동, 끝이 없으면 그 자리 단어)
 	| { type: 'files'; kind: string; files: string[] } // 연결할 수 있는 파일(작업 폴더 기준 경로)
 	| { type: 'linkProblem'; kind: string; message: string } // 연결하지 못한 이유(알림을 꺼 둬도 경로 입력 화면에 보인다)
 	| { type: 'toast'; message: string }; // 편집기 오른쪽 아래 잠깐 뜨는 알림(VS Code 알림을 꺼 둬도 보임)
+
+/**
+ * 파라미터 힌트(VS Code Signature Help 한 개): label은 함수 모양 글자, params는 그 안 각 파라미터 자리(글자 범위),
+ * active는 지금 쓰는 파라미터(없으면 undefined). doc·paramDoc은 마크다운. index/count: 겹쳐 정의된 것 중 몇 번째(1부터)
+ */
+export interface SignatureInfo {
+	label: string;
+	params: [number, number][];
+	active?: number;
+	doc?: string;
+	paramDoc?: string;
+	index: number;
+	count: number;
+}
 
 /** Design·Script·Source·연결 탭 줄 위치 */
 export type TabPosition = 'top' | 'bottom';
@@ -137,6 +154,10 @@ export type ToExtension =
 	| { type: 'addTab' }
 	| { type: 'findFiles'; kind: string } // 연결 탭 경로 입력의 파일 검색 목록
 	| { type: 'complete'; target: CodeTarget; id: number; version: number; line: number; ch: number; trigger?: string }
+	| { type: 'hover'; target: CodeTarget; id: number; version: number; line: number; ch: number }
+	| { type: 'signature'; target: CodeTarget; id: number; version: number; line: number; ch: number; trigger?: string } // 파라미터 힌트(괄호·쉼표 입력 등)
+	| { type: 'definition'; target: CodeTarget; version: number; line: number; ch: number } // 정의로 이동(Ctrl+클릭·F12)
+	| { type: 'openModule'; path: string; line: number; ch: number; endLine: number; endCh: number } // Script 정의로 이동: 공통 JS(config.xml engine module 웹 경로)를 VS Code로 열고 그 범위 선택
 	| { type: 'removeTab'; kind: string }
 	| { type: 'renameTab'; kind: string }
 	| { type: 'setTabOrder'; order: string[] }

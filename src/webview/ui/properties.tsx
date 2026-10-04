@@ -3,13 +3,12 @@ import { clsx } from 'clsx';
 import type { ComponentDef } from '../../core/protocol';
 import { EV, type XmlNode } from '../../core/xmlModel';
 import { EditBox } from './editBox';
-import { ChoiceSelect } from './choiceSelect';
 import { Tabs } from './tabs';
 import { useFloating } from './floating';
 import { useEditorStore } from '../store';
 
-/** options: 정해진 값만(select). suggestions: 고를 값이 있지만 직접 입력도(입력칸 + 목록) */
-interface Row { name: string; attr: string; value?: string; description?: string; display?: string; options?: string[]; suggestions?: string[] }
+/** suggestions: 고를 값 목록(정의의 정해진 값 포함). 목록이 길면 입력이 빠르므로 늘 직접 입력도(입력칸 + 목록) */
+interface Row { name: string; attr: string; value?: string; description?: string; display?: string; suggestions?: string[] }
 type Edit = (attr: string, value: string | undefined) => void;
 interface RowGroup { category: string; order: number; rows: Row[] }
 
@@ -25,7 +24,7 @@ function propertyGroups(node: XmlNode, def?: ComponentDef, choices: Record<strin
 	for (const p of def?.properties ?? []) {
 		if (!known.has(p.name)) {
 			known.add(p.name);
-			add(p.category, p.order, { name: p.name, attr: p.name, value: node.attrs[p.name], description: p.description, ...choices[p.name] ? { suggestions: choices[p.name] } : { options: p.options } });
+			add(p.category, p.order, { name: p.name, attr: p.name, value: node.attrs[p.name], description: p.description, suggestions: choices[p.name] ?? (p.options?.length ? p.options : undefined) });
 		}
 	}
 	for (const [k, v] of Object.entries(node.attrs)) {
@@ -199,9 +198,7 @@ function PropertyTable({ groups: all, search, onSearch, keyWidth, onKeyWidth, on
 											<Editable value={r.value} onCommit={v => onEdit(r.attr, v)} multiline={false} />
 											<button type="button" className="icon script-btn codicon codicon-code" title="Script: 없으면 만들고, 있으면 그 코드로 이동" onClick={() => onScript?.(r.name)} />
 										</div>
-										: r.options
-											? <ChoiceSelect className="choice" aria-label={r.name} value={r.value ?? ''} options={['', ...r.options]} onChange={e => onEdit(r.attr, e.target.value || undefined)} />
-											: <Editable value={r.value} onCommit={v => onEdit(r.attr, v)} multiline={false} suggestions={r.suggestions} />}
+										: <Editable value={r.value} onCommit={v => onEdit(r.attr, v)} multiline={false} suggestions={r.suggestions} />}
 								</td>
 							</tr>
 						))}

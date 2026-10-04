@@ -15,6 +15,13 @@ const chrome = process.env.CHROME_PATH ?? [
 ].find(existsSync);
 assert.ok(chrome, 'CHROME_PATH에 Chrome/Edge 실행 파일을 지정해 주세요.');
 
+/** Property 값 칸을 눌러 입력칸 + 목록을 열고 목록에서 value를 고른다 */
+async function pickProperty(page, key, value) {
+	await page.evaluate(k => [...document.querySelectorAll('.kv tr')].find(tr => tr.querySelector('.key')?.textContent === k).querySelector('.value').click(), key);
+	await page.waitForSelector('.combo-list li');
+	await page.evaluate(v => [...document.querySelectorAll('.combo-list li')].find(l => l.textContent === v).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })), value);
+}
+
 const inlineCssPlugin = {
 	name: 'inline-css',
 	setup(b) {
@@ -65,7 +72,7 @@ const html = `<!doctype html><html><head>
 <link rel="stylesheet" href="/editor.css">
 <style nonce="test">body { --vscode-editor-font-family: Consolas, monospace; --vscode-editor-font-size:16px; --vscode-font-size:14px; --vscode-editor-selectionBackground:#264f78; --vscode-editor-lineHighlightBackground:#555555; --vscode-editorIndentGuide-background1:#404040; --vscode-editorIndentGuide-activeBackground1:#707070; --vscode-editor-background:#222; --vscode-sideBar-background:#333; --vscode-foreground:#ddd; --vscode-charts-yellow:#cca700; --vscode-focusBorder:#007fd4; --vscode-symbolIcon-classForeground:#ee9d28; --vscode-symbolIcon-methodForeground:#b180d7; --vscode-button-foreground:#fff; --vscode-button-background:#0078d4; --vscode-input-background:#313131; --vscode-input-border:#3c3c3c; --vscode-input-foreground:#cccccc; --vscode-input-placeholderForeground:#989898; --vscode-panel-border:#2b2b2b; --vscode-descriptionForeground:#9d9d9d; --vscode-list-hoverBackground:#2a2d2e; --vscode-list-activeSelectionBackground:#04395e; --vscode-list-activeSelectionForeground:#ffffff; --vscode-dropdown-background:#313131; --vscode-dropdown-border:#3c3c3c; --vscode-widget-shadow:#0000005c; --vscode-checkbox-background:#313131; --vscode-checkbox-border:#3c3c3c; --vscode-toolbar-hoverBackground:#5a5d5e50; --vscode-badge-background:#616161; --vscode-badge-foreground:#f8f8f8; --vscode-textLink-foreground:#4daafc; } ::-webkit-scrollbar { width: 10px; height: 10px; }</style>
 </head><body class="vscode-dark"><div id="root"></div>
-<script nonce="test">window.leakedUndo=0; window.leakedSave=0; window.addEventListener('keydown',e=>{if(e.ctrlKey&&/^[zy]$/i.test(e.key)){window.leakedUndo++;} if(e.ctrlKey&&e.key==='s'){window.leakedSave++;}}); const versions={source:1,script:1}; window.addEventListener('message',e=>{if(e.data&&e.data.type==='document'){versions.source=versions.script=e.data.version;} if(e.data&&e.data.type==='linked'&&e.data.version){versions['link:'+e.data.kind]=e.data.version;}}); window.sent=[]; window.acquireVsCodeApi=()=>({postMessage(msg){msg=JSON.parse(JSON.stringify(msg));window.sent.push(msg);if(msg.type==='setCode'){const ok=msg.version===versions[msg.target]; if(ok){versions[msg.target]++;} setTimeout(()=>window.send({type:'codeAck',target:msg.target,ok,version:versions[msg.target]}),5);}else if(msg.type==='findFiles'){if(window.mockFiles){setTimeout(()=>window.send({type:'files',kind:msg.kind,files:window.mockFiles}),5);}}else if(msg.type==='complete'){setTimeout(()=>window.send({type:'completions',id:msg.id,...(window.remoteItems?window.remoteItems(msg):{items:[]})}),5);if(window.remoteDetails){setTimeout(()=>window.send({type:'completionDetails',id:msg.id,items:window.remoteDetails(msg)}),300);}}else if(msg.type==='format'){setTimeout(()=>window.send({type:'formatted',target:msg.target,text:window.formatResult??'formatted();'}),5);}}});</script>
+<script nonce="test">window.leakedUndo=0; window.leakedSave=0; window.addEventListener('keydown',e=>{if(e.ctrlKey&&/^[zy]$/i.test(e.key)){window.leakedUndo++;} if(e.ctrlKey&&e.key==='s'){window.leakedSave++;}}); const versions={source:1,script:1}; window.addEventListener('message',e=>{if(e.data&&e.data.type==='document'){versions.source=versions.script=e.data.version;} if(e.data&&e.data.type==='linked'&&e.data.version){versions['link:'+e.data.kind]=e.data.version;}}); window.sent=[]; window.acquireVsCodeApi=()=>({postMessage(msg){msg=JSON.parse(JSON.stringify(msg));window.sent.push(msg);if(msg.type==='setCode'){const ok=msg.version===versions[msg.target]; if(ok){versions[msg.target]++;} setTimeout(()=>window.send({type:'codeAck',target:msg.target,ok,version:versions[msg.target]}),5);}else if(msg.type==='findFiles'){if(window.mockFiles){setTimeout(()=>window.send({type:'files',kind:msg.kind,files:window.mockFiles}),5);}}else if(msg.type==='signature'){setTimeout(()=>window.send({type:'signatureResult',id:msg.id,signature:window.remoteSignature?.(msg)}),5)}else if(msg.type==='hover'){setTimeout(()=>window.send({type:'hoverResult',id:msg.id,text:window.remoteHoverText?.(msg)}),5)}else if(msg.type==='complete'){setTimeout(()=>window.send({type:'completions',id:msg.id,...(window.remoteItems?window.remoteItems(msg):{items:[]})}),5);if(window.remoteDetails){setTimeout(()=>window.send({type:'completionDetails',id:msg.id,items:window.remoteDetails(msg)}),300);}}else if(msg.type==='format'){setTimeout(()=>window.send({type:'formatted',target:msg.target,text:window.formatResult??'formatted();'}),5);}}});</script>
 <script nonce="test" src="/editor.js"></script></body></html>`;
 const server = createServer((req, res) => {
 	const pathname = new URL(req.url, 'http://localhost').pathname;
@@ -456,9 +463,8 @@ try {
 			s.querySelector('#m1').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
 			s.querySelector('#m2').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, ctrlKey: true }));
 		});
-		await page.waitForSelector('.kv select.choice');
 		await page.evaluate(() => { window.sent.length = 0; });
-		await page.select('.kv select.choice', 'true');
+		await pickProperty(page, 'disabled', 'true');
 		await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr' && m.name === 'disabled'));
 		const multiMsg = await page.evaluate(() => window.sent.find(m => m.type === 'setAttr'));
 		assert.deepEqual({ index: multiMsg.index, value: multiMsg.value, more: multiMsg.more }, { index: 3, value: 'true', more: [{ index: 2, value: 'true' }] }, '두 컴포넌트 한 요청');
@@ -745,7 +751,7 @@ try {
 		assert.deepEqual(await page.evaluate(() => { const m = window.sent.find(m => m.type === 'setAttr'); return m && { name: m.name, value: m.value, also: m.also }; }),
 			{ name: 'value', value: '이름', also: [{ name: 'width', value: '120' }] }, '바뀐 너비만, 숫자만');
 		assert.equal(await page.evaluate(() => !!document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-wrap')), false, 'Enter로 닫힘');
-		// 본문 셀 더블클릭: 자주 고치는 속성(정해진 값은 select, 숫자 칸은 숫자만)을 한 편집으로
+		// 본문 셀 더블클릭: 자주 고치는 속성(정해진 값도 입력칸 + 목록, 숫자 칸은 숫자만)을 한 편집으로
 		await page.evaluate(() => { window.sent.length = 0; document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid tbody td').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })); });
 		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-fields'), {timeout: 3000}).catch(() => assert.fail('본문 셀 속성 입력 없음'));
 		assert.deepEqual(await page.evaluate(() => [...document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.edit-fields .name')].map(e => e.textContent)),
@@ -754,8 +760,13 @@ try {
 			{ part: '본문 칸', id: 'b1', sections: ['크기', '속성'], buttons: ['취소', '적용'] }, '칸 종류·id, 크기·속성 묶음, 취소·적용');
 		await page.screenshot({path:path.join(tmpdir(), 'ws5-cell-editor.png')});
 		const cellField = name => page.evaluateHandle(name => document.querySelector('.canvas-host').shadowRoot.querySelector(`.edit-fields [aria-label="${name}"]`), name);
-		assert.equal(await (await cellField('inputType')).evaluate(e => e.tagName), 'SELECT', '정해진 값은 select');
-		await (await cellField('inputType')).select('checkbox');
+		assert.equal(await (await cellField('inputType')).evaluate(e => e.getAttribute('role')), 'combobox', '정해진 값도 입력칸 + 목록');
+		await (await cellField('inputType')).click();
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.combo-list li'));
+		await page.evaluate(() => [...document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.combo-list li')].find(l => l.textContent === 'checkbox').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })));
+		await page.waitForFunction(() => !document.querySelector('.canvas-host').shadowRoot.querySelector('.combo-list'), {timeout: 3000}).catch(() => assert.fail('목록에서 고르면 목록 닫힘'));
+		await (await cellField('inputType')).click();
+		assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.canvas-host').shadowRoot.querySelector('.combo-list')).backgroundColor), 'rgb(255, 255, 255)', '다시 누르면 열림, 캔버스 목록은 밝게');
 		await (await cellField('class')).click(); await page.keyboard.type('num');
 		await (await cellField('maxLength')).click(); await page.keyboard.type('1a0');
 		assert.equal(await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.edit-status')?.textContent), '바꾼 속성 3');
@@ -971,14 +982,18 @@ try {
 	await page.mouse.move(split.x - 97, split.y, {steps:5}); await page.mouse.up();
 	assert.ok(Math.abs(await canvasWidth() - (canvasBefore - 100)) <= 3, `패널 너비: ${canvasBefore} → ${await canvasWidth()}`);
 	console.log('Split: 두께·잡는 범위 passed');
-	// Property 값: 정의에 정해진 값 목록이 있으면 select, 고르면 바로 반영
+	// Property 값: 정의에 정해진 값 목록이 있어도 입력칸 + 목록. 고르면 바로 반영, 목록 밖 값도 입력
 	await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('input[data-wse]'));
 	await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('input[data-wse]').click());
-	await page.waitForSelector('.kv select.choice');
 	await page.evaluate(() => { window.sent.length = 0; });
-	await page.select('.kv select.choice', 'true');
+	await pickProperty(page, 'disabled', 'true');
 	await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr' && m.name === 'disabled' && m.value === 'true'));
-	console.log('Property: 정해진 값 select passed');
+	await page.evaluate(() => [...document.querySelectorAll('.kv tr')].find(tr => tr.querySelector('.key')?.textContent === 'disabled').querySelector('.value').click());
+	await page.waitForSelector('.kv input[role="combobox"]');
+	await page.$eval('.kv input[role="combobox"]', i => i.select());
+	await page.keyboard.type('custom'); await page.keyboard.press('Enter');
+	await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr' && m.name === 'disabled' && m.value === 'custom'));
+	console.log('Property: 정해진 값 입력칸 + 목록 passed');
 	// Key 도움말: 누른 칸 왼쪽에 붙고(floating-ui) 화면 안, Esc로 닫힘
 	await page.evaluate(() => [...document.querySelectorAll('.kv td.key')].find(td => td.textContent === 'label').click());
 	await page.waitForFunction(() => { const h = document.querySelector('.help'); return h && getComputedStyle(h).visibility === 'visible'; });
@@ -1098,6 +1113,9 @@ try {
 			}
 			// 공통 JS 함수: 파라미터는 detail, JSDoc은 설명 팝업
 			await page.waitForFunction(() => document.querySelector('.cm-completionDetail')?.textContent === '(value, pattern)' && document.querySelector('.cm-completionInfo')?.textContent.includes('값 형식 변환'));
+			// JSDoc 태그는 원문 그대로가 아니라 Parameters 묶음으로
+			assert.deepEqual(await page.evaluate(() => { const i = document.querySelector('.cm-completionInfo'); return { section: i.querySelector('.ws-doc-section')?.textContent, badge: i.querySelector('.ws-doc-badge')?.textContent, raw: i.textContent.includes('@param') }; }),
+				{ section: 'Parameters:', badge: 'value', raw: false });
 			// await는 return과 같은 제어 키워드 색 (기본 글자색이면 구분이 안 된다)
 			await reset('async function f() { await g(); return 1; }');
 			const colors = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.tab-body:not([hidden]) .cm-line span')].map(e => [e.textContent, getComputedStyle(e).color])));
@@ -1187,6 +1205,72 @@ try {
 	await new Promise(resolve => setTimeout(resolve, 300));
 	assert.equal(await page.$('.cm-tooltip-autocomplete'), null, '주석 안에서는 자동완성 없음');
 	await checkIndentUnit('Controller');
+	// 마우스 올림 설명: 연결 탭은 언어 확장 hover(마크다운, 코드 블록은 편집기 색)
+	await reset(javaText); await page.evaluate(() => { window.sent.length = 0; });
+	const coordsOf = (needle, offset = 1) => page.evaluate((needle, offset) => { const v = window.editor(), c = v.coordsAtPos(v.state.doc.toString().indexOf(needle) + offset); return { x: c.left + 1, y: (c.top + c.bottom) / 2 }; }, needle, offset);
+	const findAt = await coordsOf('find(');
+	await page.evaluate(() => { window.remoteHoverText = () => '```java\nint find(int id)\n```\n\nasdasd\n\n* **Parameters:**\n    * **str**\n\n<!-- -->\n\n    * **num**\n* **Returns:**\n    * id'; });
+	await page.mouse.move(0, 0); await page.mouse.move(findAt.x, findAt.y);
+	const remoteHoverShown = await page.waitForFunction(() => document.querySelector('.cm-tooltip .ws-hover')?.textContent, {timeout: 3000}).then(h => h.jsonValue()).catch(() => undefined);
+	assert.match(remoteHoverShown ?? '', /int find\(int id\).*asdasd/s, '연결 탭 hover');
+	// Java 언어 서버가 파라미터 사이에 넣는 빈 줄·HTML 주석은 안 보이고, 뒤 파라미터도 같은 목록 안(라벨은 바깥 목록에만)
+	assert.deepEqual(await page.evaluate(() => {
+		const h = document.querySelector('.cm-tooltip .ws-hover');
+		return h && { comment: h.textContent.includes('<!--'), labels: [...h.querySelectorAll(':scope > ul > li > strong')].map(l => l.textContent),
+			nested: [...h.querySelectorAll('ul ul')].map(u => [...u.children].map(l => l.textContent)) };
+	}), { comment: false, labels: ['Parameters:', 'Returns:'], nested: [['str', 'num'], ['id']] }, 'HTML 주석·빈 줄');
+	await page.mouse.move(0, 0);
+	await page.evaluate(() => { window.remoteHoverText = undefined; });
+	console.log('Link: 언어 확장 hover(마크다운·HTML 주석·빈 줄) passed');
+	// 정의로 이동: Ctrl+클릭·F12 → 반영된 버전·그 자리로 물음, 확장이 준 reveal로 커서·스크롤. 커서 추가는 Alt+클릭
+	await reset(javaText); await page.evaluate(() => { window.sent.length = 0; });
+	await page.keyboard.down('Control'); await page.mouse.click(findAt.x, findAt.y); await page.keyboard.up('Control');
+	await page.waitForFunction(() => window.sent.some(m => m.type === 'definition'), {timeout: 3000}).catch(() => assert.fail('Ctrl+클릭 → 정의 요청(편집 반영을 기다린 뒤)'));
+	const defAsked = await lastSent('definition');
+	assert.deepEqual({ target: defAsked.target, line: defAsked.line, ch: defAsked.ch }, { target: 'link:controller', line: 2, ch: javaText.split('\n')[2].indexOf('find') + 1 }, '연결 탭·누른 자리로 물음');
+	assert.equal(await page.evaluate(() => window.editor().state.selection.ranges.length), 1, 'Ctrl+클릭은 커서를 늘리지 않음');
+	await page.evaluate(() => { window.sent.length = 0; });
+	await page.keyboard.press('F12');
+	await page.waitForFunction(() => window.sent.some(m => m.type === 'definition'), {timeout: 3000}).catch(() => assert.fail('F12 → 정의 요청'));
+	// 끝이 없으면 그 자리 단어를, 끝이 있으면 그 범위를 선택(커서만 가면 잘 안 보인다)
+	const selected = () => page.evaluate(() => { const v = window.editor(), m = v.state.selection.main; return v.state.sliceDoc(m.from, m.to); });
+	await page.evaluate(() => window.send({ type: 'reveal', target: 'link:controller', line: 1, ch: 12 }));
+	await page.waitForFunction(() => { const v = window.editor(), m = v.state.selection.main; return v.state.sliceDoc(m.from, m.to) === 'MemberService'; }, {timeout: 3000}).catch(async () => assert.fail(`reveal → 그 자리 단어 선택: ${await selected()}`));
+	await page.evaluate(() => window.send({ type: 'reveal', target: 'link:controller', line: 1, ch: 26, endLine: 1, endCh: 39 }));
+	await page.waitForFunction(() => { const v = window.editor(), m = v.state.selection.main; return v.state.sliceDoc(m.from, m.to) === 'memberService'; }, {timeout: 3000}).catch(async () => assert.fail(`reveal → 준 범위 선택: ${await selected()}`));
+	const listAt = await coordsOf('list()');
+	await page.keyboard.down('Alt'); await page.mouse.click(listAt.x, listAt.y); await page.keyboard.up('Alt');
+	assert.equal(await page.evaluate(() => window.editor().state.selection.ranges.length), 2, 'Alt+클릭은 커서 추가');
+	// 다른 탭을 보고 있어도 reveal이 오면 그 연결 탭으로 바꿔 그 자리로
+	await clickTab('Script');
+	await page.evaluate(() => window.send({ type: 'reveal', target: 'link:controller', line: 2, ch: 9 }));
+	await page.waitForFunction(() => window.tab('Controller').getAttribute('aria-selected') === 'true', {timeout: 3000}).catch(() => assert.fail('reveal → 연결 탭으로 전환'));
+	await page.waitForFunction(text => { const s = window.editor().state.selection; return s.ranges.length === 1 && s.main.from === text.indexOf('list()') && s.main.to === text.indexOf('list()') + 4; }, {timeout: 3000}, javaText).catch(() => assert.fail('reveal → 탭 전환 뒤 그 자리로'));
+	console.log('Link: 정의로 이동(Ctrl+클릭·F12·reveal·Alt+클릭 커서 추가) passed');
+	// 파라미터 힌트: ( · , 입력 때 언어 확장에 묻고(그 글자를 trigger로) 커서 위에 함수 모양·지금 파라미터(굵게)·설명. Esc로 닫고 Ctrl+Shift+Space로 다시, 결과가 없으면 닫힘
+	await page.evaluate(() => {
+		window.remoteSignature = msg => ({ label: 'find(int id, String name)', params: [[5, 11], [13, 24]], active: msg.trigger === ',' || window.sigSecond ? 1 : 0, index: 1, count: 2, paramDoc: 'the **id**', doc: 'Finds a member' });
+	});
+	await reset(javaText); await page.evaluate(() => { window.sent.length = 0; });
+	const sigShown = () => page.evaluate(() => { const t = document.querySelector('.cm-tooltip.ws-signature'); return t && { label: t.querySelector('.ws-sig-label').textContent, active: t.querySelector('.ws-sig-active')?.textContent, text: t.textContent }; });
+	await page.keyboard.type('find(');
+	await page.waitForFunction(() => document.querySelector('.cm-tooltip.ws-signature'), {timeout: 3000}).catch(() => assert.fail('( 입력 → 파라미터 힌트'));
+	const sigAsked = await lastSent('signature');
+	assert.deepEqual({ target: sigAsked.target, trigger: sigAsked.trigger, line: sigAsked.line, ch: sigAsked.ch }, { target: 'link:controller', trigger: '(', line: 4, ch: 5 }, '연결 탭·( 자리로 물음');
+	assert.deepEqual(await sigShown(), { label: '1/2find(int id, String name)', active: 'int id', text: '1/2find(int id, String name)the idFinds a member' }, '함수 모양·지금 파라미터·설명');
+	assert.equal(await page.$eval('.cm-tooltip.ws-signature', t => getComputedStyle(t).paddingLeft), '14px', '설명 팝업과 같은 여백(.ws-hover 스타일)');
+	await page.keyboard.type('1,');
+	await page.waitForFunction(() => document.querySelector('.ws-sig-active')?.textContent === 'String name', {timeout: 3000}).catch(() => assert.fail(', 입력 → 다음 파라미터'));
+	await page.keyboard.press('Escape');
+	await page.waitForFunction(() => !document.querySelector('.ws-signature'), {timeout: 3000}).catch(() => assert.fail('Esc로 닫힘'));
+	await page.evaluate(() => { window.sigSecond = true; });
+	await page.keyboard.down('Control'); await page.keyboard.down('Shift'); await page.keyboard.press('Space'); await page.keyboard.up('Shift'); await page.keyboard.up('Control');
+	await page.waitForFunction(() => document.querySelector('.ws-sig-active')?.textContent === 'String name', {timeout: 3000}).catch(() => assert.fail('Ctrl+Shift+Space로 다시'));
+	await page.evaluate(() => { window.remoteSignature = () => undefined; });
+	await page.keyboard.press('End');
+	await page.waitForFunction(() => !document.querySelector('.ws-signature'), {timeout: 3000}).catch(() => assert.fail('결과가 없으면(괄호 밖) 닫힘'));
+	await page.evaluate(() => { window.remoteSignature = undefined; window.sigSecond = undefined; });
+	console.log('Link: 파라미터 힌트(( · , · Esc · Ctrl+Shift+Space · 괄호 밖 닫힘) passed');
 	// VS Code 언어 확장(Java 언어 서버) 자동완성: 편집이 반영된 버전·커서 위치로 묻고, 고르면 자동 import 같은 추가 편집도 넣는다
 	assert.deepEqual(await page.evaluate(() => [window.toSnippet('forEach(${1:action})$0'), window.toSnippet('${1|a,b|} \\$x #{y} $2')]),
 		['forEach(${1:action})${0}', '${1:a} $x #\\{y} ${2}'], 'VS Code 스니펫 → CodeMirror 스니펫');
@@ -1232,6 +1316,10 @@ try {
 		code: [...md.querySelectorAll('p > code')].map(c => c.textContent), strong: [...md.querySelectorAll('strong')].map(b => b.textContent),
 		items: [...md.querySelectorAll('li')].map(l => l.textContent), pre: md.querySelector('pre code')?.textContent, html: !!md.querySelector('b'), escaped: md.textContent.includes('surrogate * point'),
 	})), { code: ['int'], strong: ['Specified by:', 'Returns:'], items: ['Returns:', 'an IntStream'], pre: 'int x = 1;', html: false, escaped: true });
+	// 코드 블록은 편집기 언어·테마 색(키워드 int는 글자색과 다름)
+	// 목록 라벨(Returns:)은 지금 코드 테마의 키워드 색(설명 글자색과 다름)
+	assert.ok(await page.$eval('.cm-completionInfo', info => { const b = [...info.querySelectorAll('li > strong')].find(e => e.textContent === 'Returns:'); return !!b && getComputedStyle(b).color !== getComputedStyle(info).color; }), '라벨 색');
+	assert.ok(await page.$eval('.cm-completionInfo .md pre code', c => { const s = [...c.querySelectorAll('span')].find(e => e.textContent === 'int'); return !!s && getComputedStyle(s).color !== getComputedStyle(c).color; }), '코드 블록 색');
 	await page.keyboard.press('Escape');
 	await page.evaluate(() => { window.remoteItems = () => ({ items: [{ label: 'forEach', type: 'method', insert: 'forEach(${1:action})$0', snippet: true }] }); });
 	await reset('list.'); await page.keyboard.type('forE', {delay: 25});
@@ -1632,6 +1720,24 @@ try {
 	await page.waitForFunction(bg => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor === bg, {timeout: 3000}, vsDarkBg);
 	assert.ok(!await page.$eval('.tab-body:not([hidden]) .code-editor', e => e.classList.contains('custom-theme')));
 	console.log('Code theme: 적용·VS Code 전환 무시·되돌리기 passed');
+	// 찾기 일치: 지금 일치는 따로 칠하지 않고(선택 색으로 보임) 여백도 없음, 일치 글자는 원래 문법 색
+	await clickTab('Script');
+	const findText = 'scwin.target = 1;\nscwin.target = 2;';
+	await reset(findText);
+	const tokenColor = await page.evaluate(() => getComputedStyle([...document.querySelectorAll('.tab-body:not([hidden]) .cm-line span')].find(s => s.textContent === 'target')).color);
+	await modifiedKey('Control', 'f');
+	await page.waitForSelector('.tab-body:not([hidden]) .cm-search .cm-textfield');
+	await page.keyboard.type('target'); await page.keyboard.press('Enter');
+	await page.waitForSelector('.tab-body:not([hidden]) .cm-searchMatch-selected', {timeout: 3000}).catch(() => assert.fail('찾기: 지금 일치 표시'));
+	const found = await page.evaluate(() => {
+		const all = [...document.querySelectorAll('.tab-body:not([hidden]) .cm-searchMatch')], sel = document.querySelector('.tab-body:not([hidden]) .cm-searchMatch-selected');
+		const st = getComputedStyle(sel);
+		// 일치 안 글자(가장 안쪽 문법 색 span)의 색
+		return { count: all.length, bg: st.backgroundColor, padding: st.paddingLeft, colors: [...new Set(all.flatMap(e => [...e.querySelectorAll("span:not(:has(span))")].map(t => getComputedStyle(t).color)))] };
+	});
+	assert.deepEqual(found, { count: 2, bg: 'rgba(0, 0, 0, 0)', padding: '0px', colors: [tokenColor] }, `찾기 일치 표시(문법 색 ${tokenColor}): ${JSON.stringify(found)}`);
+	await page.keyboard.press('Escape');
+	console.log('Search: 지금 일치는 선택 색만·일치 글자는 문법 색 passed');
 	// 사용자 테마: 고른 테마 위 덮어쓰기 층(배경·선택·문법 색), 가져온 테마(VS Code 기본 라이트 바탕 + 층)
 	await clickTab('Script');
 	await reset('return "x";');
@@ -1782,13 +1888,66 @@ try {
 		await page.mouse.move(at.x, at.y);
 		const shown = await page.waitForFunction(() => document.querySelector('.cm-tooltip .ws-hover')?.textContent, { timeout: 2500 }).then(h => h.jsonValue()).catch(() => undefined);
 		await page.mouse.move(0, 0);
-		await page.waitForFunction(() => !document.querySelector('.cm-tooltip .ws-hover'), { timeout: 3000 });
+		await page.waitForFunction(() => !document.querySelector('.cm-tooltip .ws-hover'), { timeout: 3000 }).catch(async () => assert.fail(`hover가 안 닫힘: ${shown} / ${JSON.stringify(await page.evaluate(() => { const r = document.querySelector('.cm-tooltip').getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; }))}`));
 		return shown;
 	};
 	await clickTab('Script');
 	assert.match(await hoverText('$p.getComponentById("a");', 'getComponentById'), /getComponentById\(id\).*컴포넌트 조회/s, 'Script hover: API 설명');
 	assert.match(await hoverText('ipt_name.setValue(1);', 'setValue'), /값 설정/, 'Script hover: 컴포넌트 종류의 메서드');
 	assert.equal(await hoverText('console.log(1);', 'log'), undefined, 'Script hover: 설명 없는 멤버는 안 뜸');
+	assert.match(await hoverText('scwin.f2 = function() { scwin.f1(); };\n/**\n * 조회 실행\n * @param id 아이디\n */\nscwin.f1 = function(id) {};', 'f1()'), /조회 실행.*Parameters:.*id/s, 'Script hover: 같은 Script 함수의 JSDoc');
+	assert.match(await hoverText('var a = 1; go();\n/** 이동 */\nfunction go() {}', 'go()'), /이동/, 'Script hover: function 선언의 JSDoc');
+	// JSDoc 안 HTML: <br/>은 줄바꿈, 다른 태그는 지움(예제 코드는 그대로). 중괄호 없는 `@return String 설명`은 타입으로
+	await reset('var b = 1; now();\n/**\n * 서버 <b>날짜</b> 반환\n * @param {String:N} fmt 날짜 포맷<br/> y Year<br/>\n * @return String 현재날짜\n * @example\n * now("<br/>");\n */\nfunction now(fmt) {}');
+	const docAt = await page.evaluate(() => { const v = window.editor(), c = v.coordsAtPos(v.state.doc.toString().indexOf('now()') + 1); return { x: c.left + 1, y: (c.top + c.bottom) / 2 }; });
+	await page.mouse.move(0, 0); await page.mouse.move(docAt.x, docAt.y);
+	await page.waitForSelector('.cm-tooltip .ws-hover .ws-doc-param-item', {timeout: 3000}).catch(() => assert.fail('JSDoc HTML hover'));
+	assert.deepEqual(await page.evaluate(() => { const h = document.querySelector('.cm-tooltip .ws-hover'); return {
+		desc: h.querySelector('.ws-doc-desc').textContent, rows: [...h.querySelectorAll('.ws-doc-param-item')].map(r => r.textContent), sample: h.querySelector('.ws-doc-sample').textContent }; }),
+		{ desc: '서버 날짜 반환', rows: ['fmt String:N — 날짜 포맷\ny Year', 'String — 현재날짜'], sample: 'now("<br/>");' }, 'JSDoc HTML·return 타입');
+	await page.mouse.move(0, 0);
+	await page.waitForFunction(() => !document.querySelector('.cm-tooltip .ws-hover'), { timeout: 3000 });
+	// Script 정의로 이동: 같은 Script면 그 이름 선택, 공통 JS면 확장에 그 파일·범위로 열기 요청, 없으면(API 등) 알림. 커서 추가는 Alt+클릭
+	const scriptAt = async (text, needle) => page.evaluate((text, needle) => { const v = window.editor(), c = v.coordsAtPos(text.indexOf(needle) + 1); return { x: c.left + 1, y: (c.top + c.bottom) / 2 }; }, text, needle);
+	const ctrlClickAt = async at => { await page.keyboard.down('Control'); await page.mouse.click(at.x, at.y); await page.keyboard.up('Control'); };
+	const scriptSel = () => page.evaluate(() => { const v = window.editor(), m = v.state.selection.main; return { text: v.state.sliceDoc(m.from, m.to), from: m.from, ranges: v.state.selection.ranges.length }; });
+	const defText = 'scwin.f2 = function() { scwin.f1(); go(); };\nscwin.f1 = function(id) {};\nfunction go() {}';
+	await reset(defText);
+	await ctrlClickAt(await scriptAt(defText, 'f1();'));
+	assert.deepEqual(await scriptSel(), { text: 'f1', from: defText.indexOf('f1 = function'), ranges: 1 }, 'Script: Ctrl+클릭 → 같은 Script 정의 이름 선택');
+	await ctrlClickAt(await scriptAt(defText, 'go();'));
+	assert.deepEqual(await scriptSel(), { text: 'go', from: defText.lastIndexOf('go'), ranges: 1 }, 'Script: function 선언으로');
+	const moduleText = 'app.util.format(1);';
+	await reset(moduleText); await page.evaluate(() => { window.sent.length = 0; });
+	await page.evaluate(pos => { const v = window.editor(); v.dispatch({ selection: { anchor: pos } }); v.focus(); }, moduleText.indexOf('format') + 2);
+	await page.keyboard.press('F12');
+	await page.waitForFunction(() => window.sent.some(m => m.type === 'openModule'), {timeout: 3000}).catch(() => assert.fail('Script: F12 → 공통 JS 열기 요청'));
+	assert.deepEqual(await lastSent('openModule'), { type: 'openModule', path: '/js/common.js', line: 7, ch: 9, endLine: 7, endCh: 15 }, '공통 JS 파일·이름 범위');
+	const apiText = '$p.getComponentById("a");';
+	await reset(apiText); await page.evaluate(() => { window.sent.length = 0; });
+	await ctrlClickAt(await scriptAt(apiText, 'getComponentById'));
+	await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('정의를 찾지 못했습니다'), {timeout: 3000}).catch(() => assert.fail('Script: 정의 없으면 알림'));
+	assert.ok(!(await page.evaluate(() => window.sent.some(m => m.type === 'openModule' || m.type === 'definition'))), 'API는 요청 없음');
+	await reset(defText);
+	const altAt = await scriptAt(defText, 'go() {}');
+	await page.keyboard.down('Alt'); await page.mouse.click(altAt.x, altAt.y); await page.keyboard.up('Alt');
+	assert.equal((await scriptSel()).ranges, 2, 'Script: Alt+클릭은 커서 추가');
+	console.log('Script: 정의로 이동(같은 Script·공통 JS·없음 알림·Alt+클릭) passed');
+	// Script 파라미터 힌트: API(파라미터 표가 없으면 signature 글자), 같은 Script 함수(실제 파라미터 + JSDoc 타입·설명), 쉼표로 다음 파라미터, 모르는 함수는 안 뜸
+	const scriptSig = () => page.evaluate(() => { const t = document.querySelector('.cm-tooltip.ws-signature'); return t && { label: t.querySelector('.ws-sig-label').textContent, active: t.querySelector('.ws-sig-active')?.textContent, text: t.textContent }; });
+	await reset(''); await page.keyboard.type('$p.getComponentById(');
+	await page.waitForFunction(() => document.querySelector('.cm-tooltip.ws-signature'), {timeout: 3000}).catch(() => assert.fail('Script: API 파라미터 힌트'));
+	assert.deepEqual(await scriptSig(), { label: 'getComponentById(id)', active: 'id', text: 'getComponentById(id)컴포넌트 조회' }, 'Script: API 파라미터 힌트');
+	await page.keyboard.press('Escape');
+	const sigText = '/**\n * 조회 실행\n * @param {String} id 아이디\n * @param opt 옵션\n */\nscwin.f1 = function(id, opt = {}) {};\n';
+	await reset(sigText); await page.keyboard.type('scwin.f1(1, ');
+	await page.waitForFunction(() => document.querySelector('.ws-sig-active')?.textContent === 'opt = {}', {timeout: 3000}).catch(async () => assert.fail(`Script: 같은 Script 함수 두 번째 파라미터: ${JSON.stringify(await scriptSig())}`));
+	assert.deepEqual(await scriptSig(), { label: 'f1(id: String, opt = {})', active: 'opt = {}', text: 'f1(id: String, opt = {})옵션조회 실행' }, 'Script: JSDoc 타입·설명');
+	await page.keyboard.press('Escape');
+	await reset(''); await page.keyboard.type('unknownFn(');
+	await new Promise(r => setTimeout(r, 300));
+	assert.equal(await page.$('.cm-tooltip.ws-signature'), null, 'Script: 모르는 함수는 힌트 없음');
+	console.log('Script: 파라미터 힌트(API·같은 Script 함수·JSDoc·쉼표·모르는 함수) passed');
 	await clickTab('Source');
 	assert.match(await hoverText('<w2:input label="x"/>', 'label'), /label.*화면에 보이는 글자/s, 'Source hover: 속성 설명');
 	assert.equal(await hoverText('<w2:input disabled="true"/>', 'disabled'), undefined, 'Source hover: 설명 없는 속성은 안 뜸');

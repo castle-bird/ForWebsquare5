@@ -13,11 +13,24 @@ export function ComboInput({ value, options, onValue, onPick, onKeyDown, onFocus
 	const [focused, setFocused] = useState(false);
 	const [typed, setTyped] = useState(false);
 	const [active, setActive] = useState(-1);
+	// 목록에서 고른 뒤 닫힘(포커스는 입력칸에 그대로). 다시 누르거나 타이핑·↓로 열림
+	const [closed, setClosed] = useState(false);
 	const query = typed ? value.toLowerCase() : '';
 	const shown = query ? options.filter(o => o.toLowerCase().includes(query)) : options;
-	const open = focused && shown.length > 0;
+	const open = focused && !closed && shown.length > 0;
 	const { ref, style } = useFloating<HTMLUListElement>(open ? input ?? undefined : undefined, 'bottom-start', 2);
+	const pick = (v: string) => {
+		setClosed(true);
+		setTyped(false);
+		setActive(-1);
+		onPick(v);
+	};
 	const keys = (e: KeyboardEvent<HTMLInputElement>) => {
+		if (closed && e.key === 'ArrowDown') {
+			e.preventDefault();
+			setClosed(false);
+			return;
+		}
 		if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
 			e.preventDefault();
 			setActive(a => e.key === 'ArrowDown' ? Math.min(shown.length - 1, a + 1) : Math.max(0, a - 1));
@@ -26,15 +39,16 @@ export function ComboInput({ value, options, onValue, onPick, onKeyDown, onFocus
 		if (open && e.key === 'Enter' && shown[active] !== undefined && !e.nativeEvent.isComposing) {
 			e.preventDefault();
 			e.stopPropagation();
-			onPick(shown[active]);
+			pick(shown[active]);
 			return;
 		}
 		onKeyDown?.(e);
 	};
 	return <>
 		<input ref={setInput} {...rest} value={value} role="combobox" aria-expanded={open} autoComplete="off"
-			onChange={e => { setTyped(true); setActive(-1); onValue(e.target.value); }}
-			onFocus={e => { setFocused(true); onFocus?.(e); }}
+			onChange={e => { setTyped(true); setClosed(false); setActive(-1); onValue(e.target.value); }}
+			onMouseDown={() => setClosed(false)}
+			onFocus={e => { setFocused(true); setClosed(false); onFocus?.(e); }}
 			onBlur={e => { setFocused(false); onBlur?.(e); }}
 			onKeyDown={keys} />
 		{open && (
@@ -42,7 +56,7 @@ export function ComboInput({ value, options, onValue, onPick, onKeyDown, onFocus
 				{shown.map((o, i) => (
 					<li key={o} role="option" aria-selected={i === active} className={clsx({ current: o === value })}
 						// 누르는 동안 입력칸 포커스를 잃지 않게(잃으면 닫히며 반영된다)
-						onMouseDown={e => { e.preventDefault(); onPick(o); }} onMouseEnter={() => setActive(i)}>{o}</li>
+						onMouseDown={e => { e.preventDefault(); pick(o); }} onMouseEnter={() => setActive(i)}>{o}</li>
 				))}
 			</ul>
 		)}

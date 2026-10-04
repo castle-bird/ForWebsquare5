@@ -1,4 +1,4 @@
-import { Prec, type Extension } from '@codemirror/state';
+import { Prec, type EditorState, type Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { HighlightStyle, highlightingFor, syntaxHighlighting } from '@codemirror/language';
 import { tags as t, type Tag } from '@lezer/highlight';
@@ -114,5 +114,44 @@ export function readThemeColors(s: CodeThemeState): ThemeColors {
 	} finally {
 		view.destroy();
 		host.remove();
+	}
+}
+
+/**
+ * 설명 팝업(언어 서버 마크다운·JSDoc)의 라벨에 지금 코드 테마의 문법 색: Parameters:·@태그 같은 라벨은 키워드 색,
+ * 파라미터 이름은 변수 색, 타입은 타입 색. 테마를 따로 골라도 그 테마 색을 따른다(class라 글꼴 모양도 같이)
+ */
+export function colorDoc(dom: HTMLElement, state: EditorState): HTMLElement {
+	const paint = (selector: string, kind: TokenKind) => {
+		// 대표 태그 하나로(묶음째 넘기면 operatorKeyword 같은 다른 색이 섞인다)
+		const cls = highlightingFor(state, [TAGS[kind][0]]);
+		if (cls) {
+			dom.querySelectorAll(selector).forEach(e => e.classList.add(...cls.split(' ')));
+		}
+	};
+	paint(':scope ul ul > li > strong:first-child, .ws-doc-badge', 'variable');
+	paint(':scope > ul > li > strong:first-child, :scope > p > strong:first-child, .ws-doc-section', 'keyword');
+	paint('.ws-doc-type', 'type');
+	return dom;
+}
+
+/**
+ * VS Code 다크·라이트 테마는 찾기의 지금 일치 안 글자(`.cm-searchMatch-selected span`)를 한 색으로 칠해 문법 색을 지운다.
+ * 일치 표시가 문법 색 span을 감싸서(우선순위가 검색 패키지 안에 고정) CSS로는 원래 색을 되돌릴 수 없어, 그 규칙의 글자색만 지운다.
+ * 테마 스타일은 편집기를 만들거나 테마를 바꿀 때 붙으므로 그때마다 부른다(배경·여백은 style.css)
+ */
+export function keepSearchMatchColors(): void {
+	for (const sheet of [...document.adoptedStyleSheets, ...document.styleSheets]) {
+		let rules: CSSRuleList;
+		try {
+			rules = sheet.cssRules;
+		} catch {
+			continue;
+		}
+		for (const rule of rules) {
+			if (rule instanceof CSSStyleRule && /cm-searchMatch-selected\s+span\s*$/.test(rule.selectorText)) {
+				rule.style.removeProperty('color');
+			}
+		}
 	}
 }
