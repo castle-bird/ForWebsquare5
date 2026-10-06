@@ -124,7 +124,7 @@ interface TokenRule { scope?: string | string[]; settings?: { foreground?: strin
 
 /** VS Code 테마(include는 미리 합친 것) → 층. 문법 색은 TextMate 규칙처럼 scope 앞부분이 가장 길게 맞는 규칙 */
 export function fromVsCodeTheme(theme: VsTheme): ThemeOverlay & { dark: boolean } {
-	if (typeof theme.tokenColors === 'string') { throw new Error('tokenColors가 다른 파일(.tmTheme)을 가리키는 테마는 아직 못 가져와.'); }
+	if (typeof theme.tokenColors === 'string') { throw new Error('tokenColors가 다른 파일(.tmTheme)을 가리키는 테마는 아직 가져올 수 없습니다.'); }
 	const rules = (Array.isArray(theme.tokenColors) ? theme.tokenColors : []) as TokenRule[];
 	const c = theme.colors ?? {};
 	const global = rules.find(r => !r.scope)?.settings;

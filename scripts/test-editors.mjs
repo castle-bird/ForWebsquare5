@@ -35,7 +35,11 @@ const inlineCssPlugin = {
 const bundle = await build({
 	stdin: { contents: `
 		import './src/webview/main';
-		import {EditorView} from '@codemirror/view';
+		import {EditorView, showTooltip} from '@codemirror/view';
+		import {EditorState} from '@codemirror/state';
+		import {scriptTools, scriptLanguage} from './src/webview/editor/completions';
+		import {signatureHelp} from './src/webview/editor/signatureHelp';
+		window.testTools = {EditorState, EditorView, showTooltip, scriptTools, scriptLanguage, signatureHelp};
 		import {forEachDiagnostic} from '@codemirror/lint';
 		import {indentUnit} from '@codemirror/language';
 		import {toSnippet} from './src/webview/editor/remoteCompletion';
@@ -72,7 +76,7 @@ const html = `<!doctype html><html><head>
 <link rel="stylesheet" href="/editor.css">
 <style nonce="test">body { --vscode-editor-font-family: Consolas, monospace; --vscode-editor-font-size:16px; --vscode-font-size:14px; --vscode-editor-selectionBackground:#264f78; --vscode-editor-lineHighlightBackground:#555555; --vscode-editorIndentGuide-background1:#404040; --vscode-editorIndentGuide-activeBackground1:#707070; --vscode-editor-background:#222; --vscode-sideBar-background:#333; --vscode-foreground:#ddd; --vscode-charts-yellow:#cca700; --vscode-focusBorder:#007fd4; --vscode-symbolIcon-classForeground:#ee9d28; --vscode-symbolIcon-methodForeground:#b180d7; --vscode-button-foreground:#fff; --vscode-button-background:#0078d4; --vscode-input-background:#313131; --vscode-input-border:#3c3c3c; --vscode-input-foreground:#cccccc; --vscode-input-placeholderForeground:#989898; --vscode-panel-border:#2b2b2b; --vscode-descriptionForeground:#9d9d9d; --vscode-list-hoverBackground:#2a2d2e; --vscode-list-activeSelectionBackground:#04395e; --vscode-list-activeSelectionForeground:#ffffff; --vscode-dropdown-background:#313131; --vscode-dropdown-border:#3c3c3c; --vscode-widget-shadow:#0000005c; --vscode-checkbox-background:#313131; --vscode-checkbox-border:#3c3c3c; --vscode-toolbar-hoverBackground:#5a5d5e50; --vscode-badge-background:#616161; --vscode-badge-foreground:#f8f8f8; --vscode-textLink-foreground:#4daafc; } ::-webkit-scrollbar { width: 10px; height: 10px; }</style>
 </head><body class="vscode-dark"><div id="root"></div>
-<script nonce="test">window.leakedUndo=0; window.leakedSave=0; window.addEventListener('keydown',e=>{if(e.ctrlKey&&/^[zy]$/i.test(e.key)){window.leakedUndo++;} if(e.ctrlKey&&e.key==='s'){window.leakedSave++;}}); const versions={source:1,script:1}; window.addEventListener('message',e=>{if(e.data&&e.data.type==='document'){versions.source=versions.script=e.data.version;} if(e.data&&e.data.type==='linked'&&e.data.version){versions['link:'+e.data.kind]=e.data.version;}}); window.sent=[]; window.acquireVsCodeApi=()=>({postMessage(msg){msg=JSON.parse(JSON.stringify(msg));window.sent.push(msg);if(msg.type==='setCode'){const ok=msg.version===versions[msg.target]; if(ok){versions[msg.target]++;} setTimeout(()=>window.send({type:'codeAck',target:msg.target,ok,version:versions[msg.target]}),5);}else if(msg.type==='findFiles'){if(window.mockFiles){setTimeout(()=>window.send({type:'files',kind:msg.kind,files:window.mockFiles}),5);}}else if(msg.type==='signature'){setTimeout(()=>window.send({type:'signatureResult',id:msg.id,signature:window.remoteSignature?.(msg)}),5)}else if(msg.type==='hover'){setTimeout(()=>window.send({type:'hoverResult',id:msg.id,text:window.remoteHoverText?.(msg)}),5)}else if(msg.type==='complete'){setTimeout(()=>window.send({type:'completions',id:msg.id,...(window.remoteItems?window.remoteItems(msg):{items:[]})}),5);if(window.remoteDetails){setTimeout(()=>window.send({type:'completionDetails',id:msg.id,items:window.remoteDetails(msg)}),300);}}else if(msg.type==='format'){setTimeout(()=>window.send({type:'formatted',target:msg.target,text:window.formatResult??'formatted();'}),5);}}});</script>
+<script nonce="test">window.leakedUndo=0; window.leakedSave=0; window.addEventListener('keydown',e=>{if(e.ctrlKey&&/^[zy]$/i.test(e.key)){window.leakedUndo++;} if(e.ctrlKey&&e.key==='s'){window.leakedSave++;}}); const versions={source:1,script:1}; window.addEventListener('message',e=>{if(e.data&&e.data.type==='document'){versions.source=versions.script=e.data.version;} if(e.data&&e.data.type==='linked'&&e.data.version){versions['link:'+e.data.kind]=e.data.version;}}); window.sent=[]; window.acquireVsCodeApi=()=>({postMessage(msg){msg=JSON.parse(JSON.stringify(msg));window.sent.push(msg);if(msg.type==='setCode'){const ok=msg.version===versions[msg.target]; if(ok){versions[msg.target]++;} setTimeout(()=>window.send({type:'codeAck',target:msg.target,ok,version:versions[msg.target]}),5);}else if(msg.type==='findFiles'){if(window.mockFiles){setTimeout(()=>window.send({type:'files',kind:msg.kind,files:window.mockFiles}),5);}}else if(msg.type==='signature'){setTimeout(()=>window.send({type:'signatureResult',id:msg.id,signature:window.remoteSignature?.(msg)}),5)}else if(msg.type==='hover'){setTimeout(()=>window.send({type:'hoverResult',id:msg.id,text:window.remoteHoverText?.(msg)}),5)}else if(msg.type==='complete'){setTimeout(()=>window.send({type:'completions',id:msg.id,...(window.remoteItems?window.remoteItems(msg):{items:[]})}),5);if(window.remoteDetails){const reply=()=>window.send({type:'completionDetails',id:msg.id,items:window.remoteDetails(msg)});if(window.pendingDetails){window.pendingDetails.push(reply);}else{setTimeout(reply,300);}}}else if(msg.type==='format'){setTimeout(()=>window.send({type:'formatted',target:msg.target,text:window.formatResult??'formatted();'}),5);}}});</script>
 <script nonce="test" src="/editor.js"></script></body></html>`;
 const server = createServer((req, res) => {
 	const pathname = new URL(req.url, 'http://localhost').pathname;
@@ -93,6 +97,48 @@ try {
 	await page.goto(`http://127.0.0.1:${server.address().port}`);
 	await page.waitForSelector('.tab-bar button');
 	await page.waitForSelector('.pane .tree-row');
+	// 지연 응답은 커서가 바뀌는 즉시 무효화하고, Esc는 표시 전·예약 중 요청도 취소한다.
+	assert.deepEqual(await page.evaluate(async () => {
+		const { EditorView, showTooltip, signatureHelp } = window.testTools;
+		const pending = [], info = { label: 'f(value)', params: [[2, 7]], index: 1, count: 1 };
+		const tick = (ms = 0) => new Promise(r => setTimeout(r, ms));
+		const view = new EditorView({ extensions: [EditorView.cspNonce.of('test'), signatureHelp(() => new Promise(resolve => pending.push(resolve)), () => document.createElement('div'))] });
+		const shown = () => view.state.facet(showTooltip).some(Boolean);
+		const escape = () => view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+		const trigger = () => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: 'f(' }, selection: { anchor: 2 }, userEvent: 'input.type' });
+		try {
+			trigger(); await tick();
+			view.dispatch({ selection: { anchor: 0 } });
+			pending[0](info); await tick();
+			const staleHidden = !shown();
+			escape(); await tick(150);
+			const waitingCancelled = pending.length === 1 && !shown();
+			trigger(); await tick(); pending.at(-1)(info); await tick();
+			const initiallyShown = shown();
+			view.dispatch({ selection: { anchor: 1 } }); escape(); await tick(150);
+			const scheduledCancelled = pending.length === 2 && !shown();
+			trigger(); await tick(); escape(); pending.at(-1)(info); await tick();
+			return { staleHidden, waitingCancelled, initiallyShown, scheduledCancelled, escapedResponseHidden: !shown() };
+		} finally { view.destroy(); }
+	}), { staleHidden: true, waitingCancelled: true, initiallyShown: true, scheduledCancelled: true, escapedResponseHidden: true });
+	assert.deepEqual(await page.evaluate(() => {
+		const { EditorState, scriptTools, scriptLanguage } = window.testTools;
+		const make = text => EditorState.create({ doc: text, extensions: [scriptLanguage] });
+		const text = '/** Local docs */\nfunction local(value) {}\nlocal(1);';
+		const tools = scriptTools(undefined, [], {}), state = make(text), pos = text.lastIndexOf('1');
+		const first = tools.signature(state, pos)?.label;
+		const moved = state.update({ selection: { anchor: pos } }).state;
+		const repeated = tools.signature(moved, pos)?.label;
+		const definition = tools.definition(moved, text.lastIndexOf('local') + 2);
+		const edited = state.update({ changes: { from: text.indexOf('value'), to: text.indexOf('value') + 5, insert: 'changed' } }).state;
+		const changed = tools.signature(edited, edited.doc.toString().lastIndexOf('1'))?.label;
+		const moduleText = '/** Module docs */\napp.run = function(old) {};';
+		const call = make('app.run(1);');
+		const original = scriptTools(undefined, [], {}, [{ path: '/common.js', text: moduleText }]);
+		const replaced = scriptTools(undefined, [], {}, [{ path: '/common.js', text: moduleText.replace('old', 'newValue') }]);
+		return { first, repeated, definition, changed, moduleBefore: original.signature(call, 8)?.label, moduleAfter: replaced.signature(call, 8)?.label };
+	}), { first: 'local(value)', repeated: 'local(value)', definition: { from: 27, to: 32 }, changed: 'local(changed)', moduleBefore: 'run(old)', moduleAfter: 'run(newValue)' });
+	console.log('Script tools: 문서 캐시 갱신·공통 JS 교체·힌트 지연 응답·Esc 취소 passed');
 	assert.equal(await page.$$eval('.pane .tree-row', rows => rows.length), 1, 'Outline 초기에는 루트만 표시');
 	assert.equal(await page.$eval('.pane .tree-row', row => row.getAttribute('aria-expanded')), 'false');
 	await page.evaluate(() => window.tab('Data', '.pane').click());
@@ -125,7 +171,18 @@ try {
 	assert.equal(await page.$eval('#submission-method', input => input.value), 'post');
 	assert.equal(await page.$eval('#submission-mode', input => input.value), 'asynchronous');
 	assert.equal(await page.$eval('#submission-media', input => input.value), 'application/json');
+	// 팝업 입력칸·선택칸은 모두 VS Code 편집기 글꼴
+	assert.deepEqual(await page.evaluate(() => {
+		document.body.style.setProperty('--vscode-editor-font-family', '"Test Mono", monospace');
+		const fonts = [...new Set([...document.querySelectorAll('.submission-editor :is(input, select, textarea)')].map(e => getComputedStyle(e).fontFamily))];
+		document.body.style.removeProperty('--vscode-editor-font-family');
+		return fonts;
+	}), ['"Test Mono", monospace'], '서브미션 팝업 입력 글꼴 통일');
 	assert.deepEqual(await page.$$eval('.submission-handler button', bs => bs.map(b => b.disabled)), [true, true, true], '추가 팝업: 코드 버튼은 확인 전 비활성');
+	// form 팝업도 Enter는 확인이 아니라 입력칸에서 나오기만
+	await page.focus('#submission-id');
+	await page.keyboard.press('Enter');
+	assert.deepEqual(await page.evaluate(() => [document.activeElement?.classList.contains('submission-editor'), window.sent.some(m => m.type === 'addSubmission')]), [true, false], '서브미션 팝업 Enter: 확인 안 하고 입력칸에서 나옴');
 	await page.$eval('.submission-actions button:last-child', button => button.click());
 	await page.waitForFunction(() => window.sent.some(m => m.type === 'addSubmission'));
 	assert.equal(await page.evaluate(() => window.sent.find(m => m.type === 'addSubmission').index), 5);
@@ -169,6 +226,18 @@ try {
 		await page.keyboard.type('customer');
 		await page.keyboard.press('ArrowRight');
 		assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '1행 name');
+		// Enter: 입력칸에서 나와 팝업에 포커스(값은 그대로, Esc로 닫기 유지). 제목줄 ID도
+		await page.keyboard.type('n');
+		await page.keyboard.press('Enter');
+		assert.deepEqual(await page.evaluate(() => [document.activeElement?.classList.contains('data-editor'), document.querySelector('.data-editor input[aria-label="1행 name"]').value]), [true, 'name1n'], 'Enter로 입력칸에서 나옴');
+		assert.deepEqual(await page.evaluate(() => {
+			document.body.style.setProperty('--vscode-editor-font-family', '"Test Mono", monospace');
+			const fonts = [...new Set([...document.querySelectorAll('.data-editor :is(input:not([type="checkbox"]), select)')].map(e => getComputedStyle(e).fontFamily))];
+			document.body.style.removeProperty('--vscode-editor-font-family');
+			return fonts;
+		}), ['"Test Mono", monospace'], 'DataList 팝업 입력 글꼴 통일');
+		await page.click('.data-editor-id'); await page.keyboard.press('Enter');
+		assert.ok(await page.evaluate(() => document.activeElement?.classList.contains('data-editor')), '제목줄 ID도 Enter로 나옴');
 		await page.$eval('.data-editor-tools button', button => button.click());
 		const handles = await page.$$eval('.data-row-handle', buttons => buttons.map(button => { const r = button.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
 		await page.mouse.move(handles[0].x, handles[0].y); await page.mouse.down();
@@ -297,6 +366,7 @@ try {
 		await page.evaluate(() => {
 			const shadow = document.querySelector('.canvas-host').shadowRoot;
 			const old = shadow.getElementById('badge_last'), replacement = old.cloneNode(true);
+			window.replacedBadge = old;
 			old.replaceWith(replacement);
 		});
 		await page.waitForFunction(() => window.badgeAligned('badge_last'));
@@ -315,6 +385,8 @@ try {
 			shadow.getElementById('badge_first').nextElementSibling.style.height = '132px';
 		});
 		await page.waitForFunction(() => window.badgeAligned('badge_first'));
+		// 캔버스 DOM은 다음 문서에서도 React가 그대로 고쳐 쓴다(스크롤 유지) → 손으로 바꾼 노드를 되돌려 둔다
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.getElementById('badge_last').replaceWith(window.replacedBadge));
 		console.log('Design: 표시 점 중첩 스크롤·크기·위치 이동·DOM 교체 passed');
 		// gridView 바인딩: dataList를 gridView에 떨구면 옵션 팝업 → 확인 시 bindGrid 요청
 		await page.evaluate(() => {
@@ -358,7 +430,7 @@ try {
 		});
 		await page.waitForSelector('.context-menu');
 		assert.equal(await page.$$eval('.context-menu button', bs => bs.find(b => b.textContent === 'footer 추가').disabled), true, 'footer 있으면 footer 추가 비활성');
-		assert.deepEqual(await page.$$eval('.context-menu button', bs => bs.map(b => b.textContent)), ['왼쪽에 Column 추가', '오른쪽에 Column 추가', 'Row 추가', 'Header 추가', 'subTotal 추가', 'footer 추가', '열 왼쪽으로 이동', '열 오른쪽으로 이동', '열 삭제Delete']);
+		assert.deepEqual(await page.$$eval('.context-menu button', bs => bs.map(b => b.textContent)), ['왼쪽에 Column 추가', '오른쪽에 Column 추가', 'Row 추가', 'Header 추가', 'subTotal 추가', 'footer 추가', '열 왼쪽으로 이동', '열 오른쪽으로 이동', '열 삭제Delete', '칸 속성 표…']);
 		await page.$eval('.context-menu button:nth-child(2)', b => b.click());
 		const addPart = await page.evaluate(() => window.sent.find(m => m.type === 'addGridPart'));
 		assert.equal(addPart?.part, 'column');
@@ -373,6 +445,253 @@ try {
 		const widthMsg = await page.evaluate(() => window.sent.find(m => m.type === 'setAttr' && m.name === 'width'));
 		assert.ok(widthMsg && widthMsg.index === 5 && widthMsg.value === '100', `기본 70 + 30 = 100: ${JSON.stringify(widthMsg)}`);
 		console.log('Design: 그리드 우클릭 subTotal·footer 추가·표시 passed');
+		// 칸 속성 표: 우클릭 메뉴로 열고, Head(subTotal·footer)·Body 칸 속성을 고쳐 한 번에 보냄(비우면 지움)
+		await page.evaluate(() => {
+			window.sent.length = 0;
+			document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid tbody td').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, clientX: 50, clientY: 50 }));
+		});
+		await page.waitForSelector('.context-menu');
+		await page.$$eval('.context-menu button', bs => bs.find(b => b.textContent === '칸 속성 표…').click());
+		await page.waitForSelector('.grid-cells-editor');
+		assert.deepEqual(await page.$$eval('.grid-cells-editor .segmented button', bs => bs.map(b => b.textContent)), ['SubTotal', 'Footer'], 'Head는 있는 부분만');
+		assert.deepEqual(await page.$$eval('.grid-cells-editor section:last-child th', ths => ths.map(t => t.textContent)), ['행,열', 'id'], 'Body는 적힌 속성만');
+		await page.$$eval('.grid-cells-editor .segmented button', bs => bs.find(b => b.textContent === 'Footer').click());
+		const retype = async (label, text) => { await page.click(`.grid-cells-editor input[aria-label="${label}"]`); await page.keyboard.down('Control'); await page.keyboard.press('A'); await page.keyboard.up('Control'); await page.keyboard.press('Backspace'); await page.keyboard.type(text); };
+		await retype('Footer 0,0 value', ''); await retype('Body 0,0 id', 'a2');
+		await page.$eval('.grid-cells-editor .btn-primary', b => b.click());
+		assert.deepEqual(await page.evaluate(() => window.sent.find(m => m.type === 'editGridCells')?.cells.map(c => c.attrs)), [{ id: 'a2' }, { value: null }]);
+		await page.evaluate(() => window.send({ type: 'popupAck', popup: window.sent.find(m => m.type === 'editGridCells').popup, ok: true }));
+		await page.waitForFunction(() => !document.querySelector('.grid-cells-editor'));
+		console.log('Design: 그리드 칸 속성 표 passed');
+		// 칸 속성 표 Excel처럼: 끌어 범위 → 복사(탭·줄)·붙여넣기(왼쪽 위부터, 한 값은 범위 전체)·Delete, 클릭은 입력칸 하나
+		await page.evaluate(() => {
+			const text = '<html xmlns:w2="urn:test"><body><w2:gridView id="grd"><w2:gBody id="b"><w2:row id="r"><w2:column id="a" width="70"/><w2:column id="c" width="80"/></w2:row></w2:gBody></w2:gridView></body></html>';
+			window.sent.length = 0;
+			const root = window.parseXml(text);
+			root.children[0].children[0].def = 2;
+			window.send({ type: 'document', version: 92, text, root, script: { text: '' } });
+		});
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('.w2grid tbody td'));
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid tbody td').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, clientX: 50, clientY: 50 })));
+		await page.waitForSelector('.context-menu');
+		await page.$$eval('.context-menu button', bs => bs.find(b => b.textContent === '칸 속성 표…').click());
+		await page.waitForSelector('.grid-cells-editor input[aria-label="Body 0,1 width"]');
+		const cellCenter = label => page.$eval(`.grid-cells-editor input[aria-label="${label}"]`, el => { const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+		const [cellFrom, cellTo] = [await cellCenter('Body 0,0 id'), await cellCenter('Body 0,1 width')];
+		await page.mouse.click(cellFrom.x, cellFrom.y);
+		assert.deepEqual(await page.evaluate(() => [document.activeElement?.getAttribute('aria-label'), document.querySelectorAll('.grid-cells-editor td.picked').length]), ['Body 0,0 id', 0], '클릭은 입력칸 하나');
+		await page.mouse.move(cellFrom.x, cellFrom.y); await page.mouse.down();
+		await page.mouse.move(cellTo.x, cellTo.y, { steps: 6 }); await page.mouse.up();
+		assert.deepEqual(await page.evaluate(() => [document.activeElement?.classList.contains('data-editor-table-wrap'), document.querySelectorAll('.grid-cells-editor td.picked').length]), [true, 4], '끌어 범위');
+		const cellClip = (type, text) => page.evaluate((type, text) => {
+			const dt = new DataTransfer();
+			if (text !== undefined) { dt.setData('text/plain', text); }
+			const e = new ClipboardEvent(type, { bubbles: true, cancelable: true, clipboardData: dt });
+			// VS Code의 Ctrl+C·V는 글자 선택이 없으면 body로 보낸다(고른 컴포넌트 XML이 복사되던 버그)
+			document.body.dispatchEvent(e);
+			return [e.defaultPrevented, dt.getData('text/plain')];
+		}, type, text);
+		assert.deepEqual(await cellClip('copy'), [true, 'a\t70\nc\t80'], '범위 복사');
+		assert.equal(await page.$eval('.grid-cells-editor .data-editor-body th', th => getComputedStyle(th).textAlign), 'center', '머리글 가운데');
+		const values = () => page.$$eval('.grid-cells-editor section:last-child tbody input', els => els.map(e => e.value));
+		await cellClip('paste', 'x\t1\ny\t2\r\n');
+		assert.deepEqual(await values(), ['x', '1', 'y', '2'], '범위 붙여넣기(Excel 끝 줄바꿈 무시)');
+		await cellClip('paste', 'p\tq');
+		assert.deepEqual(await values(), ['p', 'q', 'p', 'q'], '한 행을 두 행 범위에 → 되풀이(Excel처럼)');
+		await cellClip('paste', 'z');
+		assert.deepEqual(await values(), ['z', 'z', 'z', 'z'], '한 값은 범위 전체');
+		await page.keyboard.press('Delete');
+		assert.deepEqual(await values(), ['', '', '', ''], 'Delete로 비움');
+		// 팝업 안 되돌리기: VS Code로 키가 안 넘어가야(넘어가면 화면 XML 문서가 되돌려짐)
+		await page.evaluate(() => { window.undoLeaked = 0; window.addEventListener('keydown', window.undoSpy = e => { if (e.ctrlKey && /^[zy]$/i.test(e.key)) { window.undoLeaked++; } }); });
+		const press = async (key, shift) => { await page.keyboard.down('Control'); if (shift) { await page.keyboard.down('Shift'); } await page.keyboard.press(key); if (shift) { await page.keyboard.up('Shift'); } await page.keyboard.up('Control'); };
+		await press('z');
+		assert.deepEqual(await values(), ['z', 'z', 'z', 'z'], 'Ctrl+Z: Delete 되돌림');
+		await press('z');
+		assert.deepEqual(await values(), ['p', 'q', 'p', 'q'], 'Ctrl+Z 두 번');
+		await press('y');
+		assert.deepEqual(await values(), ['z', 'z', 'z', 'z'], 'Ctrl+Y 다시 하기');
+		await page.mouse.click(cellFrom.x, cellFrom.y); await page.keyboard.type('ab');
+		assert.equal((await values())[0], 'zab');
+		await press('z');
+		assert.equal((await values())[0], 'z', '이어 친 글자는 한 단계로 되돌림');
+		await press('z', true);
+		assert.equal((await values())[0], 'zab', 'Ctrl+Shift+Z 다시 하기');
+		await press('z'); await press('z'); await press('z');
+		assert.deepEqual(await page.evaluate(() => { window.removeEventListener('keydown', window.undoSpy); return window.undoLeaked; }), 0, '되돌리기 키가 VS Code로 안 넘어감');
+		await page.mouse.click(cellFrom.x, cellFrom.y);
+		assert.deepEqual(await cellClip('paste', 'q'), [false, 'q'], '입력칸 하나에 한 값은 입력칸이 받음');
+		await page.keyboard.down('Shift'); await page.mouse.click(cellTo.x, cellTo.y); await page.keyboard.up('Shift');
+		assert.equal(await page.evaluate(() => document.querySelectorAll('.grid-cells-editor td.picked').length), 4, 'Shift+클릭 범위');
+		// 표를 좁혀 가린 칸이 생기게 한 뒤 오른쪽 아래 바깥으로 끌면 상하좌우로 굴리며 가려진 칸까지 고름
+		const wrapBox = await page.$eval('.grid-cells-editor section:last-child .data-editor-table-wrap', w => {
+			w.style.maxWidth = '150px'; w.style.maxHeight = '62px'; w.scrollLeft = w.scrollTop = 0;
+			const r = w.getBoundingClientRect(); return { right: r.right, bottom: r.bottom };
+		});
+		const first = await cellCenter('Body 0,0 id');
+		await page.mouse.move(first.x, first.y); await page.mouse.down();
+		await page.mouse.move(wrapBox.right + 30, wrapBox.bottom + 30, { steps: 6 });
+		await page.waitForFunction(() => { const w = document.querySelector('.grid-cells-editor section:last-child .data-editor-table-wrap'); return w.scrollLeft > 0 && w.scrollTop > 0 && document.querySelectorAll('.grid-cells-editor td.picked').length === 4; }, { timeout: 3000 })
+			.catch(() => assert.fail('끌기 자동 스크롤·가려진 칸 고르기 안 됨'));
+		await page.mouse.up();
+		await page.$eval('.grid-cells-editor section:last-child .data-editor-table-wrap', w => { w.style.maxWidth = w.style.maxHeight = ''; });
+		await page.$eval('.grid-cells-editor .btn-secondary', b => b.click());
+		await page.waitForFunction(() => !document.querySelector('.grid-cells-editor'));
+		console.log('Design: 그리드 칸 속성 표 범위 복사·붙여넣기 passed');
+		// Info 탭: head meta_* 속성 + 개정 이력. 칸에서 나오면 반영(setAttr·editHistory)
+		await page.evaluate(() => {
+			const text = '<html xmlns:w2="http://www.inswave.com/websquare"><head meta_programId="BM003M01" meta_programName="프로그램 관리" meta_memo="zzz"><w2:historyInfo><w2:history meta_no="1" meta_desc="asd" meta_date="20250101" meta_user="zz"></w2:history></w2:historyInfo></head><body/></html>';
+			window.sent.length = 0;
+			window.send({ type: 'document', version: 93, text, root: window.parseXml(text), script: { text: '' } });
+			window.tab('Info').click();
+		});
+		await page.waitForSelector('.info-pane input[aria-label="프로그램명"]');
+		assert.deepEqual(await page.$$eval('.info-pane .info-field :is(input, textarea)', els => els.map(e => e.value)), ['BM003M01', '프로그램 관리', '', '', '', 'zzz']);
+		assert.deepEqual(await page.$$eval('.info-pane tbody :is(input, textarea)', els => els.map(e => [e.tagName, e.value, getComputedStyle(e).textAlign])),
+			[['INPUT', '1', 'center'], ['TEXTAREA', 'asd', 'start'], ['INPUT', '2025-01-01', 'center'], ['INPUT', 'zz', 'start']], '개정번호·일자 가운데, 내용은 여러 줄');
+		// 일자: 달력에서 고르기·키보드(→ Enter)·잘못된 날짜는 되돌림
+		const lastDates = () => page.evaluate(() => window.sent.findLast(m => m.type === 'editHistory')?.rows.map(r => r.date));
+		await page.click('.info-pane input[aria-label="1행 제/개정 일자"]');
+		await page.waitForSelector('.date-picker');
+		assert.equal(await page.$eval('.date-picker-title', e => e.textContent), '2025년 1월', '달력은 지금 값의 달'); await page.screenshot({path:path.join(tmpdir(), 'ws5-info-date.png')});
+		await page.click('.date-picker-day[aria-label="20250115"]');
+		assert.deepEqual(await lastDates(), ['2025-01-15'], '달력에서 고른 날 반영');
+		assert.equal(await page.$('.date-picker'), null, '고르면 닫힘');
+		await page.keyboard.down('Alt'); await page.keyboard.press('ArrowDown'); await page.keyboard.up('Alt');
+		await page.waitForSelector('.date-picker');
+		await page.keyboard.press('ArrowRight'); await page.keyboard.press('PageDown'); await page.keyboard.press('Enter');
+		assert.deepEqual(await lastDates(), ['2025-02-16'], '키보드: 하루 뒤·다음 달·Enter');
+		const sentCount = () => page.evaluate(() => window.sent.filter(m => m.type === 'editHistory').length);
+		const historySends = await sentCount();
+		await page.keyboard.down('Control'); await page.keyboard.press('A'); await page.keyboard.up('Control'); await page.keyboard.type('2025-13x45');
+		assert.equal(await page.$eval('.info-pane input[aria-label="1행 제/개정 일자"]', e => e.value), '2025-13-45', '숫자만 치고 하이픈은 자동');
+		await page.keyboard.press('Escape'); await page.keyboard.press('Tab');
+		assert.deepEqual([await sentCount(), await page.$eval('.info-pane input[aria-label="1행 제/개정 일자"]', e => e.value)], [historySends, '2025-02-16'], '잘못된 날짜는 원래 값으로');
+		await page.click('.info-pane input[aria-label="작성자"]'); await page.keyboard.type('홍길동'); await page.keyboard.press('Enter');
+		assert.deepEqual(await page.evaluate(() => { const m = window.sent.findLast(m => m.type === 'setAttr'); return [m?.name, m?.value, m?.index]; }), ['meta_author', '홍길동', 1], 'Enter로 head 속성 반영');
+		// 작성일: 달력, yyyy-MM-dd로 저장(숫자만 치거나 다른 구분자로 쳐도 맞춤)
+		const lastAttr = () => page.evaluate(() => { const m = window.sent.findLast(m => m.type === 'setAttr'); return [m?.name, m?.value]; });
+		await page.click('.info-pane input[aria-label="작성일"]');
+		await page.waitForSelector('.date-picker');
+		await page.$$eval('.date-picker-foot button', bs => bs[0].click());
+		const now = new Date(), pad = n => String(n).padStart(2, '0');
+		assert.deepEqual(await lastAttr(), ['meta_date', `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`], '작성일 오늘');
+		// 달력이 열린 채 숫자만 쳐도 하이픈이 붙고, Enter는 친 날짜로(달력이 가리키던 날로 덮지 않음)
+		await page.click('.info-pane input[aria-label="작성일"]');
+		await page.waitForSelector('.date-picker');
+		await page.keyboard.down('Control'); await page.keyboard.press('A'); await page.keyboard.up('Control'); await page.keyboard.type('20201212');
+		assert.equal(await page.$eval('.info-pane input[aria-label="작성일"]', e => e.value), '2020-12-12', '숫자만 쳐도 yyyy-MM-dd');
+		assert.equal(await page.$eval('.date-picker-title', e => e.textContent), '2020년 12월', '달력도 친 날짜로');
+		await page.keyboard.press('Enter');
+		assert.deepEqual(await lastAttr(), ['meta_date', '2020-12-12'], '친 날짜 반영');
+		await page.click('.info-pane input[aria-label="작성일"]');
+		await page.keyboard.down('Control'); await page.keyboard.press('A'); await page.keyboard.up('Control'); await page.keyboard.type('2024.03.05'); await page.keyboard.press('Tab');
+		assert.deepEqual(await lastAttr(), ['meta_date', '2024-03-05'], '다른 구분자로 쳐도 yyyy-MM-dd');
+		await page.$$eval('.info-pane button', bs => bs.find(b => b.getAttribute('aria-label') === '이력 추가').click());
+		const added = await page.evaluate(() => window.sent.findLast(m => m.type === 'editHistory'));
+		assert.equal(added?.index, 1);
+		assert.deepEqual(added.rows.map(r => [r.no, r.desc]), [['1', 'asd'], ['2', '']], '추가 행은 다음 개정번호');
+		assert.match(added.rows[1].date, /^\d{4}-\d{2}-\d{2}$/, '추가 행 일자는 오늘(yyyy-MM-dd)');
+		await page.click('.info-pane textarea[aria-label="2행 제/개정 페이지 및 수정 내용"]'); await page.keyboard.type('수정'); await page.keyboard.press('Enter'); await page.keyboard.type('둘째 줄');
+		assert.equal(await page.$eval('.info-pane textarea[aria-label="2행 제/개정 페이지 및 수정 내용"]', e => e.rows), 2, 'Enter는 줄바꿈, 줄 수만큼 높이');
+		assert.ok(await page.evaluate(() => { const cell = l => document.querySelector(`.info-pane [aria-label="${l}"]`).getBoundingClientRect(), mid = r => r.top + r.height / 2;
+			const row = document.querySelector('.info-pane [aria-label="2행 개정번호"]').closest('tr').getBoundingClientRect();
+			return ['2행 개정번호', '2행 제/개정 일자', '2행 제/개정자'].every(l => Math.abs(mid(cell(l)) - mid(row)) < 2); }), '내용이 여러 줄이어도 다른 칸은 세로 가운데');
+		await page.keyboard.press('Tab');
+		assert.equal(await page.evaluate(() => window.sent.findLast(m => m.type === 'editHistory').rows[1].desc), '수정\n둘째 줄', '칸에서 나오면 반영');
+		// 손잡이(⠿)로 2행을 1행 위로 끌면 바로 반영
+		const historyHandle = await page.$eval('.info-pane button[aria-label="2행 이동"]', b => { const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+		const firstRowTop = await page.$eval('.info-pane tbody tr', tr => tr.getBoundingClientRect().top);
+		await page.mouse.move(historyHandle.x, historyHandle.y); await page.mouse.down();
+		await page.mouse.move(historyHandle.x, firstRowTop + 3, { steps: 8 }); await page.mouse.up();
+		assert.deepEqual(await page.evaluate(() => window.sent.findLast(m => m.type === 'editHistory').rows.map(r => r.no)), ['2', '1'], '끌어 순서 바꾸기');
+		assert.equal(await page.$eval('.info-pane textarea[aria-label="1행 제/개정 페이지 및 수정 내용"]', e => e.value), '수정\n둘째 줄', '옮긴 행 내용이 따라감');
+		await page.click('.info-pane input[aria-label="2행 개정번호"]');
+		await page.$$eval('.info-pane button', bs => bs.find(b => b.getAttribute('aria-label') === '이력 삭제').click());
+		assert.deepEqual(await page.evaluate(() => window.sent.findLast(m => m.type === 'editHistory').rows.map(r => r.no)), ['2'], '고른 행 삭제');
+		await page.evaluate(() => window.tab('Design').click());
+		console.log('Info: 화면 정보·개정 이력 passed');
+		// Beta > 사용 테이블: 처음엔 저장 위치 고르기 → 표 입력(CRUD) → 잠깐 뒤 저장, 그림에서 선 잇기·지우기, Delete가 디자인 컴포넌트를 안 지움
+		assert.equal(await page.$eval('.canvas-frame .tab-bar', bar => { const tabs = [...bar.querySelectorAll('button[role="tab"]')]; return tabs.at(-1).textContent; }), 'Beta', 'Beta는 탭 줄 맨 오른쪽');
+		await page.evaluate(() => { window.sent.length = 0; window.tab('Beta').click(); });
+		await page.waitForFunction(() => window.sent.some(m => m.type === 'loadUsedTables'));
+		await page.evaluate(() => window.send({ type: 'usedTables' }));
+		await page.waitForSelector('.used-tables-setup');
+		await page.$$eval('.used-tables-setup button', bs => bs.find(b => b.textContent === '기본 위치 사용').click());
+		assert.deepEqual(await page.evaluate(() => window.sent.findLast(m => m.type === 'chooseTablesFolder')), { type: 'chooseTablesFolder', pick: false });
+		await page.evaluate(() => window.send({ type: 'usedTables', folder: 'C:/x', file: 'C:/x/ui/a.json', data: { tables: [], links: [] } }));
+		await page.waitForSelector('.used-tables-list');
+		const addTable = async (name, crud) => {
+			await page.$$eval('.used-tables-list button', bs => bs.find(b => b.textContent === '테이블 추가').click());
+			const row = await page.$$eval('.used-tables-list tbody tr', trs => trs.length);
+			await page.type(`.used-tables-list input[aria-label="${row}행 테이블"]`, name);
+			for (const label of crud) { await page.click(`.used-tables-list button[aria-label="${row}행 ${label}"]`); }
+		};
+		await addTable('TB_PROGRAM', ['조회', '수정']);
+		await addTable('TB_AUTH', ['조회']);
+		const lastSave = () => page.waitForFunction(() => window.sent.findLast(m => m.type === 'saveUsedTables'), { timeout: 3000 }).then(h => h.jsonValue());
+		await new Promise(r => setTimeout(r, 600));
+		const saved = (await lastSave()).data;
+		assert.deepEqual(saved.tables.map(t => [t.name, t.crud]), [['TB_PROGRAM', ['R', 'U']], ['TB_AUTH', ['R']]], '이름·CRUD 저장');
+		assert.equal(await page.evaluate(() => window.sent.filter(m => m.type === 'saveUsedTables').length), 1, '연달아 고치면 한 번만 저장');
+		await page.waitForFunction(() => document.querySelectorAll('.used-table-node').length === 2);
+		assert.deepEqual(await page.$$eval('.used-table-node', ns => ns.map(n => n.querySelector('.name').textContent + ':' + [...n.querySelectorAll('.crud span')].map(s => s.textContent).join())),
+			['TB_PROGRAM:조회,수정', 'TB_AUTH:조회'], '그림 박스에 이름·CRUD'); await page.screenshot({path:path.join(tmpdir(), 'ws5-beta-tables.png')});
+		// 첫 박스 오른쪽 점 → 둘째 박스 왼쪽 점으로 끌어 잇기
+		const handleAt = (name, side) => page.evaluate((name, side) => { const node = [...document.querySelectorAll('.react-flow__node')].find(n => n.querySelector('.name').textContent === name);
+			const r = node.querySelector(`.react-flow__handle-${side}`).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, name, side);
+		const [p1, p2] = [await handleAt('TB_PROGRAM', 'right'), await handleAt('TB_AUTH', 'left')];
+		await page.mouse.move(p1.x, p1.y); await page.mouse.down();
+		await page.mouse.move(p2.x, p2.y, { steps: 10 }); await page.mouse.up();
+		await page.waitForFunction(() => window.sent.findLast(m => m.type === 'saveUsedTables')?.data.links.length === 1, { timeout: 3000 }).catch(() => assert.fail('선 잇기 저장 안 됨'));
+		// 선은 마주 보는 면에 붙음(왼쪽 박스의 오른쪽 점 ↔ 오른쪽 박스의 왼쪽 점), 첫 점(왼쪽)으로 몰리지 않음
+		const ends = await page.evaluate(() => {
+			const path = document.querySelector('.react-flow__edge-path'), m = path.getScreenCTM(), len = path.getTotalLength();
+			const at = l => { const p = path.getPointAtLength(l); return { x: p.x * m.a + m.e, y: p.y * m.d + m.f }; };
+			const handle = (name, side) => [...document.querySelectorAll('.react-flow__node')].find(n => n.querySelector('.name').textContent === name).querySelector(`.react-flow__handle-${side}`).getBoundingClientRect();
+			const near = (p, r) => Math.abs(p.x - (r.left + r.width / 2)) < 6 && Math.abs(p.y - (r.top + r.height / 2)) < 6;
+			const [s, e] = [at(0), at(len)], a = handle('TB_PROGRAM', 'right'), b = handle('TB_AUTH', 'left');
+			return (near(s, a) && near(e, b)) || (near(s, b) && near(e, a));
+		});
+		assert.ok(ends, '선은 마주 보는 면(오른쪽 ↔ 왼쪽)에 붙음');
+		// 선 고르고 Delete: 선만 지우고, Design에서 고른 컴포넌트 삭제 요청은 안 보냄
+		await page.waitForSelector('.react-flow__edge');
+		await page.$eval('.react-flow__edge', e => e.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+		await page.keyboard.press('Delete');
+		await page.waitForFunction(() => window.sent.findLast(m => m.type === 'saveUsedTables')?.data.links.length === 0, { timeout: 3000 }).catch(() => assert.fail('선 지우기 저장 안 됨'));
+		assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'delete')), false, 'Delete가 디자인 컴포넌트를 안 지움');
+		// 컬럼: 테이블 행을 고르면 아래에서 컬럼 편집, 박스에 컬럼 줄(PK 먼저), PK만 보기
+		const addColumn = async (table, name, pk) => {
+			await page.click(`.used-tables-list input[aria-label="${table}행 테이블"]`);
+			await page.waitForSelector('.used-columns');
+			await page.$$eval('.used-columns button', bs => bs.find(b => b.textContent === '컬럼 추가').click());
+			const n = await page.$$eval('.used-columns tbody tr', trs => trs.length);
+			await page.type(`.used-columns input[aria-label="${n}번 컬럼"]`, name);
+			if (pk) { await page.click(`.used-columns input[aria-label="${n}번 컬럼 PK"]`); }
+		};
+		await addColumn(1, 'PROGRAM_NM', false);
+		await addColumn(1, 'PROGRAM_CD', true);
+		await addColumn(2, 'PROGRAM_CD', true);
+		await page.waitForFunction(() => [...document.querySelectorAll('.used-table-node')].map(n => [...n.querySelectorAll('.col-name')].map(c => c.textContent).join()).join('|') === 'PROGRAM_CD,PROGRAM_NM|PROGRAM_CD', { timeout: 3000 })
+			.catch(async () => assert.fail(`박스 컬럼 줄(PK 먼저): ${await page.$$eval('.used-table-node', ns => ns.map(n => n.textContent))}`));
+		await page.$$eval('.used-table-node .columns-toggle', bs => bs[0].click());
+		await page.waitForFunction(() => document.querySelector('.used-table-node .columns-toggle')?.textContent === '컬럼 1개 더 보기');
+		assert.deepEqual(await page.$eval('.used-table-node', n => [...n.querySelectorAll('.col-name')].map(c => c.textContent)), ['PROGRAM_CD'], 'PK만 보기');
+		assert.equal(await page.waitForFunction(() => window.sent.findLast(m => m.type === 'saveUsedTables')?.data.tables[0].keysOnly === true).then(() => true), true);
+		// CRUD 색: 넷 다 다르게(등록·수정 구분)
+		for (const label of ['등록', '삭제']) { await page.click(`.used-tables-list button[aria-label="1행 ${label}"]`); }
+		const crudColors = await page.$$eval('.used-tables-list tbody tr:first-child .crud-toggles button', bs => bs.map(b => getComputedStyle(b).backgroundColor));
+		assert.equal(new Set(crudColors).size, 4, `등록·조회·수정·삭제 색이 모두 다름: ${crudColors}`);
+		// 전체 화면: 그림이 웹뷰 전체를 덮고 Esc로 돌아옴
+		await page.click('.used-tables-flow .flow-full');
+		assert.ok(await page.evaluate(() => { const r = document.querySelector('.used-tables-flow').getBoundingClientRect(); return r.left === 0 && r.top === 0 && r.width === innerWidth && r.height === innerHeight; }), '전체 화면');
+		await page.keyboard.press('Escape');
+		await page.waitForFunction(() => !document.querySelector('.used-tables-flow.full'));
+		// Beta에 들어가면 우측 패널이 접히고, 나오면 다시 펼침
+		assert.ok(await page.$eval('.right-panel', p => p.getBoundingClientRect().width < 2), 'Beta에서 우측 패널 접힘');
+		await page.evaluate(() => window.tab('Design').click());
+		await page.waitForFunction(() => document.querySelector('.right-panel').getBoundingClientRect().width > 100, { timeout: 3000 }).catch(() => assert.fail('Beta에서 나오면 우측 패널 다시 펼침'));
+		console.log('Beta: 사용 테이블 저장 위치·입력·선 잇기·CRUD 색·전체 화면·우측 패널 passed');
 		// 다단 헤더: 번호 칸(rowSpan 2)에 header 소속, 헤더 row 높이는 가장 높은 row에 맞춤
 		await page.evaluate(() => {
 			const text = '<html xmlns:w2="urn:test"><body><w2:gridView id="grd" rowNumVisible="true" rowStatusVisible="true"><w2:header id="h"><w2:row id="h1"><w2:column id="hc" inputType="checkbox"/></w2:row><w2:row id="h2"><w2:column id="ht" value="zz"/></w2:row></w2:header><w2:gBody id="b"><w2:row id="r"><w2:column id="a"/></w2:row></w2:gBody></w2:gridView></body></html>';
@@ -418,6 +737,22 @@ try {
 		assert.ok(fitAll[2] > 250 && fitAll[1] > 100, `allColumn은 모든 열로 채움 ${fitAll}`);
 		const fitLast = await gridWidths('lastColumn', 800);
 		assert.ok(fitLast[0] === 40 && fitLast[1] === 100 && fitLast[2] > 250, `lastColumn은 마지막 열만 ${fitLast}`);
+		// 속성을 바꿔 문서가 다시 와도 그리드 가로 스크롤 위치 유지(캔버스를 통째로 다시 만들지 않는다)
+		{
+			const sendGrid = (version, value) => page.evaluate(async (version, value) => {
+				const text = `<html xmlns:w2="urn:test"><body><w2:gridView id="grd" style="width:200px"><w2:header id="h"><w2:row id="h1"><w2:column id="c1" width="300" value="${value}"/><w2:column id="c2" width="300" value="B"/></w2:row></w2:header><w2:gBody id="b"><w2:row id="r"><w2:column id="d1"/><w2:column id="d2"/></w2:row></w2:gBody></w2:gridView></body></html>`;
+				const root = window.parseXml(text);
+				root.children[0].children[0].def = 2;
+				window.send({ type: 'document', version, text, root, script: { text: '' } });
+				await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+			}, version, value);
+			const grid = () => 'document.querySelector(".canvas-host").shadowRoot.querySelector(".w2grid")';
+			await sendGrid(93, 'A');
+			await page.evaluate(`${grid()}.scrollLeft = 150`);
+			await sendGrid(94, 'A2');
+			assert.equal(await page.evaluate(`${grid()}.scrollLeft`), 150, '속성 바꾼 뒤 가로 스크롤 유지');
+			console.log('Design: 속성 변경 후 그리드 가로 스크롤 유지 passed');
+		}
 		// 우클릭 Header 추가로 header가 두 줄이 돼도 열 너비는 기존 header 기준 그대로(gBody에 width가 없어도 안 줄어듦), 끌기 손잡이도 그 칸에
 		const multi = await page.evaluate(async () => {
 			const text = '<html xmlns:w2="urn:test"><body><w2:gridView id="grd" style="width:300px" rowNumVisible="true"><w2:header id="h"><w2:row id="h1"><w2:column id="c1" width="100" value="A"/><w2:column id="c2" width="250" value="B"/></w2:row><w2:row id="h2"><w2:column id="x1" width="100"/><w2:column id="x2" width="100"/></w2:row></w2:header><w2:gBody id="b"><w2:row id="r"><w2:column id="d1"/><w2:column id="d2"/></w2:row></w2:gBody></w2:gridView></body></html>';
@@ -637,17 +972,37 @@ try {
 		await page.click('.choices-editor button[aria-label="행 추가"]');
 		await page.type('.choices-editor input[aria-label="2행 Label"]', '퇴직자');
 		await page.type('.choices-editor input[aria-label="2행 Value"]', '2');
+		await page.keyboard.press('Enter');
+		assert.deepEqual(await page.evaluate(() => [document.activeElement?.classList.contains('choices-editor'), document.querySelector('.choices-editor input[aria-label="2행 Value"]').value]), [true, '2'], '선택 항목 팝업도 Enter로 입력칸에서 나옴');
 		await page.evaluate(() => [...document.querySelectorAll('.choices-editor .choices-check')].find(l => l.textContent.includes('All Option')).querySelector('input').click());
 		// 손잡이(⠿)로 2행을 1행 위로 끌어 놓기(DataList와 같은 방식)
-		await page.evaluate(() => {
-			const dt = new DataTransfer(), handle = document.querySelector('.choices-editor button[aria-label="2행 이동"]');
-			const first = document.querySelector('.choices-editor tbody tr'), r = first.getBoundingClientRect();
-			handle.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
-			first.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: r.top + 2 }));
-			first.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: r.top + 2 }));
-			handle.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
-		});
+		const center = sel => page.$eval(sel, el => { const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, top: r.top, bottom: r.bottom, left: r.left }; });
+		const second = await center('.choices-editor button[aria-label="2행 이동"]'), firstRow = await center('.choices-editor tbody tr');
+		await page.mouse.move(second.x, second.y); await page.mouse.down();
+		await page.mouse.move(second.x, firstRow.top + 2, { steps: 8 }); await page.mouse.up();
 		assert.deepEqual(await page.$$eval('.choices-editor tbody input[aria-label$="Label"]', els => els.map(e => e.value)), ['퇴직자', '재직자'], '행 끌어 순서 변경');
+		// 끄는 중에도 휠이 먹고, 표 아래 가장자리에 오면 스크롤. 놓은 뒤에는 안 굴러감
+		const boxSel = await page.evaluate(() => {
+			let box = document.querySelector('.choices-editor tbody');
+			while (box && !/auto|scroll/.test(getComputedStyle(box).overflowY)) { box = box.parentElement; }
+			box.style.maxHeight = '64px'; box.scrollTop = 0; box.dataset.testScroll = '';
+			return '[data-test-scroll]';
+		});
+		const scrollTop = () => page.$eval(boxSel, b => b.scrollTop);
+		const firstHandle = await center('.choices-editor button[aria-label="1행 이동"]'), scrollBox = await center(boxSel);
+		await page.mouse.move(firstHandle.x, firstHandle.y); await page.mouse.down();
+		await page.mouse.wheel({ deltaY: 30 });
+		await page.waitForFunction(sel => document.querySelector(sel).scrollTop > 0, { timeout: 2000 }, boxSel).catch(() => assert.fail('끄는 중 휠 스크롤 안 됨'));
+		await page.$eval(boxSel, b => { b.scrollTop = 0; });
+		await page.mouse.move(firstHandle.x, scrollBox.bottom - 2, { steps: 4 });
+		await page.waitForFunction(sel => document.querySelector(sel).scrollTop > 0, { timeout: 2000 }, boxSel).catch(() => assert.fail('가장자리 자동 스크롤 안 됨'));
+		// 제자리(끈 행 위)에 놓으면 순서 그대로
+		await page.$eval(boxSel, b => { b.style.maxHeight = ''; });
+		await page.mouse.move(firstHandle.x, firstHandle.y, { steps: 2 }); await page.mouse.up();
+		await page.$eval(boxSel, b => { b.style.maxHeight = '64px'; b.scrollTop = 0; });
+		await new Promise(r => setTimeout(r, 100));
+		assert.equal(await scrollTop(), 0, '놓은 뒤에는 안 굴러감');
+		await page.$eval(boxSel, b => { b.style.maxHeight = ''; delete b.dataset.testScroll; });
 		await page.screenshot({path:path.join(tmpdir(), 'ws5-choices-selectbox.png')});
 		await page.click('.choices-editor .btn-primary');
 		await page.waitForFunction(() => window.sent.some(m => m.type === 'editChoices'));
@@ -668,6 +1023,11 @@ try {
 		await page.$eval('#choices-nodeset', el => el.select());
 		await page.type('#choices-nodeset', 'data:dlt_');
 		await page.waitForSelector('.combo-list li');
+		// 목록이 열린 채 Esc: 목록만 닫고 팝업은 그대로
+		await page.keyboard.press('Escape');
+		assert.deepEqual(await page.evaluate(() => [!!document.querySelector('.combo-list'), !!document.querySelector('.choices-editor[open]')]), [false, true], 'Esc는 목록만 닫음');
+		await page.keyboard.press('ArrowDown');
+		await page.waitForSelector('.combo-list li');
 		await pick('data:dlt_code');
 		await page.type('#choices-label', 'name');
 		await page.focus('#choices-value');
@@ -682,8 +1042,8 @@ try {
 		await page.waitForFunction(() => window.sent.some(m => m.type === 'editChoices'));
 		assert.deepEqual(await page.evaluate(() => window.sent.find(m => m.type === 'editChoices').fields),
 			{ items: [], itemset: { nodeset: 'data:dlt_code', label: 'name', value: 'code' }, attrs: { ref: null, cols: null, rows: '3' } }, '지울 속성은 null(JSON 메시지에서 undefined는 사라짐)');
-		await page.evaluate(() => window.send({ type: 'popupAck', popup: window.sent.findLast(m => m.type === 'editChoices').popup, ok: false, error: '문서가 바뀌었어. 팝업을 다시 열어 줘.' }));
-		await page.waitForFunction(() => document.querySelector('.choices-editor .error')?.textContent.includes('문서가 바뀌었어'));
+		await page.evaluate(() => window.send({ type: 'popupAck', popup: window.sent.findLast(m => m.type === 'editChoices').popup, ok: false, error: '문서가 바뀌었습니다. 팝업을 다시 열어 주세요.' }));
+		await page.waitForFunction(() => document.querySelector('.choices-editor .error')?.textContent.includes('문서가 바뀌었습니다'));
 		await page.$eval('.choices-editor .popup-close', b => b.click());
 		await page.waitForFunction(() => !document.querySelector('.choices-editor'));
 		// Outline: 이름은 정의의 display(태그는 툴팁), 더블클릭하면 캔버스와 같은 팝업
@@ -1007,17 +1367,18 @@ try {
 	await page.keyboard.press('Escape');
 	await page.waitForFunction(() => !document.querySelector('.help'));
 	console.log('Property: Key 도움말 자리 passed');
-	// Style 칸: Enter는 줄바꿈(반영 안 함), Ctrl+Enter로 반영
+	// Style 칸: Shift+Enter는 줄바꿈(반영 안 함), Enter로 반영하고 입력칸에서 나옴
 	await page.click('.style-area .style-value');
 	await page.keyboard.type('width:1px;');
-	await page.keyboard.press('Enter');
+	await page.keyboard.down('Shift'); await page.keyboard.press('Enter'); await page.keyboard.up('Shift');
 	await page.keyboard.type('height:2px;');
 	assert.equal(await page.$eval('.style-area textarea', el => el.value), 'width:1px;\nheight:2px;');
-	assert.ok(!await page.evaluate(() => window.sent.some(m => m.name === 'style')), 'Enter로는 반영 안 함');
-	await page.keyboard.down('Control'); await page.keyboard.press('Enter'); await page.keyboard.up('Control');
+	assert.ok(!await page.evaluate(() => window.sent.some(m => m.name === 'style')), 'Shift+Enter로는 반영 안 함');
+	await page.keyboard.press('Enter');
 	await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr' && m.name === 'style' && m.value === 'width:1px;\nheight:2px;'));
-	assert.equal(await page.$('.style-area textarea'), null, 'Ctrl+Enter로 닫힘');
-	console.log('Style: Enter 줄바꿈·Ctrl+Enter 반영 passed');
+	assert.equal(await page.$('.style-area textarea'), null, 'Enter로 닫힘');
+	assert.ok(!await page.evaluate(() => document.activeElement?.closest('.style-area')?.matches('textarea')), '입력칸에서 나옴');
+	console.log('Style: Shift+Enter 줄바꿈·Enter 반영 passed');
 	// Property 표 Key 열 너비: 머리 칸 손잡이를 끌면 바뀌고 Event 탭에도 유지된다
 	await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('input[data-wse]'));
 	await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('input[data-wse]').click());
@@ -1069,6 +1430,14 @@ try {
 		await page.waitForFunction(() => window.editor().state.doc.toString() === 'formatted();');
 		await modifiedKey('Control', 'z');
 		assert.equal(await content(), 'messy ( )', `${tab}: 포맷 되돌리기`);
+		// 다시 하기: Ctrl+Y와 Ctrl+Shift+Z 둘 다(VS Code처럼)
+		await modifiedKey('Control', 'y');
+		assert.equal(await content(), 'formatted();', `${tab}: Ctrl+Y 다시 하기`);
+		await modifiedKey('Control', 'z');
+		// 실제 브라우저처럼 Shift면 key 'Z'(puppeteer는 'z'로 보낸다)
+		await page.keyboard.down('Control'); await page.keyboard.down('Shift'); await page.keyboard.press('Z'); await page.keyboard.up('Shift'); await page.keyboard.up('Control');
+		assert.equal(await content(), 'formatted();', `${tab}: Ctrl+Shift+Z 다시 하기`);
+		await modifiedKey('Control', 'z');
 		// 포맷해도 커서는 같은 글자 자리에 남는다(바뀐 범위 전체를 한 번에 바꾸면 그 시작으로 튄다)
 		const messy = 'f(){\nvar a=1;\nvar target=2;\nvar b=3;\n}', tidy = 'f() {\n    var a = 1;\n    var target = 2;\n    var b = 3;\n}';
 		await reset(messy);
@@ -1159,7 +1528,7 @@ try {
 	}
 
 	// 연결 탭(Controller·Service·Mapper·Mybatis): 경로 입력 → 편집기, 파일별 저장·Undo, 우클릭 메뉴, 탭 끌어 순서 바꾸기
-	const tabNames = () => page.$$eval('.canvas-frame .tab-bar button[role="tab"]', bs => bs.map(b => b.textContent));
+	const tabNames = () => page.$$eval('.canvas-frame .tab-bar button[role="tab"]:not(.tab-pinned)', bs => bs.map(b => b.textContent));
 	// 탭을 끌어 놓은 직후 잠깐은 dnd-kit이 클릭을 막는다 → 선택될 때까지 다시 누른다
 	const clickTab = name => page.waitForFunction(name => {
 		const button = window.tab(name);
@@ -1168,7 +1537,7 @@ try {
 	}, { polling: 50, timeout: 5000 }, name);
 	const tabButton = name => page.evaluateHandle(name => window.tab(name), name);
 	const lastSent = type => page.evaluate(type => window.sent.findLast(m => m.type === type), type);
-	assert.deepEqual(await tabNames(), ['Design', 'Script', 'Source', 'Controller', 'Service', 'Mapper', 'Mybatis']);
+	assert.deepEqual(await tabNames(), ['Design', 'Info', 'Script', 'Source', 'Controller', 'Service', 'Mapper', 'Mybatis']);
 	await page.evaluate(() => ['controller', 'service', 'mapper', 'mybatis'].forEach(kind => window.send({ type: 'linked', kind })));
 	await clickTab('Controller');
 	await page.waitForSelector('.tab-body:not([hidden]) .link-picker input');
@@ -1295,6 +1664,7 @@ try {
 	// 목록은 풀지 않고 바로, 자동 import는 항목을 푼 결과(늦게 옴): 먼저 고르면 넣고, 오면 그때 import
 	await page.evaluate(() => {
 		window.remoteItems = msg => ({ from: { line: msg.line, ch: msg.ch - 3 }, items: [{ label: 'BigDecimal', type: 'class', insert: 'BigDecimal', sort: 'a' }] });
+		window.pendingDetails = [];
 		window.remoteDetails = () => [{ label: 'BigDecimal', info: 'Immutable decimal', edits: [{ fromLine: 0, fromCh: 0, toLine: 0, toCh: 0, insert: 'import java.math.BigDecimal;\n' }] }];
 	});
 	await reset(javaText); await page.keyboard.type('Big', {delay: 25});
@@ -1302,6 +1672,7 @@ try {
 	await new Promise(resolve => setTimeout(resolve, 100));
 	await page.keyboard.press('Enter');
 	assert.equal(await content(), javaText + 'BigDecimal', '고르면 바로 넣음(푼 결과 전)');
+	await page.evaluate(() => { window.pendingDetails.forEach(reply => reply()); window.pendingDetails = undefined; });
 	await page.waitForFunction(text => window.editor().state.doc.toString() === text, {timeout: 3000}, 'import java.math.BigDecimal;\n' + javaText + 'BigDecimal').catch(() => assert.fail('늦게 온 자동 import'));
 	await page.evaluate(() => { window.remoteDetails = undefined; });
 	// 설명은 마크다운으로(언어 서버 MarkdownString): 굵게·인라인 코드·코드 블록·목록·이스케이프, HTML은 글자로
@@ -1590,7 +1961,7 @@ try {
 	await complete('<in', 'include', 'select id from');
 	// 방언: rownum은 Oracle에만
 	assert.equal(await page.evaluate(() => [...document.querySelectorAll('.cm-completionLabel')].some(e => e.textContent === 'rownum')), false);
-	await page.evaluate(() => window.send({ type: 'codeOptions', wordWrap: false, sqlDialect: 'oracle' }));
+	await page.evaluate(() => window.send({ type: 'codeOptions', wordWrap: false, sqlDialect: 'oracle', fontFeatures: '"liga" off, "calt" off' }));
 	await new Promise(resolve => setTimeout(resolve, 200));
 	await complete('rown', 'rownum', 'select id from');
 	await linkAs('res/q.sql', 'select * from t', 531);
@@ -1598,18 +1969,18 @@ try {
 	await reset('sel'); await page.keyboard.type('e', {delay: 25});
 	await page.waitForFunction(() => [...document.querySelectorAll('.cm-completionLabel')].some(e => e.textContent.toLowerCase() === 'select'), {timeout: 6000}).catch(() => assert.fail('.sql 키워드 자동완성'));
 	await page.keyboard.press('Escape');
-	await page.evaluate(() => window.send({ type: 'codeOptions', wordWrap: false, sqlDialect: 'standard' }));
+	await page.evaluate(() => window.send({ type: 'codeOptions', wordWrap: false, sqlDialect: 'standard', fontFeatures: '"liga" off, "calt" off' }));
 	console.log('SQL: 매퍼 XML 안·CDATA·.sql 색, 키워드 자동완성, 태그 자동완성 공존, 방언 변경 passed');
 	// 줄바꿈: VS Code editor.wordWrap을 따라 모든 코드 편집기에 적용·해제(긴 줄이 여러 줄로)
 	const wrapped = () => page.evaluate(() => { const v = window.editor(); const line = v.dom.querySelector('.cm-line'); return { on: v.contentDOM.classList.contains('cm-lineWrapping'), tall: line.getBoundingClientRect().height > parseFloat(getComputedStyle(line).lineHeight) * 1.5 }; });
 	await reset('x'.repeat(400) + ' ' + 'word '.repeat(80));
 	assert.deepEqual(await wrapped(), { on: false, tall: false }, '기본: 줄바꿈 없음');
-	await page.evaluate(() => window.send({ type: 'codeOptions', wordWrap: true, sqlDialect: 'standard' }));
+	await page.evaluate(() => window.send({ type: 'codeOptions', wordWrap: true, sqlDialect: 'standard', fontFeatures: '"liga" off, "calt" off' }));
 	await page.waitForFunction(() => window.editor().contentDOM.classList.contains('cm-lineWrapping'));
 	assert.deepEqual(await wrapped(), { on: true, tall: true }, '줄바꿈 켜면 긴 줄이 여러 줄');
 	await clickTab('Script');
 	assert.equal((await wrapped()).on, true, 'Script 편집기도 같은 설정');
-	await page.evaluate(() => window.send({ type: 'codeOptions', wordWrap: false, sqlDialect: 'standard' }));
+	await page.evaluate(() => window.send({ type: 'codeOptions', wordWrap: false, sqlDialect: 'standard', fontFeatures: '"liga" off, "calt" off' }));
 	await page.waitForFunction(() => !window.editor().contentDOM.classList.contains('cm-lineWrapping'));
 	await clickTab('Service');
 	console.log('줄바꿈: editor.wordWrap 따라가기(Service·Script) passed');
@@ -1625,10 +1996,10 @@ try {
 	};
 	await dragTab('Mybatis', 'Design', false);
 	await page.waitForFunction(() => document.querySelector('.canvas-frame .tab-bar button[role="tab"]')?.textContent === 'Mybatis');
-	assert.deepEqual(await tabNames(), ['Mybatis', 'Design', 'Script', 'Source', 'Controller', 'Service', 'Mapper']);
+	assert.deepEqual(await tabNames(), ['Mybatis', 'Design', 'Info', 'Script', 'Source', 'Controller', 'Service', 'Mapper']);
 	assert.deepEqual((await lastSent('setTabOrder')).order, await tabNames());
 	await dragTab('Design', 'Source', true);
-	assert.deepEqual(await tabNames(), ['Mybatis', 'Script', 'Source', 'Design', 'Controller', 'Service', 'Mapper']);
+	assert.deepEqual(await tabNames(), ['Mybatis', 'Info', 'Script', 'Source', 'Design', 'Controller', 'Service', 'Mapper']);
 	// 다른 화면에서 바꾼 순서(확장이 보냄)
 	await page.evaluate(() => window.send({ type: 'tabOrder', order: ['Design', 'Script', 'Source', 'Controller', 'Service', 'Mapper', 'Mybatis'] }));
 	await page.waitForFunction(() => document.querySelector('.canvas-frame .tab-bar button[role="tab"]')?.textContent === 'Design');
@@ -1727,6 +2098,17 @@ try {
 	const tokenColor = await page.evaluate(() => getComputedStyle([...document.querySelectorAll('.tab-body:not([hidden]) .cm-line span')].find(s => s.textContent === 'target')).color);
 	await modifiedKey('Control', 'f');
 	await page.waitForSelector('.tab-body:not([hidden]) .cm-search .cm-textfield');
+	// 검색창 입력·버튼·라벨은 VS Code 편집기 글꼴
+	assert.deepEqual(await page.evaluate(() => {
+		document.body.style.setProperty('--vscode-editor-font-family', '"Test Mono", monospace');
+		const fonts = [...new Set([...document.querySelectorAll('.tab-body:not([hidden]) .cm-search :is(.cm-textfield, .cm-button, label)')].map(e => getComputedStyle(e).fontFamily))];
+		document.body.style.removeProperty('--vscode-editor-font-family');
+		return fonts;
+	}), ['"Test Mono", monospace'], '검색창 글꼴');
+	assert.deepEqual(await page.$eval('.tab-body:not([hidden]) .cm-search [name=close]', b => {
+		const box = b.getBoundingClientRect(), icon = getComputedStyle(b, '::before');
+		return [box.width, box.height, icon.fontFamily, icon.content];
+	}), [24, 24, 'codicon', '""'], '검색창 닫기: codicon close 24px');
 	await page.keyboard.type('target'); await page.keyboard.press('Enter');
 	await page.waitForSelector('.tab-body:not([hidden]) .cm-searchMatch-selected', {timeout: 3000}).catch(() => assert.fail('찾기: 지금 일치 표시'));
 	const found = await page.evaluate(() => {
@@ -2011,6 +2393,29 @@ try {
 	// 끌지 않은 클릭은 그 칸 하나만
 	await (await (await cell('c2')).asElement()).click();
 	await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-frame.selected').length === 1, { timeout: 3000 });
+	// 가로 스크롤 그리드: 오른쪽 가장자리 밖으로 끌고 있으면 굴러가며 가려진 칸까지 고름
+	const edge = await page.evaluate(i => {
+		const c1 = document.querySelector('.canvas-host').shadowRoot.querySelector(`[data-wse="${i}"]`);
+		let grid = c1.parentElement;
+		while (grid && getComputedStyle(grid).overflowX !== 'auto') { grid = grid.parentElement; }
+		const g = grid.getBoundingClientRect(), c = c1.getBoundingClientRect();
+		grid.dataset.testWidth = grid.style.width;
+		grid.style.width = `${c.right - g.left + 4}px`;
+		const r = grid.getBoundingClientRect();
+		return { x: r.right + 30, y: c.top + c.height / 2, overflow: grid.scrollWidth > grid.clientWidth };
+	}, mergeDoc.c1);
+	assert.ok(edge.overflow, '테스트 그리드에 가로 스크롤');
+	await page.mouse.move(from.x, from.y); await page.mouse.down();
+	await page.mouse.move(edge.x, edge.y, { steps: 8 });
+	await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-frame.selected').length === 3, { timeout: 3000 })
+		.catch(async () => assert.fail(`가장자리 밖으로 끌어 고른 칸 수: ${await picked()}`));
+	await page.mouse.up();
+	await page.evaluate(i => {
+		let grid = document.querySelector('.canvas-host').shadowRoot.querySelector(`[data-wse="${i}"]`).parentElement;
+		while (grid && getComputedStyle(grid).overflowX !== 'auto') { grid = grid.parentElement; }
+		grid.style.width = grid.dataset.testWidth; grid.scrollLeft = 0;
+	}, mergeDoc.c1);
+	console.log('Design: 가로 스크롤 그리드 끌기 → 자동 스크롤·가려진 칸 고르기 passed');
 	// 손잡이를 누르면 그리드 선택, 그리드를 고른 상태에서도 칸 끌기는 범위 고르기(그리드 이동 아님)
 	await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-grid-handle').click());
 	await page.waitForFunction(() => /gridView|grd/.test(document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-chip')?.textContent ?? ''), { timeout: 3000 })
@@ -2354,9 +2759,9 @@ try {
 	await page.evaluate(() => { window.sent.length = 0; });
 	const selectHandle = await page.$('.palette-favorites .palette-row:has([data-component="selectbox"]) .palette-drag-handle');
 	const radioRow = await page.$('.palette-favorites .palette-row:has([data-component="radio"])');
-	await page.setDragInterception(true);
-	await selectHandle.dragAndDrop(radioRow);
-	await page.setDragInterception(false);
+	const [handleBox, radioBox] = [await selectHandle.boundingBox(), await radioRow.boundingBox()];
+	await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2); await page.mouse.down();
+	await page.mouse.move(handleBox.x + handleBox.width / 2, radioBox.y + 2, { steps: 8 }); await page.mouse.up();
 	await page.waitForFunction(() => window.sent.some(m => m.type === 'reorderPaletteFavorites'));
 	assert.deepEqual(await favoriteOrder(), ['selectbox', 'radio'], '손잡이 실제 드래그로 앞으로 이동');
 	const reordered = await page.evaluate(() => window.sent.find(m => m.type === 'reorderPaletteFavorites').keys);
@@ -2407,6 +2812,62 @@ try {
 
 	if (process.env.PALETTE_SCREENSHOT) { await page.screenshot({ path: process.env.PALETTE_SCREENSHOT }); }
 	console.log('Palette: 묶음·아이콘·검색·선택 기준 클릭·드롭 위치·실제 마우스 드롭·고정 버튼 passed');
+
+	// Script에서 Ctrl+X: 잘린 줄의 DOM이 다시 그려져 cut 이벤트 대상이 문서에서 떨어져도, 고른 컴포넌트를 잘라 내지 않는다(XML이 클립보드로 가던 버그)
+	{
+		await page.evaluate(() => window.tab('Outline', '.pane').click());
+		await page.waitForSelector('.pane .tree-row[role="button"] .codicon-edit');
+		await page.evaluate(() => document.querySelector('.pane .tree-row[role="button"] .codicon-edit').closest('.tree-row').click());
+		await clickTab('Script');
+		await page.waitForFunction(() => window.editor()?.state.doc.line(1).length > 0);
+		const line = await page.evaluate(() => { const v = window.editor(); v.dispatch({ selection: { anchor: 0, head: v.state.doc.line(1).to } }); v.focus(); window.sent.length = 0; return v.state.doc.line(1).text; });
+		const cut = await page.evaluate(() => {
+			const data = new DataTransfer();
+			const target = window.getSelection().anchorNode.parentElement;
+			target.dispatchEvent(new ClipboardEvent('cut', { bubbles: true, cancelable: true, clipboardData: data }));
+			return { text: data.getData('text/plain'), nodes: data.getData('application/x-websquare5-nodes'), sent: window.sent.map(m => m.type) };
+		});
+		assert.equal(cut.text, line, `잘라 낸 코드가 클립보드에: ${cut.text}`);
+		assert.equal(cut.nodes, '', '컴포넌트 XML은 클립보드에 넣지 않는다');
+		assert.ok(!cut.sent.includes('delete'), `컴포넌트를 지우지 않는다: ${cut.sent}`);
+		console.log('Script: Ctrl+X는 코드만 잘라 냄(컴포넌트 잘라 내기 아님) passed');
+	}
+
+	// 코드 편집기 합자는 VS Code editor.fontLigatures를 따른다(기본 끔)
+	{
+		const features = () => page.evaluate(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).fontFeatureSettings);
+		assert.equal(await features(), '"calt" 0, "liga" 0', '기본은 합자 끔');
+		await page.evaluate(() => window.send({ type: 'codeOptions', wordWrap: false, sqlDialect: 'standard', fontFeatures: '"liga" on, "calt" on' }));
+		await page.waitForFunction(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).fontFeatureSettings === '"calt", "liga"', {timeout: 3000});
+		await page.evaluate(() => window.send({ type: 'codeOptions', wordWrap: false, sqlDialect: 'standard', fontFeatures: '"liga" off, "calt" off' }));
+		console.log('Script: 합자는 editor.fontLigatures를 따름 passed');
+	}
+
+	// Event 코드 버튼: Script가 CRLF여도(Windows) 핸들러 이름을 정확히 고른다(편집기는 줄바꿈을 \n으로 바꿔 위치가 줄 수만큼 밀렸다)
+	{
+		await page.evaluate(() => {
+			const text = '<html xmlns:w2="urn:test"><body><w2:input id="ipt_crlf" ev:onclick="scwin.ipt_crlf_onclick"/></body></html>';
+			const root = window.parseXml(text);
+			root.children[0].children[0].def = 0;
+			window.send({ type: 'document', version: 990, text, root, script: { text: 'var a = 1;\r\nvar b = 2;\r\nvar c = 3;\r\n\r\nscwin.ipt_crlf_onclick = function(e) {\r\n};\r\n' } });
+		});
+		// 앞 테스트가 남긴 충돌 상태면 다시 불러온다
+		await clickTab('Script');
+		await page.evaluate(() => document.querySelector('.tab-body:not([hidden]) .code-banner button')?.click());
+		await page.waitForFunction(() => window.editor()?.state.doc.toString().includes('ipt_crlf'));
+		await page.evaluate(() => { const v = window.editor(); v.dispatch({ selection: { anchor: 0 } }); });
+		await clickTab('Design');
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('#ipt_crlf'));
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('#ipt_crlf').click());
+		await page.evaluate(() => window.tab('Event', '.pane').click());
+		await page.waitForSelector('.kv .script-btn');
+		await page.click('.kv .script-btn');
+		await page.waitForFunction(() => window.tab('Script').getAttribute('aria-selected') === 'true');
+		await page.waitForFunction(() => { const s = window.editor()?.state; return s && !s.selection.main.empty; }, {timeout: 3000}).catch(() => {});
+		const picked = await page.evaluate(() => { const s = window.editor().state, r = s.selection.main; return s.sliceDoc(r.from, r.to); });
+		assert.equal(picked, 'scwin.ipt_crlf_onclick', 'CRLF Script에서도 핸들러 이름 선택');
+		console.log('Event: 코드 버튼 → CRLF Script에서도 핸들러 자리 passed');
+	}
 
 	assert.deepEqual(errors, []);
 } finally {

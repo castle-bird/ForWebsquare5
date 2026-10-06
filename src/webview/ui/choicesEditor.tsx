@@ -67,8 +67,8 @@ export function ChoicesEditor({ node, kind, sources, externalError, offsetIndex 
 	const fieldsOf = (nodeset: string) => sources.find(s => s.nodeset === nodeset)?.fields ?? [];
 
 	const apply = () => {
-		if (bind && !itemset.nodeset) { setError('바인딩할 NodeSet을 골라 줘.'); return; }
-		if (spread && direction !== 'none' && !/^[1-9]\d*$/.test(count)) { setError('Span Count는 1 이상의 정수로 적어 줘.'); return; }
+		if (bind && !itemset.nodeset) { setError('바인딩할 NodeSet을 골라 주세요.'); return; }
+		if (spread && direction !== 'none' && !/^[1-9]\d*$/.test(count)) { setError('Span Count는 1 이상의 정수로 적어 주세요.'); return; }
 		setError('');
 		const orEmpty = (name: string, value: string) => value || (node.attrs[name] === '' ? '' : null);
 		const attrs: Record<string, string | null> = { ref: orEmpty('ref', ref) };
@@ -112,10 +112,10 @@ export function ChoicesEditor({ node, kind, sources, externalError, offsetIndex 
 								<td><button type="button" className="data-row-handle" disabled={bind} title="끌어서 행 이동" aria-label={`${i + 1}행 이동`} {...bind ? {} : handleProps(r.uid)}>⠿ {i + 1}</button></td>
 								<td><input type="checkbox" aria-label={`${i + 1}행 선택`} disabled={bind} checked={r.checked} onChange={e => update(r.uid, { checked: e.target.checked })} /></td>
 								<td><input aria-label={`${i + 1}행 Label`} disabled={bind} value={r.label} placeholder={params ? 'name' : '항목 이름'} onChange={e => update(r.uid, { label: e.target.value })} /></td>
-								<td><input className="mono" aria-label={`${i + 1}행 Value`} disabled={bind} value={r.value} placeholder="값" onChange={e => update(r.uid, { value: e.target.value })} /></td>
+								<td><input aria-label={`${i + 1}행 Value`} disabled={bind} value={r.value} placeholder="값" onChange={e => update(r.uid, { value: e.target.value })} /></td>
 							</tr>)}</tbody>
 						</table>
-						{!rows.length && <p className="table-empty">{bind ? '데이터에서 가져온 항목을 써.' : params ? '파라미터가 없어. 항목 추가로 넣어.' : '항목이 없어. 항목 추가로 넣거나 아래에서 데이터에서 가져오기를 켜.'}</p>}
+						{!rows.length && <p className="table-empty">{bind ? '데이터에서 가져온 항목을 씁니다.' : params ? '파라미터가 없습니다. 항목 추가로 넣어 주세요.' : '항목이 없습니다. 항목 추가로 넣거나 아래에서 데이터에서 가져오기를 켜 주세요.'}</p>}
 					</div>
 				</div>
 			</section>
@@ -128,14 +128,14 @@ export function ChoicesEditor({ node, kind, sources, externalError, offsetIndex 
 				<div className="form-grid itemset" aria-disabled={!bind || undefined}>
 					<label className="field"><span>NodeSet</span>
 						{/* 화면에서 만드는 dataList처럼 목록에 없는 것도 바인딩하게 직접 입력도 받는다. 목록에서 다른 걸 고르면 Label·Value 비움 */}
-						<ComboInput id="choices-nodeset" className="mono" disabled={!bind} value={itemset.nodeset} options={sources.map(s => s.nodeset)}
+						<ComboInput id="choices-nodeset" disabled={!bind} value={itemset.nodeset} options={sources.map(s => s.nodeset)}
 							onValue={nodeset => setItemset({ ...itemset, nodeset })}
 							onPick={nodeset => setItemset(nodeset === itemset.nodeset ? itemset : { nodeset, label: '', value: '' })} /></label>
 					<label className="field"><span>Label</span>
-						<ComboInput id="choices-label" className="mono" disabled={!bind} value={itemset.label} options={fieldsOf(itemset.nodeset)}
+						<ComboInput id="choices-label" disabled={!bind} value={itemset.label} options={fieldsOf(itemset.nodeset)}
 							onValue={label => setItemset({ ...itemset, label })} onPick={label => setItemset({ ...itemset, label })} /></label>
 					<label className="field"><span>Value</span>
-						<ComboInput id="choices-value" className="mono" disabled={!bind} value={itemset.value} options={fieldsOf(itemset.nodeset)}
+						<ComboInput id="choices-value" disabled={!bind} value={itemset.value} options={fieldsOf(itemset.nodeset)}
 							onValue={value => setItemset({ ...itemset, value })} onPick={value => setItemset({ ...itemset, value })} /></label>
 				</div>
 			</section>
@@ -143,7 +143,7 @@ export function ChoicesEditor({ node, kind, sources, externalError, offsetIndex 
 				<h3>{options || spread ? '값 연결 · 옵션' : '값 연결'}</h3>
 				<div className="form-grid">
 					<label className="field wide"><span>ref (고른 값을 넣을 곳)</span>
-						<input id="choices-ref" className="mono" value={ref} placeholder="data:dataMap1.key" onChange={e => setRef(e.target.value)} /></label>
+						<input id="choices-ref" value={ref} placeholder="data:dataMap1.key" onChange={e => setRef(e.target.value)} /></label>
 					{spread
 						? <>
 							<div className="field"><span>Span Direction</span>

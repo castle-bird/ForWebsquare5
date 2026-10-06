@@ -133,8 +133,8 @@ function ColorRow({ name, label, value, fallback, onColor, font, fontChanged, on
 			{/* 색상 선택기는 반투명을 못 고른다: 고르면 #rrggbb, 반투명은 옆 칸에 #rrggbbaa로 */}
 			<input type="color" aria-label={`${label} 색 고르기`} value={(shown ?? '#000000').slice(0, 7)} onChange={e => onColor(e.target.value)} />
 		</label>
-		<input className="theme-hex mono" aria-label={`${label} 색 코드`} data-name={name} value={text} placeholder="테마 기본" spellCheck={false}
-			onChange={e => setText(e.target.value)} onBlur={e => commit(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { commit(e.currentTarget.value); } }} />
+		<input className="theme-hex" aria-label={`${label} 색 코드`} data-name={name} value={text} placeholder="테마 기본" spellCheck={false}
+			onChange={e => setText(e.target.value)} onBlur={e => commit(e.target.value)} />
 		{onFont ? <span className="theme-font" role="group" aria-label={`${label} 글꼴 모양`}>
 			{FONTS.map(([style, mark]) => {
 				const on = font?.split(/\s+/).includes(style) ?? false;

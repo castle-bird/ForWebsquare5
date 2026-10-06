@@ -1,0 +1,40 @@
+{
+	// One Dark 느낌의 코드 편집기 테마(Atom One Dark 색 팔레트를 참고해 직접 작성한 값, Atom·One Dark Pro 파일 아님).
+	// media/themes의 VS Code 테마 .json은 테마 목록에 기본으로 나온다
+	"name": "One Dark",
+	"type": "dark",
+	"colors": {
+		"editor.background": "#282C34",
+		"editor.foreground": "#ABB2BF",
+		"editorCursor.foreground": "#528BFF",
+		"editor.selectionBackground": "#3E4451",
+		"editor.lineHighlightBackground": "#2C313C",
+		"editorGutter.background": "#282C34",
+		"editorLineNumber.foreground": "#4B5263",
+		"editorLineNumber.activeForeground": "#ABB2BF",
+		"editorIndentGuide.background1": "#3B4048",
+		"editorIndentGuide.activeBackground1": "#5C6370",
+		"editorWhitespace.foreground": "#3B4048"
+	},
+	"tokenColors": [
+		{ "settings": { "foreground": "#ABB2BF", "background": "#282C34" } },
+		{ "name": "주석", "scope": ["comment", "punctuation.definition.comment"], "settings": { "foreground": "#5C6370", "fontStyle": "italic" } },
+		{ "name": "문서 주석", "scope": "comment.block.documentation", "settings": { "foreground": "#5C6370", "fontStyle": "italic" } },
+		{ "name": "문자열", "scope": ["string", "string.quoted"], "settings": { "foreground": "#98C379" } },
+		{ "name": "문자열 이스케이프", "scope": "constant.character.escape", "settings": { "foreground": "#56B6C2" } },
+		{ "name": "숫자", "scope": "constant.numeric", "settings": { "foreground": "#D19A66" } },
+		{ "name": "true·false·null", "scope": "constant.language", "settings": { "foreground": "#D19A66" } },
+		{ "name": "키워드", "scope": ["keyword", "keyword.control"], "settings": { "foreground": "#C678DD" } },
+		{ "name": "수식어·선언", "scope": ["storage", "storage.type", "storage.modifier"], "settings": { "foreground": "#C678DD" } },
+		{ "name": "연산자", "scope": "keyword.operator", "settings": { "foreground": "#56B6C2" } },
+		{ "name": "타입·클래스", "scope": ["entity.name.type", "entity.name.class", "support.type", "support.class"], "settings": { "foreground": "#E5C07B" } },
+		{ "name": "함수·메서드 선언", "scope": ["entity.name.function", "support.function"], "settings": { "foreground": "#61AFEF" } },
+		{ "name": "변수", "scope": ["variable", "variable.other"], "settings": { "foreground": "#E06C75" } },
+		{ "name": "필드·속성", "scope": ["variable.other.property", "variable.other.object.property", "support.type.property-name"], "settings": { "foreground": "#E06C75" } },
+		{ "name": "상수 필드", "scope": "variable.other.constant", "settings": { "foreground": "#D19A66" } },
+		{ "name": "어노테이션", "scope": ["storage.type.annotation", "meta.annotation", "punctuation.definition.annotation"], "settings": { "foreground": "#E5C07B" } },
+		{ "name": "XML·HTML 태그", "scope": ["entity.name.tag", "punctuation.definition.tag"], "settings": { "foreground": "#E06C75" } },
+		{ "name": "XML·HTML 속성", "scope": "entity.other.attribute-name", "settings": { "foreground": "#D19A66" } },
+		{ "name": "XML CDATA·엔티티", "scope": ["string.unquoted.cdata", "constant.character.entity"], "settings": { "foreground": "#98C379" } }
+	]
+}

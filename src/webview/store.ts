@@ -155,7 +155,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 			const { type: _type, ...theme } = data;
 			set({ codeTheme: theme });
 		} else if (data.type === 'codeOptions') {
-			set({ codeOptions: { wordWrap: data.wordWrap, sqlDialect: data.sqlDialect } });
+			set({ codeOptions: { wordWrap: data.wordWrap, sqlDialect: data.sqlDialect, fontFeatures: data.fontFeatures } });
 		} else if (data.type === 'paletteFavorites') {
 			set({ paletteFavorites: data.keys });
 		} else if (data.type === 'tabOrder') {
@@ -225,7 +225,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 			return false;
 		}
 		if (nodes.some(isStructure)) {
-			post({ type: 'warn', message: '화면 구조(xf:model 등)는 복사할 수 없습니다. 안의 submission·dataMap·컴포넌트를 골라 복사해 줘.' });
+			post({ type: 'warn', message: '화면 구조(xf:model 등)는 복사할 수 없습니다. 안의 submission·dataMap·컴포넌트를 골라 복사해 주세요.' });
 			return false;
 		}
 		const copied = nodes.map(node => (leadOf(doc.text, node.start) ?? '') + doc.text.slice(node.start, node.end));

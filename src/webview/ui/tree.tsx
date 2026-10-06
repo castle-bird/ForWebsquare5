@@ -205,7 +205,7 @@ export function useTreeRename(root: XmlNode | undefined, selected: number | unde
 		index,
 		commit: (n, id) => {
 			if (!VALID_ID.test(id)) {
-				post({ type: 'warn', message: `ID 형식이 아니야: ${id || '(비어 있음)'}` });
+				post({ type: 'warn', message: `ID 형식이 아닙니다: ${id || '(비어 있음)'}` });
 			} else if (root && findNode(root, c => c !== n && c.attrs.id === id)) {
 				post({ type: 'warn', message: `이미 있는 ID야: ${id}` });
 			} else {

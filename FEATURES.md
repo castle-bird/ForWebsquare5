@@ -1,0 +1,84 @@
+# 기능 설명
+
+[README](README.md)에 요약한 기능을 자세히 적은 문서입니다.
+
+## 화면 디자이너
+
+`*.xml`을 열면 WebSquare 화면은 디자이너로, 그 외 XML은 일반 텍스트 편집기로 열립니다. 탭은 Design·Info·Script·Source와 연결 파일 탭이며, 탭 줄 오른쪽에 Beta 탭이 있습니다.
+
+- **Design 탭**: 프로젝트 CSS를 적용한 화면 미리보기, 컴포넌트 선택·크기 조절, 복사·붙여넣기·삭제, 그리드 열 너비 조절. fusionchart는 바인딩한 dataList 값으로 차트(선·막대·원·영역)를 그립니다(엔진 모양과 다른 미리보기)
+- **Property / Event 패널**: 속성·이벤트 검색과 편집, 여러 컴포넌트 동시 편집. 정해진 값이 있는 속성도 입력칸 + 목록이라 직접 입력할 수 있습니다
+- **Outline / Data 패널**: 컴포넌트 트리, DataCollection·Submission 트리, 드래그 앤 드롭 이동·바인딩, F2로 id 바꾸기
+- **더블클릭 편집**(캔버스·Outline): 글자 바로 고치기(버튼·textbox·output 등), 그리드 칸 속성, 선택 항목(selectbox·checkcombobox·multiselect·radio·checkbox), DataList·DataMap·Submission, multiupload 파라미터. 팝업 안의 입력칸은 Enter로 나오고, 확인은 버튼으로 합니다
+- **Design 이동**: 이미 배치된 컴포넌트를 끌어 순서·부모 그룹을 바꿉니다. 그룹 중앙은 안쪽 맨 뒤, 가장자리는 앞·뒤로 이동하며 놓을 위치를 표시합니다. 그리드는 칸에 마우스를 올리면 왼쪽 위에 나오는 이동 손잡이나, 칸이 아닌 빈 곳을 끌어 옮깁니다. Outline과 같은 XML 이동·Undo를 사용합니다
+- **팔레트**: 탭 줄 왼쪽 버튼으로 Design 왼쪽 팔레트를 열고 닫습니다. 설치본 정의의 묶음별 목록·아이콘·검색, 즐겨찾기(별, ⠿ 손잡이로 순서 변경)를 지원합니다. 클릭하면 삽입 위치를 고르고, 캔버스로 끌어다 놓으면 그룹 중앙은 안쪽, 위·아래 가장자리는 앞·뒤에 삽입합니다
+- **Event → Script**: 이벤트 값을 더블클릭하면 `scwin.{id}_{이벤트}` 함수 뼈대를 만들거나 해당 함수로 이동합니다
+- **id 바꾸기**: dataList·dataMap이나 그 컬럼의 id를 바꾸면 `data:` 바인딩·바인딩된 그리드 열·Submission 참조도 같이 바뀝니다(Script 코드 안 참조는 그대로). 이미 쓰는 id로는 바꾸지 않고 알려 줍니다
+- **화면 점검**: Outline·Data 트리에 경고 아이콘으로 겹치는 id, 없는 컬럼을 가리키는 바인딩, Script에 없는 이벤트 함수를 표시합니다(마우스를 올리면 이유). 트리 위 경고 개수 버튼을 누르면 다음 경고로 이동합니다
+
+XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그대로 동작합니다.
+
+## 그리드
+
+- **칸 여러 개 고르기**: 칸을 누른 채 끌면 직사각형 안의 칸을 모두 고릅니다(같은 header·본문 안). 가로 스크롤이 있는 그리드는 가장자리로 끌면 스크롤하며 가려진 칸까지 고릅니다
+- **셀 병합·병합 해제**: 그리드 칸·표(th·td)를 골라 우클릭 "병합", 합친 칸은 우클릭 "병합 해제"
+- **열 이동·삭제**: 우클릭 "열 왼쪽으로/오른쪽으로 이동"·"열 삭제". 칸을 골라 Delete를 눌러도 그 열이 header·본문·footer에서 함께 지워집니다. 묶음 머리 칸(여러 열을 합친 칸) 밖으로는 옮기지 않습니다
+- **칸 속성 표**: 그리드 우클릭 "칸 속성 표…"(또는 그리드 빈 곳·Outline 더블클릭). Head(header·subTotal·footer)·Body 칸을 행으로, 칸에 적힌 속성을 열로 보여 한눈에 비교하며 고칩니다("모든 속성 보기"는 정의의 속성까지). 비우면 그 속성을 지웁니다
+  - 클릭은 입력칸 하나, 끌기·Shift+클릭은 범위
+  - Ctrl+C·X·V: 탭·줄로 나눈 글자라 Excel과 주고받을 수 있고, 범위가 복사한 크기의 배수면 되풀이해 채웁니다. Delete로 비움
+  - 팝업 안 Ctrl+Z·Ctrl+Y(Ctrl+Shift+Z), 끌 때 가장자리 자동 스크롤
+  - 확인하면 한 번의 편집으로 반영(Undo 한 번)
+
+## Info 탭
+
+- **화면 정보**: 프로그램 ID·프로그램명·작성자·작성일·프로그램 설명·비고. `head`의 `meta_*` 속성으로 저장하며, 칸에서 나오면 바로 반영됩니다(비우면 속성 지움)
+- **개정 이력(History Meta Info)**: `w2:historyInfo`의 개정번호·수정 내용·일자·작성자 표. 추가(다음 번호·오늘 날짜), 삭제, ⠿ 손잡이로 순서 바꾸기. 내용은 여러 줄
+- **날짜 입력**: 달력으로 고르거나 숫자만 쳐도 됩니다(20201212 → 2020-12-12). yyyy-MM-dd로 저장하며, 다른 모양으로 저장된 값도 읽습니다
+
+## Beta 탭: 사용 테이블 (실험 기능)
+
+화면이 쓰는 DB 테이블을 직접 적고 관계를 그림으로 봅니다. 화면 XML에는 넣지 않고, 처음 열 때 고른 이 PC의 폴더에 화면마다 JSON 파일로 저장합니다.
+
+- 테이블: 이름·설명·등록/조회/수정/삭제 표시. 테이블을 고르면 컬럼(이름·설명·타입·PK)을 편집합니다
+- 그림: 박스를 끌어 옮기고(격자 맞춤), 박스 옆 점을 다른 박스에 놓아 테이블끼리 선을 잇습니다. 선은 두 박스가 마주 보는 면에 붙고, 고르고 Delete로 지웁니다
+- 박스는 PK 컬럼을 먼저 보여 주며 "PK만 보기"로 접을 수 있습니다. 박스를 누르면 이어진 테이블만 강조하고, 더블클릭하면 표의 그 행으로 갑니다
+- 미니맵·확대·축소(Ctrl+휠)·전체 화면. Beta에 들어가면 우측 패널을 접고, 나오면 되돌립니다
+
+## 코드 편집 (Source · Script)
+
+![Source 탭](images/sourceTab.png)
+
+- XML·WebSquare API·공통 JS 자동완성과 마우스 오버 설명(공통 JS·같은 Script 함수의 JSDoc 포함). 공통 JS를 저장하면 바로 반영됩니다
+- 정의로 이동(Ctrl+클릭·F12): 같은 Script 함수는 그 자리로, 공통 JS 함수는 그 파일을 VS Code로 엽니다. 커서 추가는 Alt+클릭
+- 파라미터 힌트: `(`·`,`를 치거나 Ctrl+Shift+Space를 누르면 함수 모양과 지금 파라미터를 보여 줍니다(WebSquare API 문서·JSDoc)
+- 문법 오류 표시, 포맷(VS Code에 설정한 포매터, 없으면 VS Code 내장), 검색, 줄바꿈(VS Code 설정을 따름), 다시 하기 Ctrl+Y·Ctrl+Shift+Z
+- 코드 편집기 테마(탭 줄 오른쪽 톱니바퀴 메뉴): "VS Code 따라가기"(지금 VS Code 색 테마의 문법 색), "IntelliJ Dark"·"IntelliJ Light"·"One Dark"·"One Light" 등. Git 변경 줄 표시
+- 테마 색 덮어쓰기: 톱니바퀴 메뉴의 "테마 색 덮어쓰기…" 팝업에서 바꾸면 바로 미리 보이고, 확인하면 저장됩니다(지금 테마만 또는 모든 테마). 설정 `websquare5-editor.codeThemeCustomizations`에 직접 적어도 됩니다. 예:
+  ```json
+  "websquare5-editor.codeThemeCustomizations": {
+    "tokens": { "keyword": "#ff8800", "comment": { "color": "#888888", "fontStyle": "italic" } },
+    "[Dracula]": { "colors": { "background": "#1e1f29" } }
+  }
+  ```
+- 테마 가져오기: 톱니바퀴 메뉴의 "테마 파일 가져오기…"로 VS Code 테마 `.json`을 가져옵니다
+
+## 연결 파일 (Controller · Service · Mapper · MyBatis)
+
+화면 탭에서 Java·XML·SQL 등 연결 파일을 열어 편집합니다. 탭 목록과 순서는 직접 바꿀 수 있고, 탭 줄 앞쪽 화살표로 탭 줄을 위·아래로 옮길 수 있습니다(기본 위).
+
+![Java 자동완성](images/java2.png)
+
+- 작업 폴더 안 파일을 이름으로 검색해 연결
+- VS Code에 설치된 언어 확장(Java 등)의 자동완성·포맷·마우스 오버 설명(Javadoc)·정의로 이동(Ctrl+클릭·F12)·파라미터 힌트 사용
+- MyBatis 매퍼의 SQL 색·키워드 자동완성. 설정 `websquare5-editor.sqlDialect`로 DB 방언을 고릅니다(`standard`(기본)·`oracle`·`mysql`·`mariadb`·`postgresql`·`mssql`·`sqlite`)
+
+## 저장
+
+저장하면 wpack 변환이 실행되어 JS 산출물이 갱신됩니다. 변환기를 못 찾으면 변환을 건너뛰고 알려 줍니다.
+
+## 참고 자료
+
+공개된 WebSquare 학습 자료와 배포 환경의 동작을 참고해 만들었습니다.
+
+- [WebSquare 공식 유튜브 공개 강의](https://www.youtube.com/watch?v=KEPuK3erXWM&list=PL7a9HhkvOVb09T_2Xdxs4sPgyDjkGlT9G)
+- [WebSquare5 교육용 개발팩](https://media.inswave.kr/edu/WEBSQUARE_DEV_PACK_SP5_edu.zip)

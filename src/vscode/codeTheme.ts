@@ -48,7 +48,42 @@ function stateOf(id: string): CodeThemeState {
 		return { theme: 'vscode', dark: own.dark, id: own.id, label: own.label, imported: own.overlay, ...customizationsFor(setting, own.id, own.label) };
 	}
 	const builtIn = CODE_THEMES.find(t => t.id === id) ?? CODE_THEMES[0];
-	return { theme: builtIn.id, id: builtIn.id, label: builtIn.label, ...customizationsFor(setting, builtIn.id, builtIn.label) };
+	return { theme: builtIn.id, id: builtIn.id, label: builtIn.label, ...builtIn.id === 'vscode' && vsCodeTokens && { imported: { tokens: vsCodeTokens } }, ...customizationsFor(setting, builtIn.id, builtIn.label) };
+}
+
+/** VS Code 따라가기: 지금 VS Code 색 테마의 문법 색(배경·선택 등은 웹뷰 CSS 변수가 이미 따라감). 못 읽으면 기본 다크·라이트 색 */
+let vsCodeTokens: ThemeOverlay['tokens'];
+
+/** 지금 색 테마의 설정 이름: 시스템 밝기 따라가기면 그 종류의 선호 테마 */
+function activeThemeName(): string | undefined {
+	const kind = vscode.window.activeColorTheme.kind, workbench = vscode.workspace.getConfiguration('workbench'), window = vscode.workspace.getConfiguration('window');
+	const contrast = kind === vscode.ColorThemeKind.HighContrast || kind === vscode.ColorThemeKind.HighContrastLight;
+	const light = kind === vscode.ColorThemeKind.Light || kind === vscode.ColorThemeKind.HighContrastLight;
+	if (contrast && window.get('autoDetectHighContrast')) {
+		return workbench.get(light ? 'preferredHighContrastLightColorTheme' : 'preferredHighContrastColorTheme');
+	}
+	if (window.get('autoDetectColorScheme')) {
+		return workbench.get(light ? 'preferredLightColorTheme' : 'preferredDarkColorTheme');
+	}
+	return workbench.get('colorTheme');
+}
+
+/** 설치된 확장의 contributes.themes에서 그 이름(설정 값은 id, 없으면 label)의 테마 파일을 찾아 문법 색만 읽는다 */
+async function loadVsCodeTokens(): Promise<void> {
+	const name = activeThemeName();
+	vsCodeTokens = undefined;
+	for (const ext of vscode.extensions.all) {
+		const themes = (ext.packageJSON as { contributes?: { themes?: { id?: string; label?: string; path?: string }[] } }).contributes?.themes ?? [];
+		const found = themes.find(t => (t.id ?? t.label) === name && t.path);
+		if (found) {
+			try {
+				vsCodeTokens = fromVsCodeTheme(await readVsCodeTheme(path.join(ext.extensionPath, found.path!))).tokens;
+			} catch {
+				// .tmTheme을 가리키는 테마 등: 기본 다크·라이트 색
+			}
+			return;
+		}
+	}
 }
 
 export const codeTheme = () => stateOf(currentId());
@@ -67,11 +102,14 @@ export function registerCodeTheme(context: vscode.ExtensionContext, broadcast: (
 	globalState = context.globalState;
 	bundled = loadBundled(path.join(context.extensionPath, 'media', 'themes'));
 	const send = (id: string) => broadcast({ type: 'codeTheme', ...stateOf(id) });
+	const followVsCode = () => loadVsCodeTokens().then(() => { if (currentId() === 'vscode') { send('vscode'); } });
 	context.subscriptions.push(
 		vscode.commands.registerCommand('websquare5-editor.codeTheme', () => pickCodeTheme(send)),
 		vscode.commands.registerCommand('websquare5-editor.importCodeTheme', () => importTheme(send)),
 		vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration(SETTING)) { send(currentId()); } }),
+		vscode.window.onDidChangeActiveColorTheme(() => void followVsCode()),
 	);
+	void followVsCode();
 }
 
 type Item = vscode.QuickPickItem & { id: string };
@@ -122,13 +160,13 @@ async function importTheme(send: (id: string) => void): Promise<void> {
 	try {
 		const theme = await readVsCodeTheme(file.fsPath);
 		const { dark, ...overlay } = fromVsCodeTheme(theme);
-		if (!overlay.colors && !overlay.tokens) { throw new Error('VS Code 테마 파일이 아니거나 색이 없어.'); }
+		if (!overlay.colors && !overlay.tokens) { throw new Error('VS Code 테마 파일이 아니거나 색이 없습니다.'); }
 		const label = theme.name?.trim() || path.basename(file.fsPath, '.json');
 		const id = `custom:${label}`;
 		await globalState.update(IMPORTED, [...imported().filter(t => t.id !== id), { id, label, dark, overlay }]);
 		await globalState.update(KEY, id);
 		send(id);
-		void vscode.window.showInformationMessage(`'${label}' 테마를 가져와 적용했어. 문법 색은 비슷하게 맞춘 거라, 다르면 설정 codeThemeCustomizations로 고칠 수 있어.`);
+		void vscode.window.showInformationMessage(`'${label}' 테마를 가져와 적용했습니다. 문법 색은 비슷하게 맞춘 것이라, 다르면 설정 codeThemeCustomizations로 고칠 수 있습니다.`);
 	} catch (e) {
 		void vscode.window.showErrorMessage(`테마를 못 가져왔어: ${e instanceof Error ? e.message : String(e)}`);
 	}
@@ -137,7 +175,7 @@ async function importTheme(send: (id: string) => void): Promise<void> {
 /** include(바탕 테마 파일)를 따라가 합친다: 바탕 색·규칙 먼저, 자기 것이 뒤(위) */
 async function readVsCodeTheme(file: string, depth = 0): Promise<VsTheme> {
 	const theme = parseJsonc(await fs.readFile(file, 'utf8')) as VsTheme;
-	if (!theme || typeof theme !== 'object') { throw new Error('JSON 객체가 아니야.'); }
+	if (!theme || typeof theme !== 'object') { throw new Error('JSON 객체가 아닙니다.'); }
 	if (typeof theme.include !== 'string' || depth > 4) { return theme; }
 	const base = await readVsCodeTheme(path.resolve(path.dirname(file), theme.include), depth + 1);
 	const rules = (t: typeof theme) => Array.isArray(t.tokenColors) ? t.tokenColors : [];

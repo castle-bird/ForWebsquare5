@@ -1,0 +1,40 @@
+{
+	// One Light 느낌의 코드 편집기 테마(Atom One Light 색 팔레트를 참고해 직접 작성한 값, Atom 파일 아님).
+	// media/themes의 VS Code 테마 .json은 테마 목록에 기본으로 나온다
+	"name": "One Light",
+	"type": "light",
+	"colors": {
+		"editor.background": "#FAFAFA",
+		"editor.foreground": "#383A42",
+		"editorCursor.foreground": "#526FFF",
+		"editor.selectionBackground": "#E5E5E6",
+		"editor.lineHighlightBackground": "#F2F2F2",
+		"editorGutter.background": "#FAFAFA",
+		"editorLineNumber.foreground": "#9D9D9F",
+		"editorLineNumber.activeForeground": "#383A42",
+		"editorIndentGuide.background1": "#E6E6E6",
+		"editorIndentGuide.activeBackground1": "#C2C2C3",
+		"editorWhitespace.foreground": "#D3D3D3"
+	},
+	"tokenColors": [
+		{ "settings": { "foreground": "#383A42", "background": "#FAFAFA" } },
+		{ "name": "주석", "scope": ["comment", "punctuation.definition.comment"], "settings": { "foreground": "#A0A1A7", "fontStyle": "italic" } },
+		{ "name": "문서 주석", "scope": "comment.block.documentation", "settings": { "foreground": "#A0A1A7", "fontStyle": "italic" } },
+		{ "name": "문자열", "scope": ["string", "string.quoted"], "settings": { "foreground": "#50A14F" } },
+		{ "name": "문자열 이스케이프", "scope": "constant.character.escape", "settings": { "foreground": "#0184BC" } },
+		{ "name": "숫자", "scope": "constant.numeric", "settings": { "foreground": "#986801" } },
+		{ "name": "true·false·null", "scope": "constant.language", "settings": { "foreground": "#986801" } },
+		{ "name": "키워드", "scope": ["keyword", "keyword.control"], "settings": { "foreground": "#A626A4" } },
+		{ "name": "수식어·선언", "scope": ["storage", "storage.type", "storage.modifier"], "settings": { "foreground": "#A626A4" } },
+		{ "name": "연산자", "scope": "keyword.operator", "settings": { "foreground": "#0184BC" } },
+		{ "name": "타입·클래스", "scope": ["entity.name.type", "entity.name.class", "support.type", "support.class"], "settings": { "foreground": "#C18401" } },
+		{ "name": "함수·메서드 선언", "scope": ["entity.name.function", "support.function"], "settings": { "foreground": "#4078F2" } },
+		{ "name": "변수", "scope": ["variable", "variable.other"], "settings": { "foreground": "#E45649" } },
+		{ "name": "필드·속성", "scope": ["variable.other.property", "variable.other.object.property", "support.type.property-name"], "settings": { "foreground": "#E45649" } },
+		{ "name": "상수 필드", "scope": "variable.other.constant", "settings": { "foreground": "#986801" } },
+		{ "name": "어노테이션", "scope": ["storage.type.annotation", "meta.annotation", "punctuation.definition.annotation"], "settings": { "foreground": "#C18401" } },
+		{ "name": "XML·HTML 태그", "scope": ["entity.name.tag", "punctuation.definition.tag"], "settings": { "foreground": "#E45649" } },
+		{ "name": "XML·HTML 속성", "scope": "entity.other.attribute-name", "settings": { "foreground": "#986801" } },
+		{ "name": "XML CDATA·엔티티", "scope": ["string.unquoted.cdata", "constant.character.entity"], "settings": { "foreground": "#50A14F" } }
+	]
+}

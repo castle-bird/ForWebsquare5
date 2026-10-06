@@ -165,6 +165,18 @@ suite('styles', () => {
 });
 
 suite('frames', () => {
+	test('잘못된 URL의 frame만 실패하고 나머지 화면은 붙인다', async () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws5-frame-url-'));
+		fs.writeFileSync(path.join(dir, 'ok.xml'), '<html><body><b/></body></html>');
+		const defs = parseComponents('<WebSquare><components><component id="wframe" namespaceURI="urn:test" realType="wframe"/></components></WebSquare>');
+		const root = parseXml('<html xmlns:w2="urn:test"><body><w2:wframe src="bad%.xml"/><w2:wframe src="ok.xml"/></body></html>')!;
+		annotate(root, defs);
+		await attachFrames(root, path.join(dir, 'main.xml'), dir, defs);
+		const [bad, good] = root.children[0].children;
+		assert.ok(bad.frameError?.includes('읽기 실패'));
+		assert.strictEqual(good.frame?.children[0].tag, 'b');
+	});
+
 	test('wframe 화면 붙이기 · 순환 참조 차단', async () => {
 		const defs = parseComponents(`<WebSquare><components>
 			<component id="wframe" namespaceURI="http://www.inswave.com/websquare" realType="wframe"/>

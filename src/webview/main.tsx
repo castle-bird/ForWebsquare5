@@ -10,6 +10,9 @@ import { PropertyPane } from './ui/properties';
 import { DataEditor } from './ui/dataEditor';
 import { SubmissionEditor } from './ui/submissionEditor';
 import { GridBindDialog } from './ui/gridBindDialog';
+import { GridCellsEditor } from './ui/gridCellsEditor';
+import { InfoPane } from './ui/infoPane';
+import { UsedTablesPane } from './ui/usedTablesPane';
 import { ChoicesEditor, choicesKind, type ChoicesKind } from './ui/choicesEditor';
 import { boundColumnIds, canMoveGridColumn, listColumns } from '../core/grid';
 import { xmlSupport } from './editor/xmlSupport';
@@ -41,11 +44,14 @@ const SETTINGS_MENU: ([SettingsMenuItem, string] | null)[] = [
 const GRID_MENU = { columnLeft: '왼쪽에 Column 추가', column: 'Column 추가', row: 'Row 추가', header: 'Header 추가', subTotal: 'subTotal 추가', footer: 'footer 추가' } as const;
 
 const LOADING = <p className="empty">불러오는 중…</p>;
+/** 실험 기능 탭: 탭 줄 오른쪽(설정 버튼 왼쪽)에 고정 */
+const BETA_TAB = 'Beta';
 
 type Popup = { key: string; error?: string; busy?: boolean } & (
 	| { kind: 'data'; id: string }
 	| { kind: 'submission'; initial: SubmissionFields; source?: { id?: string; index: number } }
-	| { kind: 'choices'; index: number; id?: string; choices: ChoicesKind });
+	| { kind: 'choices'; index: number; id?: string; choices: ChoicesKind }
+	| { kind: 'gridCells'; index: number; id?: string });
 
 function useComponentShortcuts() {
 	useEffect(() => {
@@ -53,7 +59,9 @@ function useComponentShortcuts() {
 		// 이걸 입력칸으로 보면 input류 컴포넌트를 고른 뒤 Delete·복붙이 간헐적으로 안 먹는다
 		const inEditable = (e: Event) => {
 			const el = e.composedPath()[0] as HTMLElement;
-			return !!el.closest?.('input, textarea, select, dialog, [contenteditable], .code-editor') && !el.closest('[data-wse]');
+			// 팝업 안에 포커스가 있으면 이벤트가 body로 와도(VS Code 복사·붙여넣기는 글자 선택이 없으면 body로 보낸다) 팝업 것
+			// Beta 사용 테이블 그림(React Flow)의 Delete는 선 지우기
+			return !!el.closest?.('input, textarea, select, dialog, [contenteditable], .code-editor, .used-tables') && !el.closest('[data-wse]') || !!document.activeElement?.closest('dialog');
 		};
 		const onClip = (e: ClipboardEvent) => {
 			if (inEditable(e) || String(window.getSelection() ?? '')) {
@@ -70,14 +78,16 @@ function useComponentShortcuts() {
 				e.preventDefault();
 			}
 		};
-		document.addEventListener('copy', onClip);
-		document.addEventListener('cut', onClip);
-		document.addEventListener('paste', onClip);
+		// 캡처 단계에서 본다: 코드 편집기는 cut을 처리하며 잘린 줄 DOM을 다시 그려, 버블 단계에선 이벤트 대상이 문서에서 떨어져
+		// 편집기 안인지 못 알아본다(→ 고른 컴포넌트를 잘라 클립보드를 XML로 덮어썼다)
+		document.addEventListener('copy', onClip, true);
+		document.addEventListener('cut', onClip, true);
+		document.addEventListener('paste', onClip, true);
 		window.addEventListener('keydown', onKey);
 		return () => {
-			document.removeEventListener('copy', onClip);
-			document.removeEventListener('cut', onClip);
-			document.removeEventListener('paste', onClip);
+			document.removeEventListener('copy', onClip, true);
+			document.removeEventListener('cut', onClip, true);
+			document.removeEventListener('paste', onClip, true);
 			window.removeEventListener('keydown', onKey);
 		};
 	}, []);
@@ -85,6 +95,9 @@ function useComponentShortcuts() {
 
 function App() {
 	const doc = useEditorStore(s => s.doc);
+	// 코드 편집기 합자: VS Code editor.fontLigatures(themes.ts editorBase가 읽는다)
+	const fontFeatures = useEditorStore(s => s.codeOptions.fontFeatures);
+	useEffect(() => document.body.style.setProperty('--code-font-features', fontFeatures), [fontFeatures]);
 	const defs = useEditorStore(s => s.defs);
 	const styles = useEditorStore(s => s.styles);
 	const api = useEditorStore(s => s.api);
@@ -108,6 +121,18 @@ function App() {
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const rightPanel = usePanelRef();
 	const [rightOpen, setRightOpen] = useState(true);
+	// Beta(그림이 넓어야 함)에 들어가면 우측 패널을 접고, 나오면 들어가기 전 상태로
+	const reopenRight = useRef(false);
+	const showTab = (name: string) => {
+		if (name === BETA_TAB && shownTab !== BETA_TAB) {
+			reopenRight.current = !rightPanel.current?.isCollapsed();
+			rightPanel.current?.collapse();
+		} else if (name !== BETA_TAB && shownTab === BETA_TAB && reopenRight.current) {
+			reopenRight.current = false;
+			rightPanel.current?.expand();
+		}
+		setActiveTab(name);
+	};
 	const [settingsMenu, setSettingsMenu] = useState<HTMLElement>();
 	const [themeColors, setThemeColors] = useState(false);
 	/**
@@ -120,7 +145,7 @@ function App() {
 	const [gridBind, setGridBind] = useState<{ grid: number; list: number }>();
 	const linkTabs = useLinkTabs(activeTab, LOADING);
 	// 보고 있던 연결 탭이 지워지면 Design으로
-	const shownTab = FIXED_TABS.includes(activeTab) || linkTabs.labels.includes(activeTab) ? activeTab : 'Design';
+	const shownTab = FIXED_TABS.includes(activeTab) || activeTab === BETA_TAB || linkTabs.labels.includes(activeTab) ? activeTab : 'Design';
 	const pendingDataCreate = useRef<{ kind: DataKind; ids: Set<string>; version: number } | undefined>(undefined);
 	const scriptRef = useRef<CodeEditorHandle>(null);
 
@@ -150,7 +175,7 @@ function App() {
 			if (msg.type === 'popupAck') {
 				const { popup, ok, error } = msg;
 				setPopups(curr => ok ? curr.filter(p => p.key !== popup)
-					: curr.map(p => p.key === popup ? { ...p, busy: false, error: error ?? '적용하지 못했어.' } : p));
+					: curr.map(p => p.key === popup ? { ...p, busy: false, error: error ?? '적용하지 못했습니다.' } : p));
 			} else {
 				handleMessage(msg);
 			}
@@ -170,6 +195,7 @@ function App() {
 	// 바인딩된 그리드의 본문 셀: id를 dataList 컬럼 id 목록에서 고른다
 	const cellIds = root && nodePath && boundColumnIds(root, nodePath);
 	const body = root && root.children.find(c => c.tag === 'body');
+	const head = root?.children.find(c => c.tag === 'head');
 	const model = root && findTag(root, 'xf:model');
 	const dataCollection = model?.children.find(c => c.tag === 'w2:dataCollection');
 	// 매 렌더 새 배열이면 아래 dataRoots useMemo가 매번 깨져 Data 트리가 다시 그려진다
@@ -237,7 +263,7 @@ function App() {
 		if (node) {
 			postPopupEdit(key, { type: 'editSubmission', version: doc.version, index: node.index, popup: key, fields });
 		} else {
-			updatePopup(key, { error: '원래 Submission을 찾지 못했어. 다시 열어 줘.' });
+			updatePopup(key, { error: '원래 Submission을 찾지 못했습니다. 다시 열어 주세요.' });
 		}
 	};
 	const bindRefTo = (index: number, value: string) => {
@@ -246,7 +272,7 @@ function App() {
 		const isGrid = !!target?.tag.endsWith(':gridView');
 		const isList = !value.includes('.');
 		if (isGrid !== isList) {
-			post({ type: 'warn', message: isGrid ? 'gridView에는 dataList를 끌어다 놓아 줘.' : 'dataList는 gridView에만 바인딩할 수 있어.' });
+			post({ type: 'warn', message: isGrid ? 'gridView에는 dataList를 끌어다 놓아 주세요.' : 'dataList는 gridView에만 바인딩할 수 있습니다.' });
 			return;
 		}
 		setSelected(index);
@@ -257,8 +283,14 @@ function App() {
 		}
 		post({ type: 'setAttr', version: doc.version, index, name: 'ref', value });
 	};
+	const openGridCells = (grid: XmlNode) => {
+		setSelected(grid.index);
+		setPopups(curr => [...curr.filter(p => p.kind !== 'gridCells'), { key: `gridCells:${grid.attrs.id ?? grid.index}`, kind: 'gridCells', index: grid.index, id: grid.attrs.id }]);
+	};
 	const openEditor = (index: number) => {
 		const n = body && nodeAt(body, index);
+		// 그리드(칸 밖 빈 곳·Outline): 칸 속성 표
+		if (n?.tag.endsWith(':gridView')) { openGridCells(n); return true; }
 		const kind = n && choicesKind(n, defOf(n, defs?.defs));
 		if (!n || !kind) { return false; }
 		setSelected(index);
@@ -306,7 +338,7 @@ function App() {
 						onClick={() => { if (rightPanel.current?.isCollapsed()) { rightPanel.current.expand(); } else { rightPanel.current?.collapse(); } }} /></>} start={<><button className={`tab-palette codicon codicon-layout-sidebar-left${paletteOpen ? ' active' : ''}`}
 						title={paletteOpen ? '팔레트 접기' : '팔레트 펼치기'} aria-label="팔레트" aria-expanded={paletteOpen} draggable={false} disabled={shownTab !== 'Design'} onClick={() => setPaletteOpen(open => !open)} />
 						<button draggable={false} className={`tab-move codicon codicon-arrow-${otherSide === 'top' ? 'up' : 'down'}`}
-						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} /></>} keepMounted={['Script', 'Source', ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={setActiveTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
+						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} /></>} pinned={[BETA_TAB]} keepMounted={['Script', 'Source', ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={showTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
 						Design: doc?.error ? <p className="error">{doc.error}</p>
 							: body && defs ? <Group orientation="horizontal" className="design-layout">
 								{paletteOpen && <Panel key="palette" id="palette" defaultSize={220} minSize={150} maxSize={360}><PalettePane /></Panel>}
@@ -321,6 +353,11 @@ function App() {
 								</div></Panel>
 							</Group>
 								: LOADING,
+						Info: doc?.error ? <p className="error">{doc.error}</p>
+							: head && doc ? <InfoPane head={head} onAttr={(name, value) => editAttr(name, value, head.index)}
+								onHistory={rows => post({ type: 'editHistory', version: doc.version, index: head.index, rows })} />
+							: doc ? <p className="empty">head가 없는 화면입니다.</p> : LOADING,
+						[BETA_TAB]: <UsedTablesPane />,
 						Script: doc ? <CodeEditor ref={scriptRef} target="script" lang={scriptLanguage} complete={jsTools.complete} hover={jsTools.hover} definition={jsTools.definition} signature={jsTools.signature} lint="js" text={doc.script.text} version={doc.version}
 							readOnly={!!doc.script.note} notes={[api?.error, modules?.error, doc.script.note]} post={post} /> : LOADING,
 						Source: doc ? <CodeEditor target="source" lang={XML} complete={xmlComplete} hover={xmlHoverSource} lint="xml" text={doc.text} version={doc.version} post={post} /> : LOADING,
@@ -354,7 +391,10 @@ function App() {
 							열 {dir === 'left' ? '왼쪽' : '오른쪽'}으로 이동</button>),
 						<button key="delete" role="menuitem" onClick={() => { setDataMenu(undefined); useEditorStore.getState().gridColumns('delete', dataMenu.index, dataMenu.grid!.column!.cells); }}>
 							열 삭제<kbd>Delete</kbd></button>,
-					] : [])
+					] : [], [
+						<div key="cells-separator" className="menu-separator" role="separator" />,
+						<button key="cells" role="menuitem" onClick={() => { setDataMenu(undefined); const grid = body && nodeAt(body, dataMenu.index); if (grid) { openGridCells(grid); } }}>칸 속성 표…</button>,
+					])
 				: dataMenu.index === -1
 					? <button role="menuitem" onClick={() => { setDataMenu(undefined); openSubmissionEditor(); }}>Submission 추가</button>
 					: DATA_KINDS.map(kind => <button key={kind} role="menuitem" onClick={() => addData(kind)}>{kind[0].toUpperCase() + kind.slice(1)} 추가</button>)}
@@ -388,6 +428,11 @@ function App() {
 				return <SubmissionEditor key={p.key} {...common} initial={p.initial} editing={!!source} busy={!!p.busy}
 					onScript={source && ((eventName, current) => { const target = findSubmission(source); return target && openEventHandler(target, eventName, current); })}
 					onConfirm={fields => applySubmission(p.key, source, fields)} />;
+			}
+			if (p.kind === 'gridCells') {
+				const grid = root && (p.id ? findNode(root, c => c.attrs.id === p.id && c.tag.endsWith(':gridView')) : nodeAt(root, p.index));
+				return grid?.tag.endsWith(':gridView') && <GridCellsEditor key={p.key} {...common} grid={grid} defs={defs?.defs}
+					onApply={cells => { if (doc) { postPopupEdit(p.key, { type: 'editGridCells', version: doc.version, index: grid.index, popup: p.key, cells }); } }} />;
 			}
 			const node = choicesNode(p);
 			return node && <ChoicesEditor key={p.key} {...common} node={node} kind={p.choices}

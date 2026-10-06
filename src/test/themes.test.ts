@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { CODE_THEMES, customizationsFor, fromVsCodeTheme, parseJsonc, withCustomizations, type VsTheme } from '../core/codeTheme';
-import { DEFAULT_CODE_OPTIONS, readSqlDialect, readWordWrap, SQL_DIALECTS } from '../core/codeOptions';
+import { DEFAULT_CODE_OPTIONS, readFontLigatures, readSqlDialect, readWordWrap, SQL_DIALECTS } from '../core/codeOptions';
 
 suite('코드 편집기 테마', () => {
 	test('코드 편집기 테마: id 중복 없음, 명령 등록(우클릭 메뉴 대신 탭 줄 톱니바퀴)', async () => {
@@ -43,7 +43,7 @@ suite('코드 편집기 테마', () => {
 	test('확장에 든 테마(media/themes): 모두 읽히고 편집기 색·문법 색 14종이 다 있다', () => {
 		const dir = path.join(vscode.extensions.all.find(e => e.packageJSON.name === 'websquare5-editor')!.extensionPath, 'media', 'themes');
 		const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
-		assert.deepStrictEqual(files.filter(f => f.startsWith('intellij-')).sort(), ['intellij-dark.json', 'intellij-light.json']);
+		assert.deepStrictEqual(files.filter(f => f.startsWith('intellij-') || f.startsWith('one-')).sort(), ['intellij-dark.json', 'intellij-light.json', 'one-dark.json', 'one-light.json']);
 		for (const file of files) {
 			const theme = parseJsonc(fs.readFileSync(path.join(dir, file), 'utf8')) as VsTheme;
 			const converted = fromVsCodeTheme(theme);
@@ -82,6 +82,16 @@ suite('코드 편집기 옵션', () => {
 		}
 		assert.strictEqual(readWordWrap(undefined), false);
 		assert.strictEqual(readWordWrap(true), false);
+	});
+
+	test('editor.fontLigatures: 끔·켬·글꼴 기능 글자', () => {
+		for (const value of [false, undefined, '', ' ', 'false', 1]) {
+			assert.strictEqual(readFontLigatures(value), '"liga" off, "calt" off', String(value));
+		}
+		assert.strictEqual(readFontLigatures(true), '"liga" on, "calt" on');
+		assert.strictEqual(readFontLigatures('true'), '"liga" on, "calt" on');
+		assert.strictEqual(readFontLigatures(" 'ss01', 'ss02' "), "'ss01', 'ss02'");
+		assert.strictEqual(DEFAULT_CODE_OPTIONS.fontFeatures, '"liga" off, "calt" off');
 	});
 
 	test('SQL 방언: 목록에 없으면 standard', () => {

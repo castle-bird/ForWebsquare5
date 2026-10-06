@@ -33,6 +33,7 @@ export function signatureHelp(ask: SignatureSource, renderDoc: DocRenderer): Ext
 		/** 늦게 온 옛 결과는 버린다 */
 		seq = 0;
 		timer?: number;
+		active = false;
 		constructor(readonly view: EditorView) {}
 		update(u: ViewUpdate) {
 			let trigger: string | undefined, start = false;
@@ -51,34 +52,42 @@ export function signatureHelp(ask: SignatureSource, renderDoc: DocRenderer): Ext
 			}
 			if (start) {
 				this.schedule(trigger, 0);
-			} else if (u.state.field(field) && (u.docChanged || u.selectionSet)) {
+			} else if (this.active && (u.docChanged || u.selectionSet)) {
 				this.schedule(undefined, UPDATE_DELAY);
 			}
 		}
 		schedule(trigger: string | undefined, delay: number) {
 			clearTimeout(this.timer);
-			this.timer = window.setTimeout(() => void this.ask(trigger), delay);
+			this.active = true;
+			const seq = ++this.seq;
+			this.timer = window.setTimeout(() => void this.ask(seq, trigger), delay);
 		}
-		async ask(trigger?: string) {
-			const seq = ++this.seq, view = this.view;
-			const info = await Promise.resolve(ask(view, view.state.selection.main.head, trigger)).catch(() => undefined);
+		async ask(seq: number, trigger?: string) {
+			this.timer = undefined;
+			const view = this.view;
+			let info: SignatureInfo | undefined;
+			try { info = await ask(view, view.state.selection.main.head, trigger); } catch { /* 언어 제공자가 실패하면 힌트를 닫는다. */ }
+			if (seq === this.seq) { this.active = !!info; }
 			if (seq !== this.seq || (!info && !view.state.field(field))) {
 				return;
 			}
 			view.dispatch({ effects: setSignature.of(info ? { pos: view.state.selection.main.head, info } : null) });
 		}
-		destroy() {
+		cancel() {
 			clearTimeout(this.timer);
 			this.seq++;
+			this.active = false;
 		}
+		destroy() { this.cancel(); }
 	});
 	return [field, requester, keymap.of([
 		{ key: 'Mod-Shift-Space', run: view => (view.plugin(requester)?.schedule(undefined, 0), true) },
 		{ key: 'Escape', run: view => {
-			if (!view.state.field(field)) {
+			const plugin = view.plugin(requester);
+			if (!plugin?.active && !view.state.field(field)) {
 				return false;
 			}
-			view.plugin(requester)!.seq++;
+			plugin?.cancel();
 			view.dispatch({ effects: setSignature.of(null) });
 			return true;
 		} },

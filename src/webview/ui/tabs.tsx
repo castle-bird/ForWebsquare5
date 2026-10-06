@@ -7,10 +7,12 @@ export interface TabHint { title?: string; dirty?: boolean }
 
 type Drop = { target: string; after: boolean };
 
-export function Tabs({ items, actions, start, end, position = 'top', keepMounted = [], active: activeProp, onActive, order, onReorder, hints, onTabMenu, onAdd, keys = {} }: {
+export function Tabs({ items, actions, start, end, pinned = [], position = 'top', keepMounted = [], active: activeProp, onActive, order, onReorder, hints, onTabMenu, onAdd, keys = {} }: {
 	items: Record<string, ReactNode>; actions?: Record<string, ReactNode>;
 	/** 탭 줄 맨 앞(탭 앞)에 둘 것 */
 	start?: ReactNode; end?: ReactNode; position?: 'top' | 'bottom'; keepMounted?: string[];
+	/** 탭 줄 오른쪽(end 앞)에 고정할 탭(Beta 등). 끌어 순서 바꾸기·저장 순서에서 빠진다 */
+	pinned?: string[];
 	active?: string; onActive?(name: string): void;
 	/** onReorder가 있으면 탭을 끌어 순서를 바꾼다 */
 	order?: readonly string[]; onReorder?(order: string[]): void;
@@ -20,7 +22,8 @@ export function Tabs({ items, actions, start, end, position = 'top', keepMounted
 	/** 이름이 바뀌어도 내용(편집기)을 그대로 두는 탭별 고정 키. 없으면 이름 */
 	keys?: Record<string, string>;
 }) {
-	const names = orderTabs(Object.keys(items), order);
+	const names = orderTabs(Object.keys(items).filter(n => !pinned.includes(n)), order);
+	const all = [...names, ...pinned.filter(n => n in items)];
 	const [activeState, setActiveState] = useState(names[0]);
 	const active = activeProp ?? activeState;
 	const setActive = onActive ?? setActiveState;
@@ -67,13 +70,14 @@ export function Tabs({ items, actions, start, end, position = 'top', keepMounted
 			</DndContext>
 			{onAdd && <button className="tab-add codicon codicon-add" title="탭 추가" aria-label="탭 추가" onClick={onAdd} />}
 			<span className="tab-actions">{actions?.[active]}</span>
+			{all.slice(names.length).map(n => <button key={n} role="tab" aria-selected={n === active} className={clsx('tab-pinned', { active: n === active })} onClick={() => setActive(n)}>{n}</button>)}
 			{end}
 		</nav>
 	);
 	return (
 		<>
 			{position === 'top' && bar}
-			{names.filter(n => n === active || (keepMounted.includes(n) && visited.includes(keyOf(n)))).map(n =>
+			{all.filter(n => n === active || (keepMounted.includes(n) && visited.includes(keyOf(n)))).map(n =>
 				<div key={keyOf(n)} className="tab-body" role="tabpanel" hidden={n !== active}>{items[n]}</div>)}
 			{position === 'bottom' && bar}
 		</>

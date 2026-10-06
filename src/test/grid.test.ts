@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import { findNode, parseXml, type XmlNode } from '../core/xmlModel';
 import { applyEdits } from '../core/edit';
-import { canMoveGridColumn, deleteGridColumns, moveGridColumn } from '../core/grid';
+import { canMoveGridColumn, deleteGridColumns, editGridCells, moveGridColumn } from '../core/grid';
 import { isMerged, mergeCells, unmergeCells } from '../core/merge';
 
 const XMLNS = 'xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms"';
@@ -38,6 +38,33 @@ const GRID = `<html ${XMLNS}><body>
 		</w2:footer>
 	</w2:gridView>
 </body></html>`;
+
+suite('그리드 칸 속성 일괄 편집', () => {
+	test('중복 칸·속성 순서, 원문·본문·namespace 보존, 잘못된 대상은 전체 거부', () => {
+		const text = `<html ${XMLNS} xmlns:custom="urn:custom"><body><!-- keep -->
+			<w2:column id='a'  value = 'old'><w2:label><![CDATA[unchanged <body>]]></w2:label></w2:column>
+			<w2:column id="b" value="remove" /></body></html>`;
+		const root = parseXml(text)!, a = byId(root, 'a'), b = byId(root, 'b');
+		const edits = editGridCells(text, root, [
+			{ index: b.index, attrs: { value: null, 'custom:label': 'B' } },
+			{ index: a.index, attrs: { value: "a'&\n", 'ev:onclick': 'scwin.click' } },
+			{ index: a.index, attrs: { 'ev:onchange': 'scwin.change', id: 'new' } },
+		])!;
+		assert.strictEqual(edits.length, 2, '칸마다 겹치지 않는 편집 하나');
+		const out = applyEdits(text, edits);
+		assert.ok(out.includes("id='new'  value = 'a&apos;&amp;&#10;'"), out);
+		assert.ok(out.includes('<w2:label><![CDATA[unchanged <body>]]></w2:label>') && out.includes('<!-- keep -->'));
+		assert.strictEqual(out.match(/xmlns:ev=/g)?.length, 1, '추가 이벤트의 namespace는 한 번만');
+		assert.ok(out.includes('<w2:column id="b" custom:label="B" />'), out);
+		assert.deepStrictEqual(editGridCells(text, root, [{ index: a.index, attrs: { id: 'a' } }]), []);
+		for (const index of [-1, root.index]) {
+			assert.strictEqual(editGridCells(text, root, [{ index: a.index, attrs: { id: 'new' } }, { index, attrs: { value: 'bad' } }]), undefined);
+		}
+		for (const [name, value] of [['xmlns:bad', 'x'], ['unknown:value', 'x'], ['value', '\u0001']]) {
+			assert.throws(() => editGridCells(text, root, [{ index: a.index, attrs: { [name]: value } }]));
+		}
+	});
+});
 
 suite('그리드 열 지우기·옮기기, 병합 풀기', () => {
 	const grid = (text: string) => byId(parseXml(text)!, 'grd');

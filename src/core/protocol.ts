@@ -1,8 +1,10 @@
 import type { XmlNode } from './xmlModel';
 import type { DataField, DataKind } from './data';
 import type { SubmissionFields } from './submission';
-import type { GridBindMode, GridExtras, GridPart } from './grid';
+import type { GridBindMode, GridCellEdit, GridExtras, GridPart } from './grid';
 import type { ChoicesFields } from './choices';
+import type { HistoryRow } from './info';
+import type { UsedTables } from './tables';
 import type { InsertPosition, DropPosition } from './paste';
 import type { LinkTab, LinkTarget } from './links';
 import type { CodeThemeState, ThemeOverlay } from './codeTheme';
@@ -26,7 +28,7 @@ export type ToWebview =
 	| { type: 'linkTabs'; tabs: LinkTab[]; exts: string[]; select?: string } // select: 이 탭으로 넘어간다(방금 추가한 탭). exts: 연결할 수 있는 확장자
 	| { type: 'xmlSchema'; kind: string; elements?: XmlElementSpec[]; source?: string } // 연결한 XML의 DTD 스키마(없으면 기본 MyBatis 목록)
 	| ({ type: 'codeTheme' } & CodeThemeState)
-	| ({ type: 'codeOptions' } & CodeOptions) // 줄바꿈(VS Code editor.wordWrap)·SQL 방언(설정)
+	| ({ type: 'codeOptions' } & CodeOptions) // 줄바꿈·합자(VS Code editor.wordWrap·fontLigatures)·SQL 방언(설정)
 	| { type: 'diagnostics'; target: CodeTarget; version: number; items: RemoteDiagnostic[] } // VS Code가 그 파일에 낸 문제(문제 탭과 같은 것). version: 연결 파일 버전
 	| { type: 'gitBase'; target: CodeTarget; text?: string } // 변경 표시 기준(Git 스테이지 내용). 없으면 표시 안 함
 	| ({ type: 'completions'; id: number } & Partial<RemoteCompletions>)
@@ -36,7 +38,8 @@ export type ToWebview =
 	| { type: 'reveal'; target: CodeTarget; line: number; ch: number; endLine?: number; endCh?: number } // 그 편집기 탭을 보이고 그 범위를 선택·스크롤(정의로 이동, 끝이 없으면 그 자리 단어)
 	| { type: 'files'; kind: string; files: string[] } // 연결할 수 있는 파일(작업 폴더 기준 경로)
 	| { type: 'linkProblem'; kind: string; message: string } // 연결하지 못한 이유(알림을 꺼 둬도 경로 입력 화면에 보인다)
-	| { type: 'toast'; message: string }; // 편집기 오른쪽 아래 잠깐 뜨는 알림(VS Code 알림을 꺼 둬도 보임)
+	| { type: 'toast'; message: string } // 편집기 오른쪽 아래 잠깐 뜨는 알림(VS Code 알림을 꺼 둬도 보임)
+	| { type: 'usedTables'; folder?: string; file?: string; data?: UsedTables; error?: string }; // Beta 사용 테이블. folder 없음 = 저장 폴더를 아직 안 고름
 
 /**
  * 파라미터 힌트(VS Code Signature Help 한 개): label은 함수 모양 글자, params는 그 안 각 파라미터 자리(글자 범위),
@@ -144,6 +147,8 @@ export type ToExtension =
 	| { type: 'addSubmission'; version: number; index: number; popup: string; fields: SubmissionFields }
 	| { type: 'editSubmission'; version: number; index: number; popup: string; fields: SubmissionFields }
 	| { type: 'editChoices'; version: number; index: number; popup: string; fields: ChoicesFields }
+	| { type: 'editHistory'; version: number; index: number; rows: HistoryRow[] } // head(index)의 개정 이력(Info 탭)
+	| { type: 'editGridCells'; version: number; index: number; popup: string; cells: GridCellEdit[] } // 그리드(index) 칸 속성 표 팝업
 	| { type: 'bindGrid'; version: number; index: number; list: number; mode: GridBindMode; extras: GridExtras }
 	| { type: 'addGridPart'; version: number; index: number; part: GridPart | 'column' | 'columnLeft' | 'row'; at?: number }
 	| { type: 'openFrame'; index: number }
@@ -163,7 +168,10 @@ export type ToExtension =
 	| { type: 'setTabOrder'; order: string[] }
 	| { type: 'reorderPaletteFavorites'; keys: string[] }
 	| { type: 'setPaletteFavorite'; component: Pick<ComponentDef, 'id' | 'ns' | 'realType'>; favorite: boolean }
-	| { type: 'setTabPosition'; position: TabPosition };
+	| { type: 'setTabPosition'; position: TabPosition }
+	| { type: 'loadUsedTables' }
+	| { type: 'saveUsedTables'; data: UsedTables }
+	| { type: 'chooseTablesFolder'; pick: boolean }; // pick: 폴더 고르기 창, 아니면 기본 위치(확장 저장 폴더)
 
 interface PropertyDef { name: string; category: string; order: number; description: string; options?: string[] }
 interface EventDef { name: string; signature: string; description: string }

@@ -115,6 +115,13 @@ export function withAttrs(xml: string, attrs: [string, string | undefined][], an
 	return xml;
 }
 
+/** 여러 속성은 시작 태그만 고친다. 본문 재파싱 없이 따옴표·공백·접두사 검증을 유지한다. */
+export function setAttributes(text: string, node: XmlNode, attrs: [string, string | undefined][], ancestors: XmlNode[] = []): TextEdit | undefined {
+	const tag = text.slice(node.start, startTagEnd(text, node.start) + 1);
+	const change = sourceChange(tag, withAttrs(tag, attrs, ancestors));
+	return change && { ...change, start: node.start + change.start, end: node.start + change.end };
+}
+
 export function startTagEnd(text: string, start: number): number {
 	let quote = '';
 	for (let i = start + 1; i < text.length; i++) {

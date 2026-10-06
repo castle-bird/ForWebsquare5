@@ -1,4 +1,4 @@
-import { applyEdits, deleteNode, eolOf, escape, lineIndent, setAttribute, sourceChange, startTagEnd, type TextEdit } from './edit';
+import { applyEdits, deleteNode, eolOf, escape, lineIndent, setAttribute, setAttributes, sourceChange, startTagEnd, type TextEdit } from './edit';
 import { prefixOf, uniqueId, usedIds, WEBSQUARE_NS, type XmlNode } from './xmlModel';
 
 export const GRID_BIND_MODES = { new: '신규 생성', header: '헤더만 업데이트', body: '바디만 업데이트', all: '모두 업데이트', bind: '바인드 업데이트' } as const;
@@ -56,7 +56,7 @@ export function addGridPart(text: string, root: XmlNode, grid: XmlNode, part: Gr
 	const headerRow = g.rowsOf(g.all('header')[0]).at(-1);
 	if (part === 'header' && headerRow) { return addGridRow(text, root, grid, headerRow.index); }
 	const count = g.columnsOf(g.rowsOf(g.all('gBody')[0])[0] ?? g.rowsOf(g.all('header')[0])[0]).length;
-	if (!count) { throw new Error('gBody(또는 header) 컬럼이 없습니다. dataList를 먼저 바인딩해 줘.'); }
+	if (!count) { throw new Error('gBody(또는 header) 컬럼이 없습니다. dataList를 먼저 바인딩해 주세요.'); }
 	const i1 = `${indentOf(text, grid)}\t`, i2 = `${i1}\t`, i3 = `${i2}\t`;
 	const cols = Array.from({ length: count }, () => `${g.eol}${i3}${g.column(`id="${g.nextId('column')}"`)}`).join('');
 	const xml = `<${g.p}${part} id="${g.nextId(part)}">${g.eol}${i2}<${g.p}row id="${g.nextId('row')}">${cols}${g.eol}${i2}</${g.p}row>${g.eol}${i1}</${g.p}${part}>`;
@@ -101,7 +101,7 @@ export function columnLayout(sections: XmlNode[][], columnsOf: (row: XmlNode) =>
 export function addGridColumn(text: string, root: XmlNode, grid: XmlNode, at?: number, side: 'left' | 'right' = 'right'): TextEdit[] {
 	const g = gridContext(text, root, grid);
 	const rows = g.sections().flatMap(g.rowsOf);
-	if (!rows.length) { throw new Error('header·gBody가 없습니다. dataList를 먼저 바인딩해 줘.'); }
+	if (!rows.length) { throw new Error('header·gBody가 없습니다. dataList를 먼저 바인딩해 주세요.'); }
 	const { cells, covered } = columnLayout(g.sections().map(g.rowsOf), g.columnsOf);
 	const clicked = [...cells].find(([c]) => c.index === at)?.[1];
 	const x = clicked ? clicked.start + (side === 'right' ? clicked.span : 0) : Infinity;
@@ -125,7 +125,7 @@ export function addGridColumn(text: string, root: XmlNode, grid: XmlNode, at?: n
 export function addGridRow(text: string, root: XmlNode, grid: XmlNode, at?: number): TextEdit {
 	const g = gridContext(text, root, grid);
 	const ref = g.sections().flatMap(g.rowsOf).find(r => r.index === at || r.children.some(c => c.index === at)) ?? g.rowsOf(g.all('gBody')[0]).at(-1);
-	if (!ref) { throw new Error('gBody row가 없습니다. dataList를 먼저 바인딩해 줘.'); }
+	if (!ref) { throw new Error('gBody row가 없습니다. dataList를 먼저 바인딩해 주세요.'); }
 	const indent = indentOf(text, ref);
 	const count = Math.max(1, g.columnsOf(ref).length);
 	const cols = Array.from({ length: count }, () => `${g.eol}${indent}\t${g.column(`id="${g.nextId('column')}"`)}`).join('');
@@ -276,4 +276,42 @@ export function deleteGridColumns(text: string, grid: XmlNode, cellIndexes: numb
 		const left = p.span - hit;
 		return !hit ? [] : !left ? [deleteNode(text, cell)] : [setAttribute(text, cell, 'colSpan', left > 1 ? String(left) : undefined)!];
 	});
+}
+
+export const GRID_CELL_PARTS = ['header', 'gBody', 'subTotal', 'footer'] as const;
+export type GridCellPart = typeof GRID_CELL_PARTS[number];
+export interface GridCell { index: number; label: string; node: XmlNode }
+/** null = 속성 지우기(웹뷰 메시지는 JSON이라 undefined 값은 키째 사라진다) */
+export interface GridCellEdit { index: number; attrs: Record<string, string | null> }
+
+/** 그리드 부분(header·gBody·subTotal·footer, 같은 이름이 여럿이면 첫째)의 칸들. label은 "행,열"(0부터, 행 안 순서) */
+export function gridPartCells(grid: XmlNode, part: GridCellPart): GridCell[] | undefined {
+	const p = prefixOf(grid.tag), section = grid.children.find(c => c.tag === p + part);
+	return section?.children.filter(r => r.tag === `${p}row`).flatMap((row, r) =>
+		row.children.filter(c => c.tag === `${p}column`).map((node, c) => ({ index: node.index, label: `${r},${c}`, node })));
+}
+
+/**
+ * 그리드 칸 속성 표의 편집: 한 번 순회해 칸별 시작 태그만 고친다. 중복 칸 요청도 받은 순서대로 적용한다.
+ * 칸을 못 찾으면(옛 버전) undefined: 아무것도 안 바꾼다
+ */
+export function editGridCells(text: string, root: XmlNode, cells: GridCellEdit[]): TextEdit[] | undefined {
+	const pending = new Map<number, [string, string | undefined][]>();
+	for (const cell of cells) {
+		const attrs = pending.get(cell.index) ?? [];
+		attrs.push(...Object.entries(cell.attrs).map(([name, value]): [string, string | undefined] => [name, value ?? undefined]));
+		if (attrs.length) { pending.set(cell.index, attrs); }
+	}
+	const changes: TextEdit[] = [];
+	const visit = (node: XmlNode, ancestors: XmlNode[]) => {
+		const attrs = pending.get(node.index);
+		if (attrs && node.tag.endsWith(':column')) {
+			const change = setAttributes(text, node, attrs, ancestors);
+			if (change) { changes.push(change); }
+			pending.delete(node.index);
+		}
+		if (pending.size) { node.children.forEach(child => visit(child, [...ancestors, node])); }
+	};
+	visit(root, []);
+	return pending.size ? undefined : changes;
 }

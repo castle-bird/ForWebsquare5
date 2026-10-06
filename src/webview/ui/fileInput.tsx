@@ -25,7 +25,8 @@ export function FileInput({ files, value, onChange, onChoose, onFocus, placehold
 		onChoose(file);
 	};
 	const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-		if (!shown) {
+		// 한글 조합 중 Enter·화살표는 조합을 끝내는 키라 목록에 쓰지 않는다
+		if (!shown || e.nativeEvent.isComposing) {
 			return;
 		}
 		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {

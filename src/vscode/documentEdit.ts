@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { nodeAt, parseXml, pathTo, type XmlNode } from '../core/xmlModel';
-import { applyEdits, applyLineChanges, deleteNode, editableScript, encodeScript, setAttribute, setText, sourceChange, type TextEdit } from '../core/edit';
+import { applyEdits, applyLineChanges, deleteNode, editableScript, encodeScript, setAttribute, setAttributes, setText, sourceChange, type TextEdit } from '../core/edit';
 import { pasteNode } from '../core/paste';
 import { moveNode } from '../core/move';
 import { mergeCells, unmergeCells } from '../core/merge';
@@ -11,10 +11,11 @@ import { idConflict } from '../core/check';
 import { addDataNode, editDataFields, isDataKind, renameDataRefs, type DataRename } from '../core/data';
 import { addSubmissionNode, editSubmissionNode } from '../core/submission';
 import { editChoices } from '../core/choices';
-import { addGridColumn, addGridPart, addGridRow, bindGridView, deleteGridColumns, moveGridColumn } from '../core/grid';
+import { editHistory } from '../core/info';
+import { addGridColumn, addGridPart, addGridRow, bindGridView, deleteGridColumns, editGridCells, moveGridColumn } from '../core/grid';
 import type { CodeChange, CodeTarget, ToExtension } from '../core/protocol';
 
-type NodeEdit = Extract<ToExtension, { type: 'setAttr' | 'setText' | 'paste' | 'delete' | 'move' | 'addData' | 'editDataFields' | 'addSubmission' | 'editSubmission' | 'editChoices' | 'bindGrid' | 'addGridPart' | 'mergeCells' | 'unmergeCells' | 'gridColumns' }>;
+type NodeEdit = Extract<ToExtension, { type: 'setAttr' | 'setText' | 'paste' | 'delete' | 'move' | 'addData' | 'editDataFields' | 'addSubmission' | 'editSubmission' | 'editChoices' | 'editGridCells' | 'editHistory' | 'bindGrid' | 'addGridPart' | 'mergeCells' | 'unmergeCells' | 'gridColumns' }>;
 
 /** notify: 같이 바꾼 것(데이터·컬럼 id를 바꿔 바인딩도 바꿈)·막은 이유(겹치는 id)를 알린다 */
 export async function applyNodeEdit(document: vscode.TextDocument, msg: NodeEdit, notify?: (message: string) => void): Promise<boolean> {
@@ -30,6 +31,15 @@ export async function applyNodeEdit(document: vscode.TextDocument, msg: NodeEdit
 	const changes = root && nodeChanges(text, root, msg);
 	if (!changes) {
 		return false;
+	}
+	if (msg.type === 'editGridCells') {
+		// 바꾼 뒤 문서에서 본다: 칸끼리 id를 맞바꾸거나 같은 id를 두 칸에 넣은 것까지
+		const after = parseXml(applyEdits(text, changes));
+		const clash = after && msg.cells.map(c => c.attrs.id ? idConflict(after, c.index, c.attrs.id) : undefined).find(Boolean);
+		if (clash) {
+			notify?.(clash);
+			return false;
+		}
 	}
 	const rename = root && changes.length ? dataRename(root, msg) : undefined;
 	const refs = rename ? renameDataRefs(text, root!, rename) : [];
@@ -112,17 +122,12 @@ function nodeChanges(text: string, root: XmlNode, msg: NodeEdit): TextEdit[] | u
 		case 'editDataFields': return one(editDataFields(text, root, node, msg.fields, msg.id));
 		case 'editSubmission': return one(editSubmissionNode(text, root, node, msg.fields));
 		case 'editChoices': return one(editChoices(text, root, node, msg.fields));
+		case 'editGridCells': return editGridCells(text, root, msg.cells);
+		case 'editHistory': return one(editHistory(text, root, node, msg.rows));
 		case 'gridColumns': return msg.op === 'delete' ? deleteGridColumns(text, node, msg.cells) : moveGridColumn(text, node, msg.cells[0], msg.op);
 		case 'setAttr': {
 			if (msg.also?.length) {
-				// 같은 시작 태그를 여러 번 고치므로 차례로 적용한 뒤 바뀐 범위 하나로
-				let next = text;
-				for (const a of [{ name: msg.name, value: msg.value }, ...msg.also]) {
-					const at = pathTo(parseXml(next) ?? root, msg.index);
-					const change = at && setAttribute(next, at.at(-1)!, a.name, a.value, at.slice(0, -1));
-					next = change ? applyEdits(next, [change]) : next;
-				}
-				return one(sourceChange(text, next));
+				return one(setAttributes(text, node, [{ name: msg.name, value: msg.value }, ...msg.also].map(a => [a.name, a.value]), path.slice(0, -1)));
 			}
 			// 같은 노드가 두 번 오면 같은 범위를 두 번 고쳐 원문이 깨지므로 처음 것만
 			const targets = [{ index: msg.index, value: msg.value }, ...msg.more ?? []]

@@ -147,7 +147,7 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 			}} />
 			<div className="style-area">
 				<span>Style</span>
-				<Editable className="style-value" disabled={!node} value={node?.attrs.style} onCommit={v => onEdit('style', v)} enterNewline />
+				<Editable className="style-value" disabled={!node} value={node?.attrs.style} onCommit={v => onEdit('style', v)} />
 			</div>
 			{help && (
 				<div ref={popup} className={clsx('help', { fading })} style={popupStyle}>
@@ -227,8 +227,8 @@ function ColumnResizer({ onResize }: { onResize(width: number): void }) {
 		onPointerUp={() => drag.current = undefined} />;
 }
 
-function Editable({ value, onCommit, className, disabled, multiline, enterNewline, suggestions }: {
-	value?: string; onCommit(v: string | undefined): void; className?: string; disabled?: boolean; multiline?: boolean; enterNewline?: boolean; suggestions?: string[];
+function Editable({ value, onCommit, className, disabled, multiline, suggestions }: {
+	value?: string; onCommit(v: string | undefined): void; className?: string; disabled?: boolean; multiline?: boolean; suggestions?: string[];
 }) {
 	const [editing, setEditing] = useState(false);
 	const [initialHeight, setInitialHeight] = useState<number>();
@@ -242,7 +242,7 @@ function Editable({ value, onCommit, className, disabled, multiline, enterNewlin
 	};
 
 	if (editing) {
-		return <EditBox value={value ?? ''} className={className} multiline={multiline} enterNewline={enterNewline} initialHeight={initialHeight} suggestions={suggestions} onCommit={v => onCommit(v === '' ? undefined : v)} onClose={() => setEditing(false)} />;
+		return <EditBox value={value ?? ''} className={className} multiline={multiline} initialHeight={initialHeight} suggestions={suggestions} onCommit={v => onCommit(v === '' ? undefined : v)} onClose={() => setEditing(false)} />;
 	}
 	return <div ref={divRef} className={clsx('value', className, suggestions && 'has-list')} title={value}
 		onClick={() => !disabled && startEditing()}>{value}</div>;

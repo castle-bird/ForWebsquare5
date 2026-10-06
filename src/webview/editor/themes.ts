@@ -13,12 +13,15 @@ const THEMES: Record<Exclude<CodeThemeId, 'vscode'>, Extension> = {
 };
 
 /**
- * 모든 CodeMirror 편집기 공통: VS Code 편집기 글꼴·크기, 그리고 CodeMirror가 넣는 <style>에 웹뷰 CSP nonce.
+ * 모든 CodeMirror 편집기 공통: VS Code 편집기 글꼴·크기·합자(--code-font-features, main.tsx), 그리고 CodeMirror가 넣는 <style>에 웹뷰 CSP nonce.
  * nonce가 없으면 그 편집기의 테마·문법 색 스타일이 막힌다(다른 편집기가 먼저 넣어 줬을 때만 칠해짐)
  */
 export const editorBase = [
 	EditorView.cspNonce.of(document.querySelector<HTMLScriptElement>('script[nonce]')?.nonce ?? ''),
-	EditorView.theme({ '.cm-scroller': { fontFamily: 'var(--vscode-editor-font-family)', fontSize: 'var(--vscode-editor-font-size)' } }),
+	EditorView.theme({
+		'&': { fontFeatureSettings: 'var(--code-font-features, "liga" off, "calt" off)' },
+		'.cm-scroller': { fontFamily: 'var(--vscode-editor-font-family)', fontSize: 'var(--vscode-editor-font-size)' },
+	}),
 ];
 
 /** VS Code 테마를 따라가는지(밝음·어두움 전환을 따름, 팝업 색도 VS Code 변수) */

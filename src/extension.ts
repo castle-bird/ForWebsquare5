@@ -15,6 +15,7 @@ import { convert, publish, readWpackConfig } from './project/wpack';
 import { offerSetup, registerSetup, resolvePath, type SetupKey } from './vscode/setup';
 import { applyCodeEdit, applyNodeEdit, formatCode } from './vscode/documentEdit';
 import { LinkedFiles, registerLinks } from './vscode/links';
+import { UsedTablesStore } from './vscode/tables';
 import { saveTabOrder, saveTabPosition, tabOrder, tabPosition } from './vscode/linkTabs';
 import { linkIdOf } from './core/links';
 import { findPaletteDef } from './core/palette';
@@ -30,7 +31,7 @@ export function activate(context: vscode.ExtensionContext) {
 	registerLinks(context);
 	registerCodeTheme(context, msg => panels.forEach(p => void p.webview.postMessage(msg)));
 	context.subscriptions.push(
-		vscode.window.registerCustomEditorProvider(VIEW_TYPE, new DesignerProvider(context.extensionUri, context.globalState), {
+		vscode.window.registerCustomEditorProvider(VIEW_TYPE, new DesignerProvider(context.extensionUri, context.globalState, context.workspaceState, context.storageUri ?? context.globalStorageUri), {
 			webviewOptions: { retainContextWhenHidden: true },
 		}),
 		vscode.workspace.onDidSaveTextDocument(doc => void wpackOnSave(doc)),
@@ -125,7 +126,9 @@ async function documentMessage(document: vscode.TextDocument, webview: vscode.We
 }
 
 class DesignerProvider implements vscode.CustomTextEditorProvider {
-	constructor(private readonly extensionUri: vscode.Uri, private readonly globalState: vscode.Memento) {}
+	/** tablesFolder: Beta 사용 테이블 기본 저장 폴더(확장 전용, 이 PC) */
+	constructor(private readonly extensionUri: vscode.Uri, private readonly globalState: vscode.Memento,
+		private readonly workspaceState: vscode.Memento, private readonly tablesFolder: vscode.Uri) {}
 
 	async resolveCustomTextEditor(document: vscode.TextDocument, panel: vscode.WebviewPanel): Promise<void> {
 		const webRoot = await findWebRoot(document.uri.fsPath);
@@ -188,6 +191,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			return sendDocument();
 		};
 		const links = new LinkedFiles(document, post);
+		const usedTables = new UsedTablesStore(document.uri, this.workspaceState, vscode.Uri.joinPath(this.tablesFolder, 'used-tables'), post);
 		// 변경 표시 기준(Git 스테이지 내용): Source는 화면 XML 전체, Script는 그 안의 Script 본문. 바뀐 것만 보낸다
 		let bases: { source?: string; script?: string } = {};
 		const sendBases = async () => {
@@ -312,6 +316,8 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 						const range = new vscode.Range(msg.line, msg.ch, msg.endLine, msg.endCh);
 						await vscode.window.showTextDocument(vscode.Uri.file(fromWebPath(webRoot, msg.path, ENGINE_PAGE)), { selection: range });
 					}).catch(e => vscode.window.showErrorMessage(`공통 JS 열기 실패: ${errorMessage(e)}`));
+				} else if (usedTables.handle(msg)) {
+					// Beta 사용 테이블(읽기·저장·저장 폴더 고르기)
 				} else if (links.handle(msg)) {
 					// 연결 탭(연결·해제·열기·저장·탭 추가/이름/삭제·자동완성)
 				} else if (msg.type === 'setTabOrder') {
@@ -320,10 +326,10 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 				} else if (msg.type === 'setTabPosition') {
 					void saveTabPosition(msg.position);
 					broadcast(panel, { type: 'tabPosition', position: msg.position });
-				} else if (msg.type === 'editDataFields' || msg.type === 'addSubmission' || msg.type === 'editSubmission' || msg.type === 'editChoices') {
+				} else if (msg.type === 'editDataFields' || msg.type === 'addSubmission' || msg.type === 'editSubmission' || msg.type === 'editChoices' || msg.type === 'editGridCells') {
 					const apply = msg.version === document.version ? applyNodeEdit(document, msg, toast) : Promise.resolve(false);
 					void apply.then(async ok => {
-						await post({ type: 'popupAck', popup: msg.popup, ok, ...!ok && { error: '문서가 바뀌었어. 팝업을 다시 열어 줘.' } });
+						await post({ type: 'popupAck', popup: msg.popup, ok, ...!ok && { error: '문서가 바뀌었습니다. 팝업을 다시 열어 주세요.' } });
 						await refresh();
 					}, e => { void post({ type: 'popupAck', popup: msg.popup, ok: false, error: errorMessage(e) }); });
 				} else if (msg.type === 'format') {

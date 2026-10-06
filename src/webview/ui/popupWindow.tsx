@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { resizeBox, resizeEdges, type Box, type ResizeEdge } from './resizeBox';
+import { isModKey } from '../keys';
 
 let globalPopupZIndex = 100;
 
@@ -78,6 +79,13 @@ export function usePopupWindow(options: { initialOffset?: number; onClose?(): vo
 		if (e.key === 'Escape') {
 			e.stopPropagation();
 			onClose?.();
+		} else if (isModKey(e.nativeEvent, 'z') || isModKey(e.nativeEvent, 'y')) {
+			// 입력칸의 되돌리기만: VS Code 웹뷰는 이 키를 VS Code에도 넘겨 화면 XML 문서까지 되돌린다(팝업 열린 채 문서가 바뀜)
+			e.stopPropagation();
+		} else if (leavesOnEnter(e)) {
+			// 입력을 마쳤다는 표시로 입력칸에서 나온다(blur로 반영하는 칸도 이때 반영). 팝업에 포커스를 둬서 Esc로 닫기는 그대로
+			e.preventDefault();
+			e.currentTarget.focus();
 		}
 	};
 
@@ -95,6 +103,13 @@ export function usePopupWindow(options: { initialOffset?: number; onClose?(): vo
 	};
 
 	return { dialog, style, titleProps, resizeHandles, bringToFront, popupProps };
+}
+
+/** 글자 입력칸의 Enter(한글 조합 중·조합키·목록에서 고른 것 빼고). form 안이어도 확인(submit) 대신 입력칸에서 나온다 — 확인은 버튼으로 */
+function leavesOnEnter(e: KeyboardEvent<HTMLElement>) {
+	const input = e.target;
+	return e.key === 'Enter' && !e.defaultPrevented && !e.nativeEvent.isComposing && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
+		&& input instanceof HTMLInputElement && !['checkbox', 'radio', 'color', 'file', 'button', 'submit'].includes(input.type);
 }
 
 export function PopupTitle({ titleProps, badge, onClose, children }: {

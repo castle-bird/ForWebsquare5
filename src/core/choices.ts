@@ -19,7 +19,7 @@ export function readChoices(node: XmlNode): Choices | { error: string } {
 	}
 	const choices = kid(node, 'choices');
 	if (!choices) { return { items: [] }; }
-	const complex = { error: '선택 항목 구조가 복잡해서 이 팝업으로는 고칠 수 없어. Source 탭에서 고쳐 줘.' };
+	const complex = { error: '선택 항목 구조가 복잡해서 이 팝업으로는 고칠 수 없습니다. Source 탭에서 고쳐 주세요.' };
 	const itemsets = choices.children.filter(c => localName(c.tag) === 'itemset');
 	if (itemsets.length) {
 		const set = itemsets[0], label = kid(set, 'label'), value = kid(set, 'value');
@@ -36,12 +36,12 @@ export function editChoices(text: string, root: XmlNode, node: XmlNode, fields: 
 	if (localName(node.tag) === 'multiupload') {
 		return editParams(text, node, fields.items);
 	}
-	if (!/^(select1?|checkcombobox|column)$/.test(localName(node.tag))) { throw new Error('선택 항목은 selectbox·checkcombobox·radio·checkbox·그리드 select 컬럼에서만 편집할 수 있어.'); }
+	if (!/^(select1?|checkcombobox|column)$/.test(localName(node.tag))) { throw new Error('선택 항목은 selectbox·checkcombobox·radio·checkbox·그리드 select 컬럼에서만 편집할 수 있습니다.'); }
 	const current = readChoices(node);
 	if ('error' in current) { throw new Error(current.error); }
 	const choices = kid(node, 'choices');
-	if (choices && /<!--/.test(text.slice(choices.start, choices.end))) { throw new Error('선택 항목에 주석이 있어 이 팝업으로는 고칠 수 없어. Source 탭에서 고쳐 줘.'); }
-	if (fields.itemset && !fields.itemset.nodeset) { throw new Error('바인딩할 NodeSet을 골라 줘.'); }
+	if (choices && /<!--/.test(text.slice(choices.start, choices.end))) { throw new Error('선택 항목에 주석이 있어 이 팝업으로는 고칠 수 없습니다. Source 탭에서 고쳐 주세요.'); }
+	if (fields.itemset && !fields.itemset.nodeset) { throw new Error('바인딩할 NodeSet을 골라 주세요.'); }
 
 	const eol = eolOf(text), p = prefixOf(node.tag);
 	const tagEnd = startTagEnd(text, node.start) + 1;

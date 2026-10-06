@@ -4,7 +4,7 @@ import { EditorView, basicSetup } from 'codemirror';
 import { search } from '@codemirror/search';
 import { ChangeSet, Compartment, EditorSelection, EditorState, Prec, Transaction, countColumn, type Extension, type Text } from '@codemirror/state';
 import { hoverTooltip, keymap, type Command, type Tooltip } from '@codemirror/view';
-import { indentLess, indentMore } from '@codemirror/commands';
+import { indentLess, indentMore, redo } from '@codemirror/commands';
 import { acceptCompletion, autocompletion, type CompletionContext, type CompletionSource } from '@codemirror/autocomplete';
 import { getIndentUnit, indentUnit, type LanguageSupport } from '@codemirror/language';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
@@ -62,7 +62,8 @@ const insertIndent: Command = view => {
 	return true;
 };
 
-const keys = Prec.high(keymap.of([{ key: 'Tab', run: acceptCompletion }, { key: 'Tab', run: insertIndent, shift: indentLess }]));
+// 다시 하기: CodeMirror 기본은 Windows에서 Ctrl+Y만(Ctrl+Shift+Z는 macOS·Linux) → VS Code처럼 둘 다
+const keys = Prec.high(keymap.of([{ key: 'Tab', run: acceptCompletion }, { key: 'Tab', run: insertIndent, shift: indentLess }, { key: 'Mod-Shift-z', run: redo, preventDefault: true }]));
 
 // 들여쓰기 단위는 파일과 상관없이 공백 4칸(포맷과 같음, CodeMirror 기본은 2칸). Tab·자동 들여쓰기·들여쓰기 가이드 간격이 이 단위를 따른다
 const indent = indentUnit.of('    ');
@@ -92,7 +93,8 @@ const completion = autocompletion({
 
 export interface CodeEditorHandle {
 	appendAndFocus(text: string, cursorOffset: number): void;
-	focusRange(from: number, to: number): void;
+	/** 이 편집기 글자(줄바꿈은 \n)에서 찾은 범위를 골라 보인다. 원문 위치를 넘기면 CRLF 파일에서 줄 수만큼 밀린다 */
+	focusFound(find: (text: string) => { from: number; to: number } | undefined): void;
 }
 
 export const CodeEditor = forwardRef<CodeEditorHandle, {
@@ -354,11 +356,13 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 			editor.dispatch({ changes: { from: end, insert: text }, selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
 			editor.focus();
 		},
-		focusRange(from, to) {
+		focusFound(find) {
 			const editor = view.current;
-			if (!editor) {
+			const found = editor && find(editor.state.doc.toString());
+			if (!editor || !found) {
 				return;
 			}
+			const { from, to } = found;
 			editor.dispatch({ selection: { anchor: from, head: to }, effects: EditorView.scrollIntoView(from, { y: 'center' }) });
 			editor.focus();
 		},

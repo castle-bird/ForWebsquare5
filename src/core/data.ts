@@ -41,7 +41,7 @@ export function editDataFields(text: string, root: XmlNode, node: XmlNode, field
 	}
 	let idEdit: TextEdit | undefined;
 	if (id !== undefined && id !== node.attrs.id) {
-		if (!VALID_ID.test(id)) { throw new Error(`올바른 ID를 입력해 줘: ${id}`); }
+		if (!VALID_ID.test(id)) { throw new Error(`올바른 ID를 입력해 주세요: ${id}`); }
 		if (usedIds(root, node).has(id)) { throw new Error(`이미 사용 중인 ID입니다: ${id}`); }
 		idEdit = setAttribute(text, node, 'id', id);
 	}

@@ -89,8 +89,15 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
 		}
 	}, [shadow, sheets]);
 	const [tree, generation] = useMemo(() => [render(body, defs), ++renders], [body, defs]);
+	// 고른 것이 바뀔 때만 보이게 스크롤(새로 넣은 노드는 다음 문서에서 나타날 때). 속성만 바꾼 새 문서마다 하면 그리드 가로 스크롤이 튄다
+	const scrolledTo = useRef<number>(undefined);
 	useEffect(() => {
-		page.current?.querySelector(node(selected))?.scrollIntoView({ block: 'nearest' });
+		if (selected === scrolledTo.current) { return; }
+		const element = page.current?.querySelector(node(selected));
+		if (element) {
+			element.scrollIntoView({ block: 'nearest' });
+			scrolledTo.current = selected;
+		}
 	}, [selected, tree, shadow]);
 	useEffect(() => {
 		const frame = requestAnimationFrame(() => page.current?.querySelectorAll<HTMLTableSectionElement>('.w2grid thead').forEach(head => {
@@ -238,7 +245,7 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
 					}}
 					onMouseOver={e => { const el = target(e); setHover(el ? wseIndex(el) : undefined); keepHoverGrid(el ? gridOf(wseIndex(el))?.index : undefined); }}
 					onMouseLeave={() => { setHover(undefined); keepHoverGrid(undefined); }}>
-					<Boundary key={generation}><DataCollection.Provider value={dataCollection}>{tree}</DataCollection.Provider></Boundary>
+					<Boundary generation={generation}><DataCollection.Provider value={dataCollection}>{tree}</DataCollection.Provider></Boundary>
 					{editing && (
 						<EditBox key={editing.target.index} style={editing.rect} value={editing.target.value ?? ''}
 							header={editing.form && <FormHeader form={editing.form} />}
@@ -274,11 +281,57 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
  * 그리드 옮기기는 이동 손잡이(GridHandle)로만. 끌어서 고른 뒤 따라오는 click은 선택을 덮지 않게 무시
  */
 function useCellRange(body: XmlNode, page: RefObject<HTMLDivElement | null>, onSelectCells?: (primary: number, cells: number[]) => void) {
-	const drag = useRef<{ anchor: number; owner: number; last: number }>(undefined);
+	/** scroller: 그리드 스크롤 칸(가장자리 밖으로 끌면 그쪽으로 굴린다), x·y: 마지막 포인터 자리 */
+	const drag = useRef<{ anchor: number; owner: number; last: number; scroller?: HTMLElement; x: number; y: number; frame?: number }>(undefined);
 	const swallowClick = useRef(false);
 	const cellAt = (t: EventTarget) => {
 		const el = pick(t as Element), path = el ? pathTo(body, wseIndex(el)) : undefined, grid = path?.find(n => localName(n.tag) === 'gridView');
 		return path && grid && localName(path.at(-1)!.tag) === 'column' && path.length > 3 ? { path, grid } : undefined;
+	};
+	/** 포인터 자리(그리드 밖이면 그리드 안 가장자리로 당겨서)의 칸까지 고른다. 새로 골랐으면 true */
+	const select = (d: NonNullable<typeof drag.current>) => {
+		let { x, y } = d;
+		if (d.scroller) {
+			const r = d.scroller.getBoundingClientRect(), left = r.left + d.scroller.clientLeft, top = r.top + d.scroller.clientTop;
+			x = Math.min(Math.max(x, left + 1), left + d.scroller.clientWidth - 2);
+			y = Math.min(Math.max(y, top + 1), top + d.scroller.clientHeight - 2);
+		}
+		// 포인터를 잡은 뒤에는 target이 캔버스라 커서 아래 칸은 좌표로 찾는다
+		const under = (page.current?.getRootNode() as ShadowRoot | undefined)?.elementFromPoint(x, y);
+		const cell = under ? cellAt(under) : undefined;
+		const index = cell?.path.at(-1)!.index;
+		if (!cell || index === undefined || cell.path.at(-3)!.index !== d.owner || index === d.last) { return false; }
+		d.last = index;
+		const rect = (i: number) => page.current?.querySelector(`[data-wse="${i}"]`)?.getBoundingClientRect();
+		const a = rect(d.anchor), b = rect(index), owner = nodeAt(body, d.owner);
+		if (!a || !b || !owner) { return false; }
+		const box = { left: Math.min(a.left, b.left), right: Math.max(a.right, b.right), top: Math.min(a.top, b.top), bottom: Math.max(a.bottom, b.bottom) };
+		// 칸 가운데가 상자 안이면 고름(병합 칸처럼 여러 줄·칸을 차지해도). 스크롤에 가려진 칸도 좌표는 있다
+		const cells = owner.children.flatMap(row => row.children).filter(c => localName(c.tag) === 'column').flatMap(c => {
+			const r = rect(c.index), cx = r && (r.left + r.right) / 2, cy = r && (r.top + r.bottom) / 2;
+			return r && cx! >= box.left && cx! <= box.right && cy! >= box.top && cy! <= box.bottom ? [c.index] : [];
+		});
+		onSelectCells!(d.anchor, cells);
+		return true;
+	};
+	/** 포인터가 그리드 가장자리(EDGE px 안)나 밖이면 멀수록 빠르게 굴리고 새로 보인 칸까지 고른다. 안쪽으로 오면 멈춤 */
+	const EDGE = 24;
+	const autoScroll = () => {
+		const d = drag.current, s = d?.scroller;
+		if (!d || !s) { return; }
+		const r = s.getBoundingClientRect();
+		const speed = (before: number, after: number) => before > 0 ? -Math.min(16, Math.ceil(before / 5)) : after > 0 ? Math.min(16, Math.ceil(after / 5)) : 0;
+		const dx = speed(r.left + EDGE - d.x, d.x - (r.left + s.clientLeft + s.clientWidth - EDGE));
+		const dy = speed(r.top + EDGE - d.y, d.y - (r.top + s.clientTop + s.clientHeight - EDGE));
+		const { scrollLeft, scrollTop } = s;
+		s.scrollBy(dx, dy);
+		if (s.scrollLeft === scrollLeft && s.scrollTop === scrollTop) { d.frame = undefined; return; }
+		select(d);
+		d.frame = requestAnimationFrame(autoScroll);
+	};
+	const stop = () => {
+		if (drag.current?.frame !== undefined) { cancelAnimationFrame(drag.current.frame); }
+		drag.current = undefined;
 	};
 	return {
 		/** 끌어서 고르는 중(그리드 옮기기 native drag를 막는다) */
@@ -292,32 +345,22 @@ function useCellRange(body: XmlNode, page: RefObject<HTMLDivElement | null>, onS
 			// 글자 선택·그리드 끌기가 시작되지 않게(click·dblclick은 그대로 온다)
 			e.preventDefault();
 			const index = cell.path.at(-1)!.index;
-			drag.current = { anchor: index, owner: cell.path.at(-3)!.index, last: index };
+			const scroller = page.current?.querySelector<HTMLElement>(`[data-wse="${cell.grid.index}"]`) ?? undefined;
+			drag.current = { anchor: index, owner: cell.path.at(-3)!.index, last: index, scroller, x: e.clientX, y: e.clientY };
 		},
 		onPointerMove: (e: ReactPointerEvent<HTMLDivElement>) => {
-			// 다른 칸으로 넘어가면(끌기 시작) 캔버스 밖에서 놓아도 끝나게 포인터를 잡는다. 누르자마자 잡으면 click이 칸 대신 캔버스로 가 선택이 안 됨.
-			// 잡은 뒤에는 target이 캔버스라 커서 아래 칸은 좌표로 찾는다
-			const under = drag.current && (page.current?.getRootNode() as ShadowRoot | undefined)?.elementFromPoint(e.clientX, e.clientY);
-			const d = drag.current, cell = d && under ? cellAt(under) : undefined;
-			const index = cell?.path.at(-1)!.index;
-			if (!d || !cell || index === undefined || cell.path.at(-3)!.index !== d.owner || index === d.last) { return; }
-			d.last = index;
-			const rect = (i: number) => page.current?.querySelector(`[data-wse="${i}"]`)?.getBoundingClientRect();
-			const a = rect(d.anchor), b = rect(index), owner = nodeAt(body, d.owner);
-			if (!a || !b || !owner) { return; }
-			const box = { left: Math.min(a.left, b.left), right: Math.max(a.right, b.right), top: Math.min(a.top, b.top), bottom: Math.max(a.bottom, b.bottom) };
-			// 칸 가운데가 상자 안이면 고름(병합 칸처럼 여러 줄·칸을 차지해도)
-			const cells = owner.children.flatMap(row => row.children).filter(c => localName(c.tag) === 'column').flatMap(c => {
-				const r = rect(c.index), x = r && (r.left + r.right) / 2, y = r && (r.top + r.bottom) / 2;
-				return r && x! >= box.left && x! <= box.right && y! >= box.top && y! <= box.bottom ? [c.index] : [];
-			});
-			if (!swallowClick.current) {
+			const d = drag.current;
+			if (!d) { return; }
+			d.x = e.clientX;
+			d.y = e.clientY;
+			// 다른 칸으로 넘어가면(끌기 시작) 캔버스 밖에서 놓아도 끝나게 포인터를 잡는다. 누르자마자 잡으면 click이 칸 대신 캔버스로 가 선택이 안 됨
+			if (select(d) && !swallowClick.current) {
 				try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 합성 이벤트 등 활성 포인터가 없으면 캡처 없이 */ }
+				swallowClick.current = true;
 			}
-			swallowClick.current = true;
-			onSelectCells!(d.anchor, cells);
+			if (swallowClick.current && d.frame === undefined) { autoScroll(); }
 		},
-		onPointerUp: () => { drag.current = undefined; },
+		onPointerUp: stop,
 	};
 }
 
@@ -545,8 +588,15 @@ function resize(e: ReactPointerEvent, el: HTMLElement, dir: string, commit: (pro
 	window.addEventListener('pointerup', up);
 }
 
-class Boundary extends Component<{ children: ReactNode }, { error?: Error }> {
-	state: { error?: Error } = {};
+/**
+ * 그리기 오류는 새로 그릴 때(generation) 지운다. key로 다시 만들면 캔버스 DOM이 통째로 새로 생겨
+ * 속성 하나만 바꿔도 그리드 등 안쪽 스크롤 위치가 처음으로 돌아간다
+ */
+class Boundary extends Component<{ generation: number; children: ReactNode }, { error?: Error; generation: number }> {
+	state: { error?: Error; generation: number } = { generation: this.props.generation };
+	static getDerivedStateFromProps(props: { generation: number }, state: { generation: number }) {
+		return props.generation === state.generation ? null : { error: undefined, generation: props.generation };
+	}
 	static getDerivedStateFromError(error: Error) {
 		return { error };
 	}

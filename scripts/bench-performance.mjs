@@ -34,6 +34,24 @@ const bundle = await build({
 		import {parseXml} from './src/core/xmlModel';
 		import {screenProblems, problemAncestors} from './src/core/check';
 		import {useEditorStore} from './src/webview/store';
+		import {EditorState} from '@codemirror/state';
+		import {ensureSyntaxTree} from '@codemirror/language';
+		import {scriptTools, scriptLanguage} from './src/webview/editor/completions';
+		window.benchScriptTools = () => {
+			const text = Array.from({length:1000}, (_, i) => 'scwin.f' + i + ' = function(value) {};').join('\\n') + '\\nscwin.f999(1);';
+			let state = EditorState.create({doc:text, extensions:[scriptLanguage]});
+			ensureSyntaxTree(state, state.doc.length, 10000);
+			state = state.update({}).state;
+			const tools = scriptTools(undefined, [], {}), pos = text.lastIndexOf('1');
+			const run = () => {
+				if (tools.signature(state, pos)?.label !== 'f999(value)' || !tools.definition(state, pos - 3)) { throw new Error('Script lookup mismatch'); }
+			};
+			let start = performance.now(); run();
+			const cold = performance.now() - start;
+			start = performance.now();
+			for (let i = 0; i < 25; i++) { run(); }
+			return {cold, repeated: performance.now() - start};
+		};
 		const ns = 'http://www.inswave.com/websquare';
 		const defs = ['input', 'group'].map(id => ({ id, ns, realType: id, parents: [], bases: [], properties: [], events: [] }));
 		window.send = data => window.dispatchEvent(new MessageEvent('message', {data}));
@@ -70,9 +88,23 @@ const server = createServer((req, res) => {
 });
 const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
 const report = [];
-const hostBundle = await build({ stdin: { contents: "export {parseXml} from './src/core/xmlModel'; export {annotate} from './src/project/components'; export {attachFrames} from './src/project/frames';", resolveDir: process.cwd() }, bundle: true, write: false, platform: 'node', format: 'cjs', plugins: [baselinePlugin] });
+const hostBundle = await build({ stdin: { contents: "export {parseXml} from './src/core/xmlModel'; export {applyEdits} from './src/core/edit'; export {editGridCells} from './src/core/grid'; export {annotate} from './src/project/components'; export {attachFrames} from './src/project/frames';", resolveDir: process.cwd() }, bundle: true, write: false, platform: 'node', format: 'cjs', plugins: [baselinePlugin] });
 const host = { exports: {} };
 new Function('require', 'module', 'exports', hostBundle.outputFiles[0].text)(createRequire(import.meta.url), host, host.exports);
+const gridText = '<html xmlns:w2="urn:test"><body>' + Array.from({length:1000}, (_, i) => '<w2:column id="c' + i + '" value="old"/>').join('') + '</body></html>';
+const gridRoot = host.exports.parseXml(gridText);
+const gridEdits = gridRoot.children[0].children.slice(0, 100).map(n => ({index:n.index, attrs:{value:'new', width:'120', inputType:'text', displayMode:'label'}}));
+const gridTimes = [];
+for (let i = 0; i < 7; i++) {
+	const start = performance.now();
+	const changes = host.exports.editGridCells(gridText, gridRoot, gridEdits);
+	const result = host.exports.applyEdits(gridText, changes);
+	const time = performance.now() - start;
+	assert.equal(host.exports.parseXml(result).children[0].children.filter(n => n.attrs.value === 'new').length, 100);
+	if (i > 1) { gridTimes.push(time); }
+}
+const gridEditing = { totalCells:1000, editedCells:100, attributes:4, milliseconds:median(gridTimes) };
+console.log('gridEditing', gridEditing);
 const frames = [];
 const frameDir = await fs.mkdtemp(path.join(tmpdir(), 'ws5-perf-'));
 try {
@@ -101,6 +133,17 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 let browser;
 try {
 	browser = await puppeteer.launch({ executablePath: chrome, headless: true, pipe: true });
+	const scriptPage = await browser.newPage();
+	await scriptPage.goto(`http://127.0.0.1:${server.address().port}`);
+	await scriptPage.waitForFunction(() => !!window.benchScriptTools);
+	const scriptTimes = [];
+	for (let i = 0; i < 7; i++) {
+		const time = await scriptPage.evaluate(() => window.benchScriptTools());
+		if (i > 1) { scriptTimes.push(time); }
+	}
+	const scriptTools = { functions:1000, repeatedPairs:25, cold:median(scriptTimes.map(t => t.cold)), repeated:median(scriptTimes.map(t => t.repeated)) };
+	console.log('scriptTools', scriptTools);
+	await scriptPage.close();
 	for (const [count, marked] of [[200, false], [1000, false], [3000, false], [1000, true]]) {
 		const page = await browser.newPage();
 		await page.setViewport({ width: 1200, height: 800 });
@@ -135,7 +178,7 @@ try {
 		console.log(JSON.stringify(Object.fromEntries(Object.entries(row).map(([k, v]) => [k, typeof v === 'number' ? +v.toFixed(2) : v]))));
 		await page.close();
 	}
-	if (output) { await fs.writeFile(output, JSON.stringify({ baseline, browser: await browser.version(), frames, report }, null, 2)); }
+	if (output) { await fs.writeFile(output, JSON.stringify({ baseline, browser: await browser.version(), gridEditing, scriptTools, frames, report }, null, 2)); }
 } finally {
 	await browser?.close();
 	await new Promise(resolve => server.close(resolve));

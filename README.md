@@ -1,152 +1,69 @@
 # For Websquare5
 
-VS Code에서 WebSquare5 에디터를 사용할 수 있게 해주는 **비공식** 확장입니다.
-
-화면 XML을 Design·Script·Source로 열어 편집하고, Controller·Service·Mapper·MyBatis 파일을 같은 화면의 탭으로 연결해 한 창에서 작업합니다.
+VS Code에서 WebSquare5 화면을 편집하는 **비공식** 확장입니다.
+화면 XML을 Design·Info·Script·Source 탭으로 열고, Controller·Service·Mapper·MyBatis 파일도 같은 창의 탭으로 연결해 작업합니다.
 
 ![Design 탭](images/designTab.png)
 
-> 스크린샷의 화면은 [WebSquare5 교육용 개발팩](https://media.inswave.kr/edu/WEBSQUARE_DEV_PACK_SP5_edu.zip)의 샘플 프로젝트를 연 것입니다. 샘플 화면·코드의 저작권은 Inswave Systems에 있습니다.
-
----
-
-## 개발 배경
-
-실무에서 가장 불편했던 것은 **과도한 툴 분리와 컨텍스트 스위칭**이었습니다.
-
-- **Frontend**: Eclipse (WebSquare Studio)
-- **Backend**: IntelliJ / Zed
-- **Database**: DBeaver
-- 여기에 Java/Spring의 수많은 파일(Controller, Service, Mapper, XML 등)까지 겹쳐 창과 탭 전환에 피로감이 컸습니다.
-
-> "VS Code 하나로 WebSquare와 백엔드를 같이 개발할 수는 없을까?"
-
-Eclipse + WebSquare 환경의 사용 흐름을 참고해 VS Code 확장으로 만들었습니다.
-
----
+> 스크린샷은 [WebSquare5 교육용 개발팩](https://media.inswave.kr/edu/WEBSQUARE_DEV_PACK_SP5_edu.zip) 샘플 프로젝트입니다. 샘플 화면·코드의 저작권은 Inswave Systems에 있습니다.
 
 ## 주요 기능
 
-### 화면 디자이너
+- **Design**: 프로젝트 CSS를 적용한 미리보기, 선택·크기 조절·이동, 복사·붙여넣기·삭제, 팔레트로 컴포넌트 추가
+- **그리드**: 열 너비, 셀 병합·해제, 열 이동·삭제, 칸 속성 표(Excel처럼 범위 복사·붙여넣기)
+- **팝업 편집**: DataList·DataMap·Submission·선택 항목을 더블클릭으로 편집
+- **Property / Event / Outline / Data 패널**: 속성·이벤트 편집, 트리 이동·바인딩, 화면 점검(겹치는 id·없는 컬럼 등)
+- **Info**: 프로그램 정보와 개정 이력
+- **Script·Source**: 자동완성, 마우스 오버 설명, 정의로 이동, 파라미터 힌트, 포맷, 문법 오류 표시, 코드 테마
+- **연결 파일**: Java·XML·SQL 파일을 화면 탭으로 열어 편집(설치된 언어 확장의 자동완성·포맷 사용)
+- **Beta**: 화면이 쓰는 테이블을 적고 관계를 그림으로 보기(이 PC에만 저장)
+- **저장**: 저장하면 wpack 변환으로 JS 산출물 갱신
 
-`*.xml`을 열면 WebSquare 화면은 디자이너로, 그 외 XML은 일반 텍스트 편집기로 열립니다.
+XML은 바뀐 부분만 고치고, 저장·Undo는 VS Code 방식 그대로입니다.
 
-- **Design 탭**: 프로젝트 CSS를 적용한 화면 미리보기, 컴포넌트 선택·크기 조절, 복사·붙여넣기·삭제, 그리드 열 너비 조절. fusionchart는 바인딩한 dataList 값으로 차트(선·막대·원·영역)를 그립니다(엔진 모양과 다른 미리보기)
-- **Property / Event 패널**: 속성·이벤트 검색과 편집, 여러 컴포넌트 동시 편집. 정해진 값이 있는 속성도 입력칸 + 목록이라 직접 입력할 수 있습니다
-- **Outline / Data 패널**: 컴포넌트 트리, DataCollection·Submission 트리, 드래그 앤 드롭 이동·바인딩, F2로 id 바꾸기
-- **더블클릭 편집**(캔버스·Outline): 글자 바로 고치기(버튼·textbox·output 등), 그리드 칸 속성, 선택 항목(selectbox·checkcombobox·multiselect·radio·checkbox), DataList·DataMap·Submission, multiupload 파라미터
-- **Design 이동**: 이미 배치된 컴포넌트를 끌어 순서·부모 그룹을 변경합니다. 그룹 중앙은 안쪽 맨 뒤, 가장자리는 앞·뒤로 이동하며 놓을 위치를 표시합니다. 그리드는 칸에 마우스를 올리면 왼쪽 위에 나오는 이동 손잡이나, 칸이 아닌 빈 곳을 끌어 옮깁니다(손잡이를 누르면 그리드 선택). Outline과 같은 XML 이동·Undo를 사용합니다.
-- **그리드 칸 여러 개 고르기**: 칸을 누른 채 끌면 누른 칸부터 지금 칸까지 직사각형 안의 칸을 모두 고릅니다(같은 header·본문 안). 이어서 우클릭 "병합"으로 합칠 수 있습니다
-- **셀 병합·병합 해제**: 그리드 칸·표(th·td)를 골라 우클릭 "병합", 합친 칸은 우클릭 "병합 해제"로 원래 칸 수로 나눕니다
-- **그리드 열**: 우클릭 "열 왼쪽으로/오른쪽으로 이동"·"열 삭제". 칸을 골라 Delete를 눌러도 그 열이 header·본문·footer에서 함께 지워져 행·열이 어긋나지 않습니다. 묶음 머리 칸(여러 열을 합친 칸) 밖으로는 옮기지 않습니다
-- **팔레트**: 탭 방향 화살표 왼쪽 패널 버튼으로 Design 왼쪽 팔레트를 열고 닫습니다. 설치본 정의의 묶음별 목록·아이콘·검색을 지원합니다. 행 오른쪽 별로 즐겨찾기를 저장하며, 상단 즐겨찾기는 접기 없이 표시합니다. 즐겨찾기도 클릭·드래그로 삽입합니다. 즐겨찾기 왼쪽 ⠿ 손잡이를 끌어 순서를 바꾸며, 순서도 저장됩니다(손잡이에서 위·아래 방향키 지원). 탭 맨 오른쪽 버튼으로 우측 Property·Event·Outline·Data 패널을 접고 펼칩니다. 클릭하면 삽입 위치를 고르고, 캔버스로 끌어다 놓으면 그룹 중앙은 안쪽, 위·아래 가장자리는 앞·뒤에 삽입합니다.
-- **Event → Script**: 이벤트 값을 더블클릭하면 `scwin.{id}_{이벤트}` 함수 뼈대를 만들거나 해당 함수로 이동
-- **id 바꾸기**: dataList·dataMap이나 그 컬럼의 id를 바꾸면 `data:` 바인딩·바인딩된 그리드 열·Submission 참조도 같이 바뀝니다(Script 코드 안 참조는 그대로). 이미 쓰는 id로는 바꾸지 않고 알려 줍니다
-- **화면 점검**: Outline·Data 트리에 경고 아이콘으로 겹치는 id, 없는 컬럼을 가리키는 바인딩, Script에 없는 이벤트 함수를 표시합니다(마우스를 올리면 이유). 트리 위 경고 개수 버튼을 누르면 다음 경고 줄로 이동합니다. 스크립트에서 만드는 데이터는 경고하지 않습니다
-
-XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그대로 동작합니다.
-
-### 코드 편집 (Source · Script)
+자세한 기능 설명은 [FEATURES.md](FEATURES.md)에 있습니다.
 
 ![Script 탭](images/scriptTab.png)
 
-![Source 탭](images/sourceTab.png)
-
-- XML·WebSquare API·공통 JS 자동완성과 마우스 오버 설명(공통 JS·같은 Script 함수의 JSDoc 포함). 공통 JS를 저장하면 바로 반영됩니다
-- 정의로 이동(Ctrl+클릭·F12): 같은 Script 함수는 그 자리로, 공통 JS 함수는 그 파일을 VS Code로 엽니다. 커서 추가는 Alt+클릭
-- 파라미터 힌트: `(`·`,`를 치거나 Ctrl+Shift+Space를 누르면 함수 모양과 지금 파라미터를 보여 줍니다(WebSquare API 문서·JSDoc)
-- 문법 오류 표시, 포맷(VS Code에 설정한 포매터, 없으면 VS Code 내장), 검색, 줄바꿈(VS Code 설정을 따름)
-- 코드 편집기 테마 선택(탭 줄 오른쪽 톱니바퀴 메뉴, "IntelliJ Dark"·"IntelliJ Light" 포함), Git 변경 줄 표시
-- 테마 색 덮어쓰기: 톱니바퀴 메뉴의 "테마 색 덮어쓰기…" 팝업에서 색칸·색 코드·기울임/굵게/밑줄로 바꾸면 바로 미리 보이고, 확인하면 저장됩니다(지금 테마만 또는 모든 테마). 저장 위치는 설정 `websquare5-editor.codeThemeCustomizations`라 직접 적어도 됩니다. 예:
-  ```json
-  "websquare5-editor.codeThemeCustomizations": {
-    "tokens": { "keyword": "#ff8800", "comment": { "color": "#888888", "fontStyle": "italic" } },
-    "[Dracula]": { "colors": { "background": "#1e1f29" } }
-  }
-  ```
-- 테마 가져오기: 톱니바퀴 메뉴의 "테마 파일 가져오기…"로 VS Code 테마 `.json`을 가져옵니다. 배경·글자·선택·줄 번호 색은 그대로, 문법 색은 이 편집기의 분류에 맞춰 비슷하게 옮겨집니다
-
-### 연결 파일 (Controller · Service · Mapper · MyBatis)
-
-화면 탭에서 Java·XML·SQL 등 연결 파일을 열어 편집합니다. 탭 목록과 순서는 직접 바꿀 수 있고, 탭 줄 앞쪽 화살표로 탭 줄을 위·아래로 옮길 수 있습니다(기본 위).
-
 ![연결 파일 탭](images/java1.png)
-
-![Java 자동완성](images/java2.png)
-
-- 작업 폴더 안 파일을 이름으로 검색해 연결
-- VS Code에 설치된 언어 확장(Java 등)의 자동완성·포맷·마우스 오버 설명(Javadoc)·정의로 이동(Ctrl+클릭·F12)·파라미터 힌트 사용
-- MyBatis 매퍼의 SQL 색·키워드 자동완성. 설정 `websquare5-editor.sqlDialect`로 DB 방언을 고릅니다 (`standard`(기본)·`oracle`·`mysql`·`mariadb`·`postgresql`·`mssql`·`sqlite`)
-
-### 저장
-
-저장하면 wpack 변환이 실행되어 JS 산출물이 갱신됩니다.
-
----
 
 ## 사용 전 준비
 
-이 확장은 **사용 권한이 있는 WebSquare5 환경** 위에서 동작합니다.
+이 확장은 **사용 권한이 있는 WebSquare5 환경**에서 동작합니다.
 
-- VS Code 1.125 이상, 또는 VS Code 기반 편집기(Cursor·Antigravity 등, 바탕 VS Code 1.125 이상)
-- WebSquare5 프로젝트 (작업 폴더에 `websquare/config.xml`이 있는 구조)
-- WebSquare5 설정 파일이 들어 있는 폴더 (컴포넌트 정의 `WebSquareConfig.xml`, wpack 변환기, API 문서를 이 폴더 밑에서 읽습니다. 예: 전자정부프레임워크 4.1 기준 `eclipse_egov4.1/`). 못 찾으면 팔레트와 Property·Event 패널이 비고, 저장 시 wpack 변환을 건너뜁니다.
-- (선택) 연결 파일의 Java 자동완성을 위한 Java 확장
+- VS Code 1.125 이상(또는 Cursor·Antigravity 등 VS Code 기반 편집기)
+- WebSquare5 프로젝트(작업 폴더에 `websquare/config.xml`)
+- WebSquare5 설정 파일 폴더(컴포넌트 정의 `WebSquareConfig.xml`, wpack 변환기, API 문서. 예: `eclipse_egov4.1/`)
 
-### 설치
+## 설치
 
-- **VS Code**: 확장 탭에서 "For Websquare5"를 검색해 설치합니다(VS Code Marketplace).
-- **Cursor·Antigravity 등**: 확장 탭에서 같은 이름으로 검색합니다([Open VSX](https://open-vsx.org)).
-- **직접 설치**: [Releases](https://github.com/castle-bird/ForWebsquare5/releases)에서 `.vsix`를 받아 설치합니다.
+- **VS Code**: 확장 탭에서 "For Websquare5" 검색(Marketplace)
+- **Cursor·Antigravity 등**: 같은 이름으로 검색([Open VSX](https://open-vsx.org))
+- **직접 설치**: [Releases](https://github.com/castle-bird/ForWebsquare5/releases)에서 `.vsix`를 받아
 
 ```bash
-code --install-extension websquare5-editor-0.5.0.vsix
+code --install-extension websquare5-editor-0.6.0.vsix
 ```
 
-## 사용 방법
+## 처음 설정
 
-### 처음 설정 (Walkthrough)
+1. WebSquare5 프로젝트 폴더를 엽니다.
+2. `F1` → **Welcome: Open Walkthrough...** → **WebSquare5 Editor 시작하기**
+3. **폴더 선택**으로 WebSquare5 설정 파일 폴더를 고르면 필요한 파일을 자동으로 찾습니다.
 
-1. VS Code에서 WebSquare5 프로젝트 폴더를 엽니다.
-2. `F1`을 누르고 **Welcome: Open Walkthrough...**(한국어 VS Code는 "연습"으로 검색)를 실행합니다.
-3. 목록에서 **WebSquare5 Editor 시작하기**를 고릅니다.
-4. **폴더 선택**을 눌러 위 WebSquare5 설정 파일 폴더(예: `eclipse_egov4.1/`)를 고릅니다.
-5. 그 밑에서 컴포넌트 정의 파일, wpack 변환기, API 문서를 자동으로 찾습니다. 못 찾은 항목은 해당 기능을 쓸 때 알림으로 알려 줍니다.
+`F1` → **WebSquare5: 환경 설정**이나 설정(`websquare5-editor.*`)에서 직접 바꿀 수도 있습니다.
 
-Walkthrough 대신 `F1` → **WebSquare5: 환경 설정**으로 항목별 위치를 확인·변경할 수도 있고, 설정(`websquare5-editor.*`)에서 직접 지정해도 됩니다.
+## 피드백
 
-### 화면 열기
-
-- 화면 `*.xml`을 열면 Design 탭으로 열립니다. 탭 줄에서 Script·Source와 연결 파일 탭으로 옮겨 다닙니다.
-- 코드 편집기 테마·SQL 방언·도구 경로는 탭 줄 오른쪽 톱니바퀴 메뉴에서 바꿉니다.
-
----
-
-## 100% Vibe Coding
-
-이 프로젝트는 **AI 페어 프로그래밍(Vibe Coding)**으로 설계·구현했습니다. 기획, 아키텍처, 컴포넌트 렌더링, XML 파싱, 상태 관리까지 AI와 대화하고 피드백하며 만들었습니다.
-
-## 현재 상태와 피드백
-
-WebSquare5 교육용 개발팩 기준으로 개발하고 확인했습니다. 엔진 버전이나 배포 방식이 다른 환경에서는 화면 모양이나 동작이 다를 수 있습니다. 자체 렌더러라 실제 엔진과 모양이 다를 수 있고, 일부 컴포넌트는 자리 표시로만 그려집니다.
-
-써 보시고 안 맞는 부분, 필요한 기능은 [Issues](https://github.com/castle-bird/ForWebsquare5/issues)로 알려 주세요.
-
----
-
-## 참고 자료
-
-공개된 WebSquare 학습 자료와 배포 환경의 동작을 참고해 만들었습니다.
-
-- [WebSquare 공식 유튜브 공개 강의](https://www.youtube.com/watch?v=KEPuK3erXWM&list=PL7a9HhkvOVb09T_2Xdxs4sPgyDjkGlT9G)
-- [WebSquare5 교육용 개발팩](https://media.inswave.kr/edu/WEBSQUARE_DEV_PACK_SP5_edu.zip)
+WebSquare5 교육용 개발팩 기준으로 만들고 확인했습니다. 자체 렌더러라 실제 엔진과 모양이 다를 수 있습니다.
+안 맞는 부분이나 필요한 기능은 [Issues](https://github.com/castle-bird/ForWebsquare5/issues)로 알려 주세요.
 
 ## 고지 사항
 
-- **비공식 도구**: 이 확장은 Inswave Systems의 공식 제품이 아니며 Inswave와 무관한 개인 프로젝트입니다. WebSquare는 Inswave Systems의 제품·상표입니다.
-- **테마 이름**: 기본 테마 "IntelliJ Dark"·"IntelliJ Light"는 IntelliJ New UI의 느낌을 참고해 색을 직접 맞춘 것으로, JetBrains의 파일이 아니며 JetBrains와 무관합니다. IntelliJ는 JetBrains s.r.o.의 상표입니다.
-- **독립 구현**: WebSquare 엔진·스킨·컴포넌트 정의·wpack·문서·아이콘 등 Inswave의 파일을 이 저장소와 확장에 포함하지 않으며, Studio 소스를 복사·포팅하지 않았습니다. 공개 문서와 실행 결과를 참고해 독립적으로 작성했습니다.
-- **WebSquare 환경 의존**: 사용자의 작업 폴더와 설치본의 WebSquare 프로젝트 구조·리소스를 실행 중에 읽습니다. WebSquare 프로젝트가 아닌 환경에서는 XML ↔ JS 변환, 컴포넌트 목록·속성 조회가 동작하지 않습니다.
+- **비공식 도구**: Inswave Systems의 공식 제품이 아니며 Inswave와 무관한 개인 프로젝트입니다. WebSquare는 Inswave Systems의 제품·상표입니다.
+- **독립 구현**: WebSquare 엔진·스킨·컴포넌트 정의·wpack·문서·아이콘 등 Inswave의 파일을 포함하지 않으며, Studio 소스를 복사·포팅하지 않았습니다. 공개 문서와 실행 결과를 참고해 작성했습니다.
+- **WebSquare 환경 의존**: 작업 폴더와 설치본의 WebSquare 리소스를 실행 중에 읽습니다. WebSquare 프로젝트가 아니면 변환·컴포넌트 목록·속성 조회가 동작하지 않습니다.
+- **테마 이름**: "IntelliJ Dark"·"IntelliJ Light"는 IntelliJ New UI 느낌을 참고해 직접 맞춘 색으로, JetBrains와 무관합니다. IntelliJ는 JetBrains s.r.o.의 상표입니다. "One Dark"·"One Light"는 Atom One 테마의 색을 참고해 직접 작성했습니다.
 
 ## 라이선스
 

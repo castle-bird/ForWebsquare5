@@ -7,7 +7,7 @@ import { findNode, parseXml, pathTo, type XmlNode } from '../core/xmlModel';
 import { mergeCells, mergeProblem } from '../core/merge';
 import { pasteNode } from '../core/paste';
 import { moveNode } from '../core/move';
-import { boundColumnIds } from '../core/grid';
+import { boundColumnIds, gridPartCells } from '../core/grid';
 import { loadDefaultStyles, parseComponents } from '../project/components';
 import { readWebConfig } from '../project/config';
 import { cached, serial } from '../project/paths';
@@ -28,6 +28,29 @@ suite('edit', () => {
 		assert.deepStrictEqual(boundColumnIds(root, path('a')), ['a', 'b']);
 		assert.strictEqual(boundColumnIds(root, path('h1')), undefined, '헤더 컬럼');
 		assert.strictEqual(boundColumnIds(root, path('x')), undefined, '바인딩 안 된 그리드');
+	});
+
+	test('editGridCells: 칸마다 여러 속성 바꾸기·지우기, 칸끼리 id 맞바꾸기는 되고 겹치면 안 바꿈', async () => {
+		const doc = await vscode.workspace.openTextDocument({ language: 'xml', content: '<html xmlns:w2="urn:w2"><body><w2:gridView id="g">'
+			+ '<w2:header><w2:row><w2:column id="h1" value="이름" class="req"/><w2:column id="h2"/></w2:row></w2:header>'
+			+ '<w2:gBody><w2:row><w2:column id="a" width="70"/><w2:column id="b"/></w2:row></w2:gBody></w2:gridView></body></html>' });
+		const grid = findNode(parseXml(doc.getText())!, n => n.attrs.id === 'g')!;
+		const [h1, h2] = gridPartCells(grid, 'header')!, [a, b] = gridPartCells(grid, 'gBody')!;
+		assert.deepStrictEqual([h1.label, h2.label, b.label], ['0,0', '0,1', '0,1']);
+		const before = doc.getText();
+		await vscode.window.showTextDocument(doc);
+		assert.ok(await applyNodeEdit(doc, { type: 'editGridCells', version: doc.version, index: grid.index, popup: 'p', cells: [
+			{ index: h1.index, attrs: { value: '성명', class: null } }, { index: a.index, attrs: { id: 'b', width: '90' } }, { index: b.index, attrs: { id: 'a' } }] }));
+		assert.ok(doc.getText().includes('<w2:column id="h1" value="성명"/>'), doc.getText());
+		assert.ok(doc.getText().includes('<w2:column id="b" width="90"/><w2:column id="a"/>'), doc.getText());
+		const after = doc.getText();
+		await vscode.commands.executeCommand('undo');
+		assert.strictEqual(doc.getText(), before, '여러 칸 편집도 Undo 한 번');
+		await vscode.commands.executeCommand('redo');
+		assert.strictEqual(doc.getText(), after, 'Redo 한 번으로 모두 복원');
+		const notes: string[] = [];
+		assert.strictEqual(await applyNodeEdit(doc, { type: 'editGridCells', version: doc.version, index: grid.index, popup: 'p', cells: [{ index: a.index, attrs: { id: 'a' } }] }, m => notes.push(m)), false);
+		assert.strictEqual(notes.length, 1, '겹치는 id 알림');
 	});
 
 	test('setAttr more: 여러 노드를 한 편집으로(노드마다 다른 값), 하나라도 없으면 안 바꿈', async () => {

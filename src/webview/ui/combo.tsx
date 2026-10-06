@@ -36,6 +36,13 @@ export function ComboInput({ value, options, onValue, onPick, onKeyDown, onFocus
 			setActive(a => e.key === 'ArrowDown' ? Math.min(shown.length - 1, a + 1) : Math.max(0, a - 1));
 			return;
 		}
+		// Esc는 목록만 닫는다(VS Code 자동완성처럼). 안 막으면 팝업이 통째로 닫히거나 Property 입력이 취소된다
+		if (open && e.key === 'Escape') {
+			e.preventDefault();
+			e.stopPropagation();
+			setClosed(true);
+			return;
+		}
 		if (open && e.key === 'Enter' && shown[active] !== undefined && !e.nativeEvent.isComposing) {
 			e.preventDefault();
 			e.stopPropagation();

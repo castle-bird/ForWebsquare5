@@ -18,7 +18,7 @@ export function SubmissionEditor({ initial, editing, busy, externalError, offset
 	const update = (name: keyof SubmissionFields, value: string) => setFields(current => ({ ...current, [name]: value }));
 	const submit = (e: FormEvent) => {
 		e.preventDefault();
-		if (!VALID_ID.test(fields.id)) { setError('올바른 ID를 입력해 줘.'); return; }
+		if (!VALID_ID.test(fields.id)) { setError('올바른 ID를 입력해 주세요.'); return; }
 		setError('');
 		onConfirm(fields);
 	};
@@ -31,7 +31,7 @@ export function SubmissionEditor({ initial, editing, busy, externalError, offset
 					<h3>기본</h3>
 					<div className="form-grid">
 						<label className="field"><span>서브미션 ID</span>
-							<input id="submission-id" className="mono" value={fields.id} onChange={e => update('id', e.target.value)} required autoFocus /></label>
+							<input id="submission-id" value={fields.id} onChange={e => update('id', e.target.value)} required autoFocus /></label>
 						<label className="field"><span>요청 URL</span>
 							<input id="submission-action" value={fields.action} placeholder="/path/to/action.do" onChange={e => update('action', e.target.value)} /></label>
 						<div className="field"><span>HTTP 메서드 · 통신 방식</span>
@@ -47,9 +47,9 @@ export function SubmissionEditor({ initial, editing, busy, externalError, offset
 					<h3>데이터</h3>
 					<div className="form-grid">
 						<label className="field"><span>요청 파라미터 (ref)</span>
-							<textarea id="submission-ref" className="mono" rows={3} placeholder="data:json,dataMap1" value={fields.ref} onChange={e => update('ref', e.target.value)} /></label>
+							<textarea id="submission-ref" rows={3} placeholder="data:json,dataMap1" value={fields.ref} onChange={e => update('ref', e.target.value)} /></label>
 						<label className="field"><span>응답 데이터 (target)</span>
-							<textarea id="submission-target" className="mono" rows={3} placeholder="data:json,dataList1" value={fields.target} onChange={e => update('target', e.target.value)} /></label>
+							<textarea id="submission-target" rows={3} placeholder="data:json,dataList1" value={fields.target} onChange={e => update('target', e.target.value)} /></label>
 					</div>
 				</section>
 				<section>
@@ -59,9 +59,9 @@ export function SubmissionEditor({ initial, editing, busy, externalError, offset
 							const name = `ev:${eventName}` as const;
 							return <label key={eventName} className="field"><span>{EVENT_LABELS[eventName]}</span>
 								<div className="submission-handler">
-									<input id={`submission-${eventName}`} className="mono" value={fields[name]} placeholder={`scwin.${fields.id}_${eventName}`} onChange={e => update(name, e.target.value)} />
+									<input id={`submission-${eventName}`} value={fields[name]} placeholder={`scwin.${fields.id}_${eventName}`} onChange={e => update(name, e.target.value)} />
 									<button type="button" className="icon codicon codicon-code" disabled={!onScript} aria-label={`${EVENT_LABELS[eventName]} Script`}
-										title={onScript ? 'Script: 없으면 만들고, 있으면 그 코드로 이동' : '확인으로 추가한 뒤 사용할 수 있어'}
+										title={onScript ? 'Script: 없으면 만들고, 있으면 그 코드로 이동' : '확인으로 추가한 뒤 사용할 수 있습니다'}
 										onClick={e => { e.preventDefault(); const handler = onScript?.(eventName, fields[name]); if (handler) { update(name, handler); } }} />
 								</div></label>;
 						})}

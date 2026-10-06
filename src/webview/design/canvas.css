@@ -89,7 +89,7 @@
 .wse-badges > span { width: 5px; height: 5px; border-radius: 50%; box-shadow: 0 0 0 1px #fff; }
 .wse-badges > .bind { background: #8fd19e; }
 .wse-badges > .event { background: #f4a09a; }
-.wse-chip { position: absolute; max-width: 100%; box-sizing: border-box; padding: 0 8px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/20px var(--vscode-font-family, sans-serif); color: var(--vscode-button-foreground, #fff); background: var(--vscode-focusBorder); transition: opacity .12s; }
+.wse-chip { position: absolute; max-width: 100%; box-sizing: border-box; padding: 0 8px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 14px/22px var(--vscode-font-family, sans-serif); color: var(--vscode-button-foreground, #fff); background: var(--vscode-focusBorder); transition: opacity .12s; }
 .wse-chip.faded { opacity: .15; }
 
 /* 입력칸 + 고를 값 목록(ui/combo.tsx). 캔버스 편집 상자처럼 늘 밝게(테마를 따르지 않음) */

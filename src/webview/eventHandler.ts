@@ -33,12 +33,14 @@ export function useEventHandler({ doc, defs, events, scriptRef, editAttr, showSc
 		showScript();
 		const attr = `ev:${eventName}`, attrChanges = target.attrs[attr] !== handler;
 		const text = doc.script.text;
-		const defined = text.search(new RegExp(`(?<![\\w$.])${handler.replace(/[.$]/g, '\\$&')}\\s*=(?!=)`));
+		const definition = new RegExp(`(?<![\\w$.])${handler.replace(/[.$]/g, '\\$&')}\\s*=(?!=)`);
+		const defined = text.search(definition);
 		if (defined >= 0 || !/^[\w$]+(\.[\w$]+)*$/.test(handler)) {
-			const at = defined >= 0 ? defined : text.indexOf(handler);
-			if (at >= 0) {
-				requestAnimationFrame(() => scriptRef.current?.focusRange(at, at + handler.length));
-			}
+			// 위치는 편집기 글자에서 다시 찾는다(원문이 CRLF면 편집기와 위치가 다르다)
+			requestAnimationFrame(() => scriptRef.current?.focusFound(code => {
+				const at = defined >= 0 ? code.search(definition) : code.indexOf(handler);
+				return at >= 0 ? { from: at, to: at + handler.length } : undefined;
+			}));
 			if (attrChanges) { editAttr(attr, handler, target.index); }
 			return handler;
 		}

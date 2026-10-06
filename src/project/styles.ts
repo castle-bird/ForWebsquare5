@@ -1,8 +1,8 @@
+import { DomUtils } from 'htmlparser2';
 import postcss, { CssSyntaxError, type Root } from 'postcss';
 import safeParse from 'postcss-safe-parser';
 import selectorParser from 'postcss-selector-parser';
 import valueParser from 'postcss-value-parser';
-import { DomUtils } from 'htmlparser2';
 import { readWebConfig } from './config';
 import { fromWebPath, webPath } from './paths';
 

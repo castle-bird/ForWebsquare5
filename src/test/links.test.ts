@@ -120,6 +120,7 @@ statementType (STATEMENT|PREPARED) "PREPARED"
 
 	test('탭 순서: 저장된 순서대로, 모르는 이름은 무시하고 새 탭은 뒤에', () => {
 		assert.deepStrictEqual(orderTabs(['D', 'S', 'C', 'M'], ['M', 'x', 'D']), ['M', 'D', 'S', 'C']);
+		assert.deepStrictEqual(orderTabs(['Design', 'Info', 'Script', 'Source', 'C'], ['C', 'Design', 'Source', 'Script']), ['C', 'Design', 'Info', 'Source', 'Script'], '새 고정 탭(Info)은 저장된 순서에서 원래 앞 탭 뒤에');
 		assert.deepStrictEqual(moveTab(['A', 'B', 'C', 'D'], 'D', 'A', false), ['D', 'A', 'B', 'C']);
 		assert.deepStrictEqual(moveTab(['A', 'B', 'C', 'D'], 'A', 'C', true), ['B', 'C', 'A', 'D']);
 		assert.deepStrictEqual(moveTab(['A', 'B'], 'A', 'zz', true), ['A', 'B']);

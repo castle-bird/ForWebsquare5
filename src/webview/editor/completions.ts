@@ -249,6 +249,7 @@ export function jsDocDom(doc: string): HTMLElement {
 }
 
 const moduleCache = new WeakMap<object, Members>();
+const fileCache = new WeakMap<object, { members: Members; definitions: TopMember[] }>();
 
 /** 맨 위 정의 하나: owner(점으로 이은 개체 이름, 전역은 '')의 label. at은 이름 글자 자리(정의로 이동) */
 interface TopMember { owner: string; label: string; value: SyntaxNode | null; doc?: string; at: { from: number; to: number } }
@@ -277,23 +278,39 @@ function eachMember(text: string, visit: (m: TopMember) => void) {
 	}
 }
 
-/** owner의 label이 정의된 이름 자리(맨 위 정의만) */
-function definitionIn(text: string, owner: string, label: string): { from: number; to: number } | undefined {
-	let found: { from: number; to: number } | undefined;
-	eachMember(text, m => { if (!found && m.owner === owner && m.label === label) { found = { from: m.at.from, to: m.at.to }; } });
-	return found;
+/** 불변 문서(Text)·공통 JS 파일마다 한 번 분석. hover·힌트·정의 이동이 같은 결과를 쓴다. */
+function fileMembers(key: object, text: () => string) {
+	let result = fileCache.get(key);
+	if (!result) {
+		const source = text(), members: Members = new Map(), definitions: TopMember[] = [];
+		const { add, namespace } = memberAdder(members);
+		eachMember(source, m => {
+			definitions.push(m);
+			if (m.owner) { namespace(m.owner); }
+			add(m.owner, memberOption(source, m.label, m.value, m.doc));
+		});
+		result = { members, definitions };
+		fileCache.set(key, result);
+	}
+	return result;
 }
+
+const localMembers = (state: EditorState) => fileMembers(state.doc, () => state.doc.toString());
+
+/** owner의 label이 정의된 첫 이름 자리(맨 위 정의만) */
+const definitionIn = (definitions: TopMember[], owner: string, label: string) => definitions.find(m => m.owner === owner && m.label === label)?.at;
 
 function moduleMembers(files: { text: string }[]): Members {
 	const cached = moduleCache.get(files);
 	if (cached) { return cached; }
 	const members: Members = new Map();
 	const { add, namespace } = memberAdder(members);
-	for (const { text } of files) {
-		eachMember(text, ({ owner, label, value, doc }) => {
+	for (const file of files) {
+		const parsed = fileMembers(file, () => file.text);
+		for (const { owner, label } of parsed.definitions) {
 			if (owner) { namespace(owner); }
-			add(owner, memberOption(text, label, value, doc));
-		});
+			add(owner, parsed.members.get(owner)!.get(label)!);
+		}
 	}
 	moduleCache.set(files, members);
 	return members;
@@ -366,7 +383,7 @@ function scriptSignature(state: EditorState, pos: number, members: Members): Sig
 	const owner = name === callee ? '' : state.sliceDoc(callee!.firstChild!.from, callee!.firstChild!.to).replace(/\s+/g, '');
 	const label = state.sliceDoc(name.from, name.to);
 	const find = (all: Members) => { const o = all.get(owner)?.get(label); return o && shapeOf.get(o); };
-	const shape = find(members) ?? find(moduleMembers([{ text: state.doc.toString() }]));
+	const shape = find(members) ?? find(localMembers(state).members);
 	if (!shape) { return undefined; }
 	let active = 0;
 	for (let c = args.firstChild; c; c = c.nextSibling) {
@@ -395,7 +412,7 @@ function scriptHover(members: () => Members): HoverSource {
 		// 없으면 이 Script 안에서 정의한 함수(scwin.f = function…, function f…)의 JSDoc
 		let option = find(members());
 		if (!option?.info) {
-			option = find(moduleMembers([{ text: view.state.doc.toString() }])) ?? option;
+			option = find(localMembers(view.state).members) ?? option;
 		}
 		const dom = option && hoverDom(option);
 		return dom ? { pos: target.from, end: target.to, above: true, create: () => ({ dom: colorDoc(dom, view.state) }) } : null;
@@ -423,10 +440,10 @@ export type ScriptDefinition = { from: number; to: number } | { path: string; li
 export function scriptDefinition(state: EditorState, pos: number, modules: { path: string; text: string }[]): ScriptDefinition | undefined {
 	const target = memberAt(state, pos) ?? memberAt(state, pos, -1);
 	if (!target) { return undefined; }
-	const here = definitionIn(state.doc.toString(), target.owner, target.label);
-	if (here) { return here; }
+	const here = definitionIn(localMembers(state).definitions, target.owner, target.label);
+	if (here) { return { from: here.from, to: here.to }; }
 	for (const file of modules) {
-		const at = definitionIn(file.text, target.owner, target.label);
+		const at = definitionIn(fileMembers(file, () => file.text).definitions, target.owner, target.label);
 		if (at) {
 			const lineCh = (offset: number) => {
 				const before = file.text.slice(0, offset).split(/\r\n?|\n/);

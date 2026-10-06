@@ -16,7 +16,7 @@ export function readLinkExts(value: unknown): string[] {
 }
 
 /** 지울 수 없는 탭 */
-export const FIXED_TABS = ['Design', 'Script', 'Source'];
+export const FIXED_TABS = ['Design', 'Info', 'Script', 'Source'];
 
 export const DEFAULT_LINK_TABS: LinkTab[] = [
 	{ id: 'controller', label: 'Controller' },
@@ -71,11 +71,11 @@ export function newTabId(tabs: LinkTab[]): string {
 	return `tab${n}`;
 }
 
-/** 저장해 둔 탭 순서대로. 순서에 없는 탭은 원래 자리 순서로 뒤에 */
+/** 저장해 둔 탭 순서대로. 순서에 없는 탭(새로 생긴 고정 탭·새 연결 탭)은 원래 바로 앞 탭 뒤에, 맨 앞 탭이면 맨 뒤에 */
 export function orderTabs(names: string[], order: readonly string[] = []): string[] {
-	const rank = (n: string) => {
-		const i = order.indexOf(n);
-		return i < 0 ? order.length + names.indexOf(n) : i;
+	const rank = (n: string): number => {
+		const i = order.indexOf(n), at = names.indexOf(n);
+		return i >= 0 ? i : at > 0 ? rank(names[at - 1]) + 1 / (names.length + 1) : order.length + at;
 	};
 	return [...names].sort((a, b) => rank(a) - rank(b));
 }

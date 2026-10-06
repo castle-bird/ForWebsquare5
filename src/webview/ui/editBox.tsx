@@ -8,8 +8,8 @@ import { ComboInput } from './combo';
  * changed: footer 값이 바뀜 → 글자가 그대로여도 닫을 때 onCommit
  * suggestions: 한 줄 입력에 고를 값 목록(직접 입력도 됨). 목록에서 고르면 바로 반영
  */
-export function EditBox({ value, onCommit, onClose, className, style, multiline = true, enterNewline = false, initialHeight, header, footer, status, changed = false, suggestions }: {
-	value: string; onCommit(v: string): void; onClose(): void; className?: string; style?: CSSProperties; multiline?: boolean; enterNewline?: boolean; initialHeight?: number;
+export function EditBox({ value, onCommit, onClose, className, style, multiline = true, initialHeight, header, footer, status, changed = false, suggestions }: {
+	value: string; onCommit(v: string): void; onClose(): void; className?: string; style?: CSSProperties; multiline?: boolean; initialHeight?: number;
 	header?: ReactNode; footer?: ReactNode; status?: ReactNode; changed?: boolean; suggestions?: string[];
 }) {
 	const [draft, setDraft] = useState(value);
@@ -38,7 +38,7 @@ export function EditBox({ value, onCommit, onClose, className, style, multiline 
 	};
 
 	const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
-		const newline = multiline && (enterNewline ? !(e.ctrlKey || e.metaKey) : e.shiftKey);
+		const newline = multiline && e.shiftKey;
 		if (e.key === 'Enter' && !newline && !e.nativeEvent.isComposing) {
 			e.preventDefault();
 			close(true);

@@ -32,16 +32,16 @@ export async function attachFrames(root: XmlNode, file: string, webRoot: string 
 	walk(root);
 	await Promise.all(frames.map(async n => {
 		const src = n.attrs.src;
-		const target = await resolveSrc(src, file, webRoot);
-		if (!target) {
-			n.frameError = `화면을 찾지 못함: ${src}`;
-			return;
-		}
-		if (stack.includes(target) || stack.length > MAX_DEPTH) {
-			n.frameError = '순환 참조 또는 중첩이 너무 깊음';
-			return;
-		}
 		try {
+			const target = await resolveSrc(src, file, webRoot);
+			if (!target) {
+				n.frameError = `화면을 찾지 못함: ${src}`;
+				return;
+			}
+			if (stack.includes(target) || stack.length > MAX_DEPTH) {
+				n.frameError = '순환 참조 또는 중첩이 너무 깊음';
+				return;
+			}
 			const child = parseXml(await readFile(target, 'utf8'));
 			const body = kid(child, 'body');
 			if (!child || !body) {

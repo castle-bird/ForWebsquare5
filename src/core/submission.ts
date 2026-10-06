@@ -24,7 +24,7 @@ export const submissionFields = (node: XmlNode): SubmissionFields =>
 
 export function editSubmissionNode(text: string, root: XmlNode, node: XmlNode, fields: SubmissionFields): TextEdit | undefined {
 	if (node.tag !== 'xf:submission') { throw new Error('xf:submission만 수정할 수 있습니다.'); }
-	if (!VALID_ID.test(fields.id)) { throw new Error('올바른 Submission ID를 입력해 줘.'); }
+	if (!VALID_ID.test(fields.id)) { throw new Error('올바른 Submission ID를 입력해 주세요.'); }
 	if (usedIds(root, node).has(fields.id)) { throw new Error(`이미 사용 중인 ID야: ${fields.id}`); }
 	const end = startTagEnd(text, node.start) + 1;
 	const tag = text.slice(node.start, end);
@@ -37,9 +37,9 @@ export function editSubmissionNode(text: string, root: XmlNode, node: XmlNode, f
 
 export function addSubmissionNode(text: string, root: XmlNode, model: XmlNode, fields: SubmissionFields): TextEdit {
 	if (model.tag !== 'xf:model' || model.ns !== XFORMS_NS) { throw new Error('xf:model에만 Submission을 추가할 수 있습니다.'); }
-	if (!VALID_ID.test(fields.id)) { throw new Error('올바른 Submission ID를 입력해 줘.'); }
+	if (!VALID_ID.test(fields.id)) { throw new Error('올바른 Submission ID를 입력해 주세요.'); }
 	if (usedIds(root).has(fields.id)) { throw new Error(`이미 사용 중인 ID야: ${fields.id}`); }
-	if (!SUBMISSION_METHODS.includes(fields.method) || !SUBMISSION_MODES.includes(fields.mode) || !SUBMISSION_MEDIA_TYPES.includes(fields.mediatype)) { throw new Error('지원하지 않는 Submission 옵션이야.'); }
+	if (!SUBMISSION_METHODS.includes(fields.method) || !SUBMISSION_MODES.includes(fields.mode) || !SUBMISSION_MEDIA_TYPES.includes(fields.mediatype)) { throw new Error('지원하지 않는 Submission 옵션입니다.'); }
 	const attrs = Object.entries(fields).filter(([name, value]) => value || !name.startsWith(EV));
 	return insertNode(text, model, 'inside', withAttrs('<xf:submission/>', attrs, pathTo(root, model.index)));
 }

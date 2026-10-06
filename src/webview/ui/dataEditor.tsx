@@ -56,11 +56,11 @@ export function DataEditor({ node, externalError, offsetIndex = 0, onApply, onCl
 		if (target) { e.preventDefault(); target.focus(); setSelected(rows[rowIndex + direction[0]].uid); }
 	};
 	const apply = () => {
-		if (!VALID_ID.test(id)) { setError(`ID를 확인해 줘: ${id || '(비어 있음)'}`); return; }
+		if (!VALID_ID.test(id)) { setError(`ID를 확인해 주세요: ${id || '(비어 있음)'}`); return; }
 		const ids = new Set<string>();
 		for (const row of rows) {
-			if (!VALID_ID.test(row.id) || ids.has(row.id)) { setError(`ID를 확인해 줘: ${row.id || '(비어 있음)'}`); return; }
-			if (row.length && !/^\d+$/.test(row.length)) { setError('length는 0 이상의 정수만 입력할 수 있어.'); return; }
+			if (!VALID_ID.test(row.id) || ids.has(row.id)) { setError(`ID를 확인해 주세요: ${row.id || '(비어 있음)'}`); return; }
+			if (row.length && !/^\d+$/.test(row.length)) { setError('length는 0 이상의 정수만 입력할 수 있습니다.'); return; }
 			ids.add(row.id);
 		}
 		setError('');
@@ -95,7 +95,7 @@ export function DataEditor({ node, externalError, offsetIndex = 0, onApply, onCl
 					{rows.map((row, i) => <tr key={row.uid} className={`${selected === row.uid ? 'selected' : ''} ${dropClass(row.uid)}`}
 						onClick={() => setSelected(row.uid)} {...rowProps(row.uid)}>
 						<td><button className="data-row-handle" title="끌어서 행 이동" aria-label={`${i + 1}행 이동`} {...handleProps(row.uid)}>⠿ {i + 1}</button></td>
-						<td><input className="mono" aria-label={`${i + 1}행 id`} value={row.id} onChange={e => update(row.uid, { id: e.target.value })} /></td>
+						<td><input aria-label={`${i + 1}행 id`} value={row.id} onChange={e => update(row.uid, { id: e.target.value })} /></td>
 						<td><input aria-label={`${i + 1}행 name`} value={row.name} onChange={e => update(row.uid, { name: e.target.value })} /></td>
 						<td><select aria-label={`${i + 1}행 dataType`} value={row.dataType} onChange={e => update(row.uid, { dataType: e.target.value })}>{DATA_TYPES.map(type => <option key={type}>{type}</option>)}</select></td>
 						<td><input aria-label={`${i + 1}행 length`} inputMode="numeric" value={row.length} onChange={e => update(row.uid, { length: e.target.value })} /></td>
