@@ -3,7 +3,7 @@ import { readChoices, type ChoiceItem, type Choices, type ChoicesFields, type It
 import { localName, type XmlNode } from '../../core/xmlModel';
 import type { ComponentDef } from '../../core/protocol';
 import { ComboInput } from './combo';
-import { PopupTitle, usePopupWindow } from './popupWindow';
+import { PopupActions, PopupTitle, usePopupWindow } from './popupWindow';
 import { useRowDrag } from './rowDrag';
 import { Segmented } from './segmented';
 
@@ -162,10 +162,7 @@ export function ChoicesEditor({ node, kind, sources, externalError, offsetIndex 
 			</section></>}
 		</div>
 		{(readError || error || externalError) && <p className="error" role="alert">{readError || error || externalError}</p>}
-		<div className="data-editor-actions">
-			<button type="button" className="btn btn-secondary" onClick={onClose}>닫기</button>
-			<button type="button" className="btn btn-primary" disabled={!!readError} onClick={apply}>확인</button>
-		</div>
+		<PopupActions onClose={onClose} onApply={apply} applyDisabled={!!readError} />
 		{resizeHandles}
 	</dialog>;
 }

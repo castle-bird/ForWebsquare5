@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import { parseXml } from '../core/xmlModel';
 import { applyEdits } from '../core/edit';
-import { editHistory, readHistory } from '../core/info';
+import { editHistory, INFO_FIELDS, infoAttr, readHistory } from '../core/info';
 
 const NS = 'xmlns="http://www.w3.org/1999/xhtml" xmlns:w2="http://www.inswave.com/websquare"';
 const headOf = (text: string) => { const root = parseXml(text)!; return { root, head: root.children.find(c => c.tag === 'head')! }; };
@@ -31,5 +31,20 @@ suite('Info 탭 개정 이력', () => {
 		assert.throws(() => editHistory(mixed, m.root, m.head, []));
 		const bare = '<html><head><title/></head></html>', b = headOf(bare);
 		assert.throws(() => editHistory(bare, b.root, b.head, [row('1', 'x')]), /namespace/);
+	});
+});
+
+suite('Info 탭 화면 정보 속성 이름', () => {
+	const names = (head: string) => INFO_FIELDS.map(f => infoAttr(headOf(`<html ${NS}><head ${head}/></html>`).head, f));
+	const other = ['meta_author', 'meta_date', 'meta_memo'];
+	test('있는 이름 그대로, ID·이름은 짝 계열을 따르고, 없으면 meta_screenId·meta_screenName·meta_programDesc', () => {
+		assert.deepStrictEqual(names(''), ['meta_screenId', 'meta_screenName', other[0], other[1], 'meta_programDesc', other[2]]);
+		assert.deepStrictEqual(names('meta_screenId="A"'), ['meta_screenId', 'meta_screenName', other[0], other[1], 'meta_programDesc', other[2]]);
+		assert.deepStrictEqual(names('meta_programName="B"'), ['meta_programId', 'meta_programName', other[0], other[1], 'meta_programDesc', other[2]]);
+		// 섞여 있으면 칸마다 있는 이름 그대로
+		assert.deepStrictEqual(names('meta_programId="A" meta_screenName="B"').slice(0, 2), ['meta_programId', 'meta_screenName']);
+		// 설명: meta_desc·meta_screenDesc만 있으면 그것
+		assert.strictEqual(names('meta_desc="x"')[4], 'meta_desc');
+		assert.strictEqual(names('meta_screenDesc="x"')[4], 'meta_screenDesc');
 	});
 });

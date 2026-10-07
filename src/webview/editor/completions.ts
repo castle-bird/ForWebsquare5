@@ -18,35 +18,37 @@ export const scriptLanguage = new LanguageSupport(
 	[javascript().support, docComments('js'), javascriptLanguage.data.of({ autocomplete: ifNotIn(NOT_CODE, completeFromList(MORE_KEYWORDS.map(label => ({ label, type: 'keyword' })))) })],
 );
 
+/** 설명 DOM 한 칸 붙이기 */
+function docEl(parent: HTMLElement, tag: string, className: string, text = '') {
+	const e = parent.appendChild(document.createElement(tag));
+	e.className = className;
+	e.textContent = text;
+	return e;
+}
+
 function renderMethodDoc(method: ScriptApiMethod): HTMLElement {
 	const dom = document.createElement('div');
-	const add = (parent: HTMLElement, tag: string, className: string, text = '') => {
-		const e = parent.appendChild(document.createElement(tag));
-		e.className = className;
-		e.textContent = text;
-		return e;
-	};
 	const section = (title: string, rows: [label: string, description: string][] = []) => {
 		if (rows.length) {
-			add(dom, 'div', 'ws-doc-section', title);
+			docEl(dom, 'div', 'ws-doc-section', title);
 		}
 		for (const [label, description] of rows) {
-			const row = add(dom, 'div', 'ws-doc-param-item');
-			add(row, 'span', 'ws-doc-badge', label);
+			const row = docEl(dom, 'div', 'ws-doc-param-item');
+			docEl(row, 'span', 'ws-doc-badge', label);
 			if (description) {
-				add(row, 'span', 'ws-doc-param-desc', ` - ${description}`);
+				docEl(row, 'span', 'ws-doc-param-desc', ` - ${description}`);
 			}
 		}
 	};
-	add(dom, 'div', 'ws-doc-sig', method.signature || method.name);
+	docEl(dom, 'div', 'ws-doc-sig', method.signature || method.name);
 	if (method.description) {
-		add(dom, 'div', 'ws-doc-desc', method.description);
+		docEl(dom, 'div', 'ws-doc-desc', method.description);
 	}
 	section('Parameters:', method.params?.map(p => [`${p.name} - ${p.type}${p.required ? `:${p.required}` : ''}`, p.description]));
 	section('Returns:', method.returns?.map(r => [r.type, r.description]));
 	if (method.sample) {
-		add(dom, 'div', 'ws-doc-section', 'Sample:');
-		add(dom, 'pre', 'ws-doc-sample', method.sample);
+		docEl(dom, 'div', 'ws-doc-section', 'Sample:');
+		docEl(dom, 'pre', 'ws-doc-sample', method.sample);
 	}
 	return dom;
 }
@@ -208,20 +210,14 @@ const HIDDEN_TAGS = new Set(['memberOf', 'memberof', 'function', 'method', 'name
 /** JSDoc 본문 → 설명·Parameters·Returns·Example·나머지 태그(흐리게) */
 export function jsDocDom(doc: string): HTMLElement {
 	const dom = document.createElement('div');
-	const add = (parent: HTMLElement, tag: string, className: string, text = '') => {
-		const e = parent.appendChild(document.createElement(tag));
-		e.className = className;
-		e.textContent = text;
-		return e;
-	};
 	const blocks = doc.split(/\n(?=\s*@\w)/);
 	const description = blocks[0].trimStart().startsWith('@') ? '' : blocks.shift()!.trim();
 	const tags = blocks.map(b => /^\s*@(\w+)\s*([\s\S]*)$/.exec(b)).filter(m => !!m).map(([, name, body]) => ({ name, body: body.replace(/\s+$/, '') }));
-	if (description) { add(dom, 'div', 'ws-doc-desc', docText(description)); }
+	if (description) { docEl(dom, 'div', 'ws-doc-desc', docText(description)); }
 	const params = tags.filter(t => t.name === 'param'), returns = tags.filter(t => /^returns?$/.test(t.name));
 	const rows = (title: string, list: typeof tags, named: boolean) => {
 		if (!list.length) { return; }
-		add(dom, 'div', 'ws-doc-section', title);
+		docEl(dom, 'div', 'ws-doc-section', title);
 		for (const t of list) {
 			const m = /^(?:\{([^}]*)\}\s*)?([\s\S]*)$/.exec(t.body)!;
 			// 이름(파라미터만)은 첫 낱말, 나머지는 줄바꿈 그대로 설명
@@ -229,21 +225,21 @@ export function jsDocDom(doc: string): HTMLElement {
 			// 중괄호 없이 `@return String 설명`이면 첫 낱말이 타입처럼(대문자로 시작) 생겼을 때 타입으로
 			const bare = !m[1] && !named ? /^([A-Z][\w.$<>[\]|]*)\s+([\s\S]*)$/.exec(after) : null;
 			const type = m[1] ?? bare?.[1], text = docText(bare ? bare[2] : after).replace(/^-\s*/, '');
-			const row = add(dom, 'div', 'ws-doc-param-item');
-			if (name) { add(row, 'span', 'ws-doc-badge', name.replace(/^\[|\]$/g, '')); }
-			if (type) { add(row, 'span', 'ws-doc-type', `${name ? ' ' : ''}${type}`); }
-			if (text) { add(row, 'span', 'ws-doc-param-desc', name || type ? ` — ${text}` : text); }
+			const row = docEl(dom, 'div', 'ws-doc-param-item');
+			if (name) { docEl(row, 'span', 'ws-doc-badge', name.replace(/^\[|\]$/g, '')); }
+			if (type) { docEl(row, 'span', 'ws-doc-type', `${name ? ' ' : ''}${type}`); }
+			if (text) { docEl(row, 'span', 'ws-doc-param-desc', name || type ? ` — ${text}` : text); }
 		}
 	};
 	rows('Parameters:', params, true);
 	rows('Returns:', returns, false);
 	for (const t of tags.filter(t => t.name === 'example')) {
-		add(dom, 'div', 'ws-doc-section', 'Example:');
-		add(dom, 'pre', 'ws-doc-sample', t.body.replace(/^\n+/, ''));
+		docEl(dom, 'div', 'ws-doc-section', 'Example:');
+		docEl(dom, 'pre', 'ws-doc-sample', t.body.replace(/^\n+/, ''));
 	}
 	const meta = tags.filter(t => !['param', 'return', 'returns', 'example'].includes(t.name) && !HIDDEN_TAGS.has(t.name));
 	if (meta.length) {
-		add(dom, 'div', 'ws-doc-meta', meta.map(t => `@${t.name} ${docText(t.body)}`.trim()).join('  ·  '));
+		docEl(dom, 'div', 'ws-doc-meta', meta.map(t => `@${t.name} ${docText(t.body)}`.trim()).join('  ·  '));
 	}
 	return dom;
 }

@@ -6,6 +6,7 @@ import { EditBox } from './editBox';
 import { Tabs } from './tabs';
 import { useFloating } from './floating';
 import { useEditorStore } from '../store';
+import { capturePointer } from './pointerCapture';
 
 /** suggestions: 고를 값 목록(정의의 정해진 값 포함). 목록이 길면 입력이 빠르므로 늘 직접 입력도(입력칸 + 목록) */
 interface Row { name: string; attr: string; value?: string; description?: string; display?: string; suggestions?: string[] }
@@ -216,7 +217,7 @@ function ColumnResizer({ onResize }: { onResize(width: number): void }) {
 		onPointerDown={e => {
 			const table = e.currentTarget.parentElement!.querySelector('table')!;
 			drag.current = { x: e.clientX, width: table.querySelector('th')!.offsetWidth, max: table.offsetWidth - 60 };
-			e.currentTarget.setPointerCapture(e.pointerId);
+			capturePointer(e);
 		}}
 		onPointerMove={e => {
 			const d = drag.current;

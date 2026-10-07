@@ -1,6 +1,6 @@
-// Info 탭: 화면 정보(head의 meta_* 속성)와 개정 이력(History Meta Info). 입력칸을 벗어나면(Enter·blur) 바로 XML에 반영
+// Info 탭: 화면 정보(head의 meta_* 속성, 칸마다 화면이 쓰는 이름 — core/info `infoAttr`)와 개정 이력(History Meta Info). 입력칸을 벗어나면(Enter·blur) 바로 XML에 반영
 import { useEffect, useState, type KeyboardEvent } from 'react';
-import { INFO_FIELDS, readHistory, type HistoryRow } from '../../core/info';
+import { INFO_FIELDS, infoAttr, readHistory, type HistoryRow } from '../../core/info';
 import type { XmlNode } from '../../core/xmlModel';
 import { DateInput, formatDate } from './dateInput';
 import { useRowDrag } from './rowDrag';
@@ -52,8 +52,8 @@ export function InfoPane({ head, onAttr, onHistory }: { head: XmlNode; onAttr(na
 		<section>
 			<h3>화면 정보</h3>
 			<div className="info-grid">
-				{INFO_FIELDS.map(f => <Field key={f.name} label={f.label} value={head.attrs[f.name] ?? ''} multiline={'multiline' in f} date={'date' in f}
-					onCommit={v => onAttr(f.name, v || undefined)} />)}
+				{INFO_FIELDS.map(f => { const name = infoAttr(head, f); return <Field key={f.label} label={f.label} value={head.attrs[name] ?? ''} multiline={'multiline' in f} date={'date' in f}
+					onCommit={v => onAttr(name, v || undefined)} />; })}
 			</div>
 		</section>
 		<section className="info-history">

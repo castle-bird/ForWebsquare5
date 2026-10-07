@@ -446,6 +446,23 @@ function Badges({ page, body, tree }: { page: RefObject<HTMLDivElement | null>; 
 	))}</>;
 }
 
+/** 캔버스 요소 하나(index)의 보이는 자리: 크기·스크롤·문서(tree)가 바뀌면 다시 잰다 */
+function useNodeRect(page: RefObject<HTMLDivElement | null>, index: number | undefined, tree: ReactNode) {
+	const [rect, setRect] = useState<Rect>();
+	const [target, setTarget] = useState<HTMLElement>();
+	useLayoutEffect(() => {
+		const p = page.current;
+		const el = index === undefined || Number.isNaN(index) ? undefined : p?.querySelector<HTMLElement>(node(index)) ?? undefined;
+		setTarget(el);
+		if (!p || !el) {
+			setRect(undefined);
+			return;
+		}
+		return watchLayout([el], p, () => visibleRect(el, p), setRect);
+	}, [page, index, tree]);
+	return { rect, target };
+}
+
 function watchLayout<T>(elements: Element[], page: HTMLElement, measure: () => T, onChange: (value: T) => void): () => void {
 	// JSON.stringify는 ''를 돌려주지 않아 첫 측정은 항상 반영된다
 	let pending = 0, last: string | undefined = '';
@@ -478,18 +495,7 @@ function watchLayout<T>(elements: Element[], page: HTMLElement, measure: () => T
 function Frame({ page, index, kind, tree, onResize, label }: {
 	page: RefObject<HTMLDivElement | null>; index?: number; kind: string; tree: ReactNode; onResize?(props: Record<string, string>): void; label?: string;
 }) {
-	const [rect, setRect] = useState<Rect>();
-	const [target, setTarget] = useState<HTMLElement>();
-	useLayoutEffect(() => {
-		const p = page.current;
-		const el = index === undefined || Number.isNaN(index) ? undefined : p?.querySelector(node(index));
-		setTarget(el as HTMLElement | undefined);
-		if (!p || !el) {
-			setRect(undefined);
-			return;
-		}
-		return watchLayout([el], p, () => visibleRect(el, p), setRect);
-	}, [page, index, tree]);
+	const { rect, target } = useNodeRect(page, index, tree);
 	if (!rect) {
 		return null;
 	}
@@ -509,15 +515,7 @@ function Frame({ page, index, kind, tree, onResize, label }: {
 function GridHandle({ page, index, tree, onDragStart, onSelect, onEnter }: {
 	page: RefObject<HTMLDivElement | null>; index: number; tree: ReactNode; onDragStart(e: ReactDragEvent): void; onSelect(): void; onEnter(): void;
 }) {
-	const [rect, setRect] = useState<Rect>();
-	useLayoutEffect(() => {
-		const p = page.current, el = p?.querySelector(node(index));
-		if (!p || !el) {
-			setRect(undefined);
-			return;
-		}
-		return watchLayout([el], p, () => visibleRect(el, p), setRect);
-	}, [page, index, tree]);
+	const { rect } = useNodeRect(page, index, tree);
 	if (!rect) {
 		return null;
 	}

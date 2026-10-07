@@ -12,7 +12,7 @@
   },
   "homepage": "https://github.com/castle-bird/ForWebsquare5#readme",
   "description": "VS Code에서 WebSquare5 에디터를 사용할 수 있게 해주는 비공식 확장",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "icon": "media/logo.png",
   "engines": {
     "vscode": "^1.125.0"

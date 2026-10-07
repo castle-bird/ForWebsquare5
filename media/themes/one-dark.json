@@ -30,7 +30,7 @@
 		{ "name": "타입·클래스", "scope": ["entity.name.type", "entity.name.class", "support.type", "support.class"], "settings": { "foreground": "#E5C07B" } },
 		{ "name": "함수·메서드 선언", "scope": ["entity.name.function", "support.function"], "settings": { "foreground": "#61AFEF" } },
 		{ "name": "변수", "scope": ["variable", "variable.other"], "settings": { "foreground": "#E06C75" } },
-		{ "name": "필드·속성", "scope": ["variable.other.property", "variable.other.object.property", "support.type.property-name"], "settings": { "foreground": "#E06C75" } },
+		{ "name": "필드·속성(기본 글자색: 변수.속성이 대부분인 스크립트가 온통 빨개지지 않게)", "scope": ["variable.other.property", "variable.other.object.property", "support.type.property-name"], "settings": { "foreground": "#ABB2BF" } },
 		{ "name": "상수 필드", "scope": "variable.other.constant", "settings": { "foreground": "#D19A66" } },
 		{ "name": "어노테이션", "scope": ["storage.type.annotation", "meta.annotation", "punctuation.definition.annotation"], "settings": { "foreground": "#E5C07B" } },
 		{ "name": "XML·HTML 태그", "scope": ["entity.name.tag", "punctuation.definition.tag"], "settings": { "foreground": "#E06C75" } },

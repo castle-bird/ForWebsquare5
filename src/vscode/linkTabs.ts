@@ -6,6 +6,7 @@ import type { TabPosition } from '../core/protocol';
 const TAB_ORDER = 'websquare5-editor.tabOrder';
 const TAB_POSITION = 'websquare5-editor.tabPosition';
 const LINK_TABS = 'websquare5-editor.linkTabs';
+const MINIMAP = 'websquare5-editor.minimap';
 
 let globalState: vscode.Memento;
 /** 탭 목록이 바뀜. from: 바꾼 디자이너(그 화면만 select 탭으로 넘어간다) */
@@ -23,6 +24,9 @@ export const saveTabOrder = (order: string[]) => globalState.update(TAB_ORDER, o
 /** 탭 줄 위치. 모든 화면 공통, 기본 위 */
 export const tabPosition = (): TabPosition => globalState.get<TabPosition>(TAB_POSITION) ?? 'top';
 export const saveTabPosition = (position: TabPosition) => globalState.update(TAB_POSITION, position);
+/** 코드 편집기 미니맵. 모든 화면 공통, 기본 켬 */
+export const minimapOn = () => globalState.get<boolean>(MINIMAP) ?? true;
+export const saveMinimap = (on: boolean) => globalState.update(MINIMAP, on);
 
 export const linkTabs = () => readLinkTabs(globalState.get(LINK_TABS));
 /** 연결할 수 있는 확장자(설정 websquare5-editor.linkFileExtensions) */

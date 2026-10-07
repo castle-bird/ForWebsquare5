@@ -738,60 +738,43 @@ textarea.edit.style-value {
 .date-picker-foot { display: flex; justify-content: center; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border)); }
 .date-picker-foot button { padding: 3px 12px; border-radius: 4px; color: var(--vscode-textLink-foreground); }
 
-/* ── Beta 탭(탭 줄 오른쪽 고정) > 사용 테이블: 위 줄(저장 위치), 왼쪽 입력(ui/usedTablesPane.tsx), 오른쪽 그림(ui/usedTablesDiagram.tsx) ── */
-.tab-bar .tab-pinned { font-size: 12px; letter-spacing: .02em; color: var(--vscode-textLink-foreground); }
+/* ── ERD 탭(탭 줄 오른쪽 고정) > 사용 테이블: 위 줄(저장 위치, ui/usedTablesPane.tsx), 아래 그림 전체(ui/usedTablesDiagram.tsx) ── */
 .canvas-frame > .tab-body:has(.used-tables) { padding: 0; overflow: hidden; }
 .used-tables { --crud-C: #3b82d6; --crud-R: #3fa66b; --crud-U: #c9781c; --crud-D: #d65b5b; height: 100%; display: flex; flex-direction: column; }
 .used-tables-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 12px; }
 .used-tables-bar .title { font-weight: 600; }
 .used-tables-bar .where { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground); direction: rtl; text-align: left; }
-.beta-badge { padding: 0 6px; border-radius: 8px; font-size: 10px; font-weight: 600; letter-spacing: .04em; color: var(--vscode-badge-foreground); background: var(--vscode-badge-background); }
-.used-tables-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(440px, 2fr) 3fr; }
 /* 처음 열 때 저장 위치 고르기 */
 .used-tables-setup { max-width: 520px; margin: 40px auto; padding: 20px; border: 1px solid var(--vscode-panel-border); border-radius: 8px; }
 .used-tables-setup h3 { margin: 0 0 8px; font-size: 14px; }
 .used-tables-setup p { margin: 0 0 14px; color: var(--vscode-descriptionForeground); font-size: 12px; }
 .setup-actions { display: flex; gap: 8px; }
+/* 메모·그룹 색: 이름만 저장하고 색은 VS Code 테마 charts 색(없으면 VS Code 기본 어두운 테마 값) */
+.note-yellow { --note: var(--vscode-charts-yellow, #cca700); }
+.note-blue { --note: var(--vscode-charts-blue, #3794ff); }
+.note-green { --note: var(--vscode-charts-green, #89d185); }
+.note-purple { --note: var(--vscode-charts-purple, #b180d7); }
+.note-red { --note: var(--vscode-charts-red, #f14c4c); }
+.note-gray { --note: var(--vscode-descriptionForeground); }
+.context-menu .menu-label { display: inline-flex; align-items: center; gap: 6px; }
+.context-menu .menu-label .codicon { font-size: 14px; }
+.context-menu .swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--note); }
 
-/* 왼쪽: 테이블 표 + 고른 테이블의 컬럼 표 + 안내 */
-.used-tables-list { min-width: 0; overflow: auto; padding: 8px 12px; border-right: 1px solid var(--vscode-panel-border); }
-.used-tables-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.used-tables-list table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.used-tables-list th { padding: 4px 6px; font-size: 11px; font-weight: 500; text-align: left; color: var(--vscode-descriptionForeground); border-bottom: 1px solid var(--vscode-panel-border); }
-.used-tables-list td { padding: 3px 4px; border-bottom: 1px solid var(--vscode-panel-border); }
-.used-tables-list th:last-child { width: 30px; }
-.used-tables-list > table th:first-child { width: 34%; }
-.used-tables-list > table th:nth-child(3) { width: 150px; }
-.used-tables-list tbody tr.selected { background: var(--vscode-list-inactiveSelectionBackground); }
-.used-tables-list td input:not([type="checkbox"]) { box-sizing: border-box; width: 100%; padding: 4px 6px; font: inherit; font-size: 12px; color: var(--vscode-input-foreground);
-	background: transparent; border: 1px solid transparent; border-radius: 3px; }
-.used-tables-list td input:not([type="checkbox"]):focus { background: var(--vscode-input-background); border-color: var(--vscode-focusBorder); outline: none; }
-.used-columns { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--vscode-panel-border); }
-.used-columns .columns-title { font-size: 12px; font-weight: 600; margin-right: auto; }
-.used-columns th:first-child { width: 32%; }
-.used-columns th:nth-child(3) { width: 26%; }
-.used-columns th:nth-child(4) { width: 34px; }
-.used-columns td:nth-child(4) { text-align: center; }
-.used-tables-hint { margin: 10px 2px 0; font-size: 11px; color: var(--vscode-descriptionForeground); }
-ul.used-tables-hint { padding-left: 16px; line-height: 1.7; }
-/* CRUD: 켠 것만 색(등록 파랑·조회 초록·수정 주황·삭제 빨강). 표의 토글과 그림 박스 배지 공통 */
-.crud-toggles { display: inline-flex; gap: 2px; }
-.crud-toggles button { padding: 1px 5px; font: inherit; font-size: 11px; border-radius: 3px; cursor: pointer; color: var(--vscode-descriptionForeground);
-	background: none; border: 1px solid var(--vscode-panel-border); }
-.crud-toggles button[aria-pressed="false"]:hover { border-color: var(--vscode-focusBorder); }
-.crud-toggles .crud-C[aria-pressed="true"], .used-table-node .crud-C { color: #fff; background: var(--crud-C); border-color: var(--crud-C); }
-.crud-toggles .crud-R[aria-pressed="true"], .used-table-node .crud-R { color: #fff; background: var(--crud-R); border-color: var(--crud-R); }
-.crud-toggles .crud-U[aria-pressed="true"], .used-table-node .crud-U { color: #fff; background: var(--crud-U); border-color: var(--crud-U); }
-.crud-toggles .crud-D[aria-pressed="true"], .used-table-node .crud-D { color: #fff; background: var(--crud-D); border-color: var(--crud-D); }
-
-/* 오른쪽: React Flow 그림(색은 VS Code 테마), 전체 화면이면 웹뷰 전체를 덮는다 */
-.used-tables-flow { min-width: 0; min-height: 0; }
+/* 그림(React Flow, 색은 VS Code 테마). 전체 화면이면 웹뷰 전체를 덮는다 */
+.used-tables-flow { flex: 1; min-width: 0; min-height: 0; position: relative; }
 .used-tables-flow.full { position: fixed; inset: 0; z-index: 1000; background: var(--vscode-editor-background); }
 .used-tables-flow .react-flow { --xy-background-color: var(--vscode-editor-background); --xy-edge-stroke: var(--vscode-descriptionForeground);
-	--xy-edge-stroke-selected: var(--vscode-focusBorder); --xy-handle-background-color: var(--vscode-focusBorder); --xy-handle-border-color: var(--vscode-editor-background); }
+	--xy-edge-stroke-selected: var(--vscode-focusBorder); --xy-handle-background-color: var(--vscode-focusBorder); --xy-handle-border-color: var(--vscode-editor-background);
+	--xy-selection-background-color: color-mix(in srgb, var(--vscode-focusBorder) 10%, transparent); --xy-selection-border: 1px dashed var(--vscode-focusBorder);
+	--xy-resize-background-color: var(--vscode-focusBorder); }
 .used-tables-flow .react-flow__edge-path { stroke-width: 1.5; }
-/* 고른 박스와 이어진 것만 또렷하게 */
-.used-tables-flow .react-flow__node.dim, .used-tables-flow .react-flow__edge.dim { opacity: .3; transition: opacity .15s; }
+/* 마우스 모양: 바닥은 기본 화살표, 테이블·메모·그룹 손잡이·선·선 글자 위에서만 손가락, 끄는 중엔 쥔 손 */
+.used-tables-flow .react-flow__pane.selection { cursor: default; }
+.used-tables-flow .react-flow__pane.dragging { cursor: grabbing; }
+.used-tables-flow :is(.react-flow__node.draggable, .link-label) { cursor: pointer; }
+.used-tables-flow .react-flow__node.dragging, .used-tables-flow .react-flow__node.dragging .group-handle { cursor: grabbing; }
+/* 테이블 하나를 고르면 그것과 이어진 것만 또렷하게 */
+.used-tables-flow .react-flow__edge.dim, .used-tables-flow .dim { opacity: .3; transition: opacity .15s; }
 .used-tables-flow .react-flow__edge.hot .react-flow__edge-path { stroke: var(--vscode-focusBorder); stroke-width: 2; }
 /* 연결점은 마우스를 올리거나 고르거나 잇는 중에만 */
 .used-tables-flow .react-flow__handle { width: 8px; height: 8px; opacity: 0; transition: opacity .12s; }
@@ -799,29 +782,110 @@ ul.used-tables-hint { padding-left: 16px; line-height: 1.7; }
 .used-tables-flow .react-flow__minimap { --xy-minimap-background-color: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
 	--xy-minimap-mask-background-color: color-mix(in srgb, var(--vscode-editor-background) 60%, transparent); --xy-minimap-node-background-color: var(--vscode-descriptionForeground);
 	border: 1px solid var(--vscode-panel-border); border-radius: 6px; overflow: hidden; }
+.used-tables-flow .react-flow__minimap-node.group-frame { fill: none; stroke: var(--vscode-descriptionForeground); stroke-dasharray: 6 4; }
+.used-tables-flow .react-flow__minimap-node.memo { fill: var(--vscode-charts-yellow); opacity: .6; }
 .used-tables-flow .react-flow__controls { --xy-controls-button-background-color: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
 	--xy-controls-button-color: var(--vscode-foreground); --xy-controls-button-border-color: var(--vscode-panel-border);
 	--xy-controls-button-background-color-hover: var(--vscode-toolbar-hoverBackground); border-radius: 6px; overflow: hidden; }
+.used-tables-flow .react-flow__controls .zoom-level { width: auto; min-width: 26px; padding: 0 4px; font-size: 10px; font-variant-numeric: tabular-nums; }
 .used-tables-flow .flow-full { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; border-radius: 6px;
 	color: var(--vscode-foreground); background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border: 1px solid var(--vscode-panel-border); }
 .used-tables-flow .flow-full:hover { background: var(--vscode-toolbar-hoverBackground); }
-/* ERD 박스: 위 테이블 머리(이름·설명·CRUD), 아래 컬럼 줄(PK 먼저, PK 아래 점선), 맨 아래 PK만 보기 */
-.used-table-node { min-width: 180px; max-width: 280px; border-radius: 6px; font-size: 12px; color: var(--vscode-editor-foreground);
+/* 왼쪽 위 도구 줄(추가·되돌리기·도움말)과 도움말·빈 그림 안내 */
+.used-tables-flow .flow-toolbar { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 8px;
+	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border: 1px solid var(--vscode-panel-border); box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, .2)); }
+.flow-tool { display: inline-flex; align-items: center; gap: 4px; height: 26px; min-width: 26px; justify-content: center; padding: 0 6px; font: inherit; font-size: 12px; cursor: pointer;
+	color: var(--vscode-foreground); background: none; border: 0; border-radius: 5px; }
+.flow-tool:hover:not(:disabled), .flow-tool[aria-pressed="true"] { background: var(--vscode-toolbar-hoverBackground); }
+.flow-tool:disabled { opacity: .4; cursor: default; }
+.flow-tool .codicon { font-size: 15px; }
+.flow-sep { width: 1px; height: 18px; margin: 0 3px; background: var(--vscode-panel-border); }
+.used-tables-flow .flow-help { margin-top: 48px; max-width: 420px; padding: 8px 12px; border-radius: 8px; font-size: 11px; line-height: 1.8; color: var(--vscode-descriptionForeground);
+	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border: 1px solid var(--vscode-panel-border); box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, .2)); }
+.used-tables-flow .flow-help ul { margin: 0; padding-left: 14px; }
+.used-tables-flow .flow-help b { font-weight: 600; color: var(--vscode-foreground); }
+.used-tables-flow .flow-empty { margin-top: 30vh; text-align: center; font-size: 12px; color: var(--vscode-descriptionForeground); }
+.used-tables-flow .flow-empty p { margin: 0 0 10px; }
+
+/* 그림 안 글자 칸: 평소 글자, 더블클릭하면 입력칸(같은 자리·크기) */
+.used-tables-flow .field { min-width: 1ch; border-radius: 3px; white-space: nowrap; }
+.used-tables-flow .field.placeholder { color: var(--vscode-input-placeholderForeground, var(--vscode-descriptionForeground)); font-style: italic; font-weight: 400; opacity: .7; }
+.used-tables-flow .field-input { box-sizing: border-box; max-width: 100%; min-width: 0; margin: -2px -4px; padding: 1px 3px; font: inherit; color: var(--vscode-input-foreground);
+	background: var(--vscode-input-background); border: 1px solid var(--vscode-focusBorder); border-radius: 3px; outline: none; }
+
+/* CRUD: 켠 것만 색(등록 파랑·조회 초록·수정 주황·삭제 빨강) */
+.used-table-node .crud { display: flex; gap: 3px; margin-top: 4px; }
+.used-table-node .crud :is(span, button) { padding: 0 4px; font: inherit; font-size: 12px; line-height: 18px; border-radius: 3px; border: 1px solid transparent; }
+.used-table-node .crud button { cursor: pointer; color: var(--vscode-descriptionForeground); background: none; border-color: var(--vscode-panel-border); }
+.used-table-node .crud button[aria-pressed="false"]:hover { border-color: var(--vscode-focusBorder); }
+.used-table-node .crud .crud-C:is(span, [aria-pressed="true"]) { color: #fff; background: var(--crud-C); border-color: var(--crud-C); }
+.used-table-node .crud .crud-R:is(span, [aria-pressed="true"]) { color: #fff; background: var(--crud-R); border-color: var(--crud-R); }
+.used-table-node .crud .crud-U:is(span, [aria-pressed="true"]) { color: #fff; background: var(--crud-U); border-color: var(--crud-U); }
+.used-table-node .crud .crud-D:is(span, [aria-pressed="true"]) { color: #fff; background: var(--crud-D); border-color: var(--crud-D); }
+
+/* ERD 박스: 위 테이블 머리(이름·설명·CRUD), 아래 컬럼 줄(PK·이름·설명·타입 열 맞춤, PK 먼저, PK 아래 점선), 맨 아래 컬럼 추가·PK만 보기 */
+.used-table-node { min-width: 200px; max-width: 720px; border-radius: 6px; font-size: 14px; color: var(--vscode-editor-foreground);
 	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border: 1px solid var(--vscode-panel-border);
 	box-shadow: 0 1px 4px var(--vscode-widget-shadow, rgba(0, 0, 0, .2)); transition: border-color .12s, box-shadow .12s; }
 .used-table-node.selected { border-color: var(--vscode-focusBorder); box-shadow: 0 0 0 1px var(--vscode-focusBorder); }
-.used-table-node .head { padding: 6px 10px; }
-.used-table-node .name { font-weight: 600; font-family: var(--vscode-editor-font-family); overflow-wrap: anywhere; }
-.used-table-node .desc { color: var(--vscode-descriptionForeground); font-size: 11px; }
-.used-table-node .crud { display: flex; gap: 3px; margin-top: 4px; }
-.used-table-node .crud span { padding: 0 4px; border-radius: 3px; font-size: 10px; }
-.used-table-node .columns { list-style: none; margin: 0; padding: 2px 0; border-top: 1px solid var(--vscode-panel-border); font-family: var(--vscode-editor-font-family); font-size: 11px; }
-.used-table-node .columns li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 2px 10px; }
+.used-table-node .head { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 10px; }
+.used-table-node .name { font-weight: 600; font-family: var(--vscode-editor-font-family); }
+.used-table-node .desc { color: var(--vscode-descriptionForeground); font-size: 13px; }
+.used-table-node .columns { display: grid; grid-template-columns: 26px auto auto auto 16px; column-gap: 8px; list-style: none; margin: 0; padding: 2px 0;
+	border-top: 1px solid var(--vscode-panel-border); font-family: var(--vscode-editor-font-family); font-size: 13px; }
+.used-table-node .columns li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; min-height: 24px; padding: 0 6px 0 10px; }
+.used-table-node .columns li:hover { background: var(--vscode-list-hoverBackground); }
 .used-table-node .columns li.last { border-bottom: 1px dashed var(--vscode-panel-border); }
-.used-table-node .columns .key { font-size: 9px; font-weight: 700; color: var(--vscode-charts-yellow, #d7ba7d); }
-.used-table-node .columns .col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.used-table-node .columns .key { padding: 0; font: inherit; font-size: 11px; font-weight: 700; text-align: left; cursor: pointer; background: none; border: 0; color: transparent; }
+.used-table-node .columns .key[aria-pressed="true"] { color: var(--vscode-charts-yellow, #d7ba7d); }
+.used-table-node .columns li:hover .key[aria-pressed="false"] { color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground)); }
+.used-table-node .columns .col-name { min-width: 24px; }
 .used-table-node .columns li.pk .col-name { font-weight: 600; }
-.used-table-node .columns .col-type { color: var(--vscode-descriptionForeground); white-space: nowrap; }
-.used-table-node .columns-toggle { display: block; width: 100%; padding: 3px 0; font: inherit; font-size: 10px; cursor: pointer; border: 0; border-top: 1px solid var(--vscode-panel-border);
-	color: var(--vscode-textLink-foreground); background: none; border-radius: 0 0 6px 6px; }
-.used-table-node .columns-toggle:hover { background: var(--vscode-toolbar-hoverBackground); }
+.used-table-node .columns .col-desc { min-width: 16px; font-family: var(--vscode-font-family); color: var(--vscode-descriptionForeground); }
+.used-table-node .columns .col-type { min-width: 16px; color: var(--vscode-descriptionForeground); }
+/* 비어 있는 설명·타입은 박스를 고르거나 줄에 올렸을 때만 자리 표시 글자 */
+.used-table-node:not(.selected) .columns li:not(:hover) :is(.col-desc, .col-type).placeholder { color: transparent; }
+.used-table-node .col-remove { padding: 0; font-size: 14px; cursor: pointer; color: var(--vscode-descriptionForeground); background: none; border: 0; border-radius: 3px; visibility: hidden; }
+.used-table-node .columns li:hover .col-remove { visibility: visible; }
+.used-table-node .col-remove:hover { color: var(--vscode-errorForeground); }
+.used-table-node .foot { display: flex; border-top: 1px solid var(--vscode-panel-border); }
+.used-table-node .foot button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 3px; padding: 4px 0; font: inherit; font-size: 12px; cursor: pointer; border: 0;
+	color: var(--vscode-textLink-foreground); background: none; }
+.used-table-node .foot button + button { border-left: 1px solid var(--vscode-panel-border); }
+.used-table-node .foot button:hover { background: var(--vscode-toolbar-hoverBackground); }
+.used-table-node .foot .codicon { font-size: 14px; }
+
+/* 메모지: 테마 색을 옅게 깐 종이 */
+.used-memo { box-sizing: border-box; width: 100%; height: 100%; overflow: hidden; padding: 8px 10px; border-radius: 4px; font-size: 12px; line-height: 1.5; color: var(--vscode-editor-foreground);
+	background: color-mix(in srgb, var(--note) 22%, var(--vscode-editor-background)); border: 1px solid color-mix(in srgb, var(--note) 55%, transparent);
+	box-shadow: 0 2px 6px var(--vscode-widget-shadow, rgba(0, 0, 0, .2)); }
+.used-memo.selected { border-color: var(--vscode-focusBorder); }
+.used-memo .memo-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.used-memo .memo-text.placeholder { font-style: italic; color: var(--vscode-descriptionForeground); }
+.used-memo .memo-input { box-sizing: border-box; display: block; width: calc(100% + 8px); height: calc(100% + 8px); margin: -4px; padding: 3px; resize: none; font: inherit; line-height: inherit; color: inherit;
+	background: color-mix(in srgb, var(--vscode-editor-background) 40%, transparent); border: 1px solid var(--vscode-focusBorder); border-radius: 3px; outline: none; }
+
+/* 그룹 틀: 안은 그림 바닥처럼 통과(끌어서 고르기·선 클릭), 왼쪽 위 손잡이(제목 + 둘레 여백)만 잡고 끈다. 제목 글자 위도 잡기(편집은 더블클릭) */
+.used-group { box-sizing: border-box; width: 100%; height: 100%; border-radius: 10px;
+	background: color-mix(in srgb, var(--note) 7%, transparent); border: 1.5px dashed color-mix(in srgb, var(--note) 70%, transparent); }
+.used-group.selected { border-style: solid; border-color: var(--vscode-focusBorder); }
+.used-group .group-handle { box-sizing: border-box; display: inline-flex; max-width: 100%; min-width: 120px; padding: 6px 24px 14px 8px; border-radius: 10px 0 10px 0;
+	pointer-events: all; cursor: pointer; user-select: none; -webkit-user-drag: none; }
+.used-group .group-handle:hover { background: color-mix(in srgb, var(--note) 10%, transparent); }
+.used-group .group-title { display: inline-flex; align-items: center; gap: 5px; min-width: 0; padding: 2px 8px; border-radius: 5px; font-size: 12px; font-weight: 600;
+	color: var(--vscode-editor-foreground); background: color-mix(in srgb, var(--note) 25%, var(--vscode-editor-background)); }
+.used-group .group-title .codicon { font-size: 13px; color: var(--note); }
+.used-tables-flow .react-flow__node-group-frame .react-flow__resize-control { pointer-events: all; }
+
+/* 선 가운데 글자 */
+.used-tables-flow .link-label { position: absolute; pointer-events: all; padding: 1px 6px; border-radius: 4px; font-size: 11px; color: var(--vscode-editor-foreground);
+	background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); }
+
+/* 코드 편집기 미니맵(막대형, editor/minimap.ts): 스크롤바 왼쪽, 지금 보이는 곳은 슬라이더 */
+.code-editor .cm-minimap { position: absolute; top: 0; bottom: 0; width: 72px; z-index: 2; cursor: default; }
+.code-editor .cm-minimap canvas { display: block; width: 100%; height: 100%; }
+.code-editor .cm-minimap-slider { position: absolute; left: 0; right: 0; min-height: 4px; background: var(--vscode-minimapSlider-background, rgba(121, 121, 121, .2)); opacity: 0; transition: opacity .15s; }
+.code-editor .cm-minimap:hover .cm-minimap-slider, .code-editor .cm-minimap.dragging .cm-minimap-slider { opacity: 1; }
+.code-editor .cm-minimap:hover .cm-minimap-slider:hover { background: var(--vscode-minimapSlider-hoverBackground, rgba(100, 100, 100, .35)); }
+.code-editor .cm-minimap.dragging .cm-minimap-slider { background: var(--vscode-minimapSlider-activeBackground, rgba(191, 191, 191, .2)); }
+.code-editor .cm-minimap-probe { position: absolute; visibility: hidden; }

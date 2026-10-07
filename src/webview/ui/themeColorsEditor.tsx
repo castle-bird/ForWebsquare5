@@ -6,7 +6,7 @@ import { isColor, readOverlay, type ColorKey, type ThemeOverlay, type TokenKind,
 import { codeVars, editorBase, editorClass, readThemeColors, themeOf } from '../editor/themes';
 import { javaSupport } from '../editor/java';
 import { post, useEditorStore } from '../store';
-import { PopupTitle, usePopupWindow } from './popupWindow';
+import { PopupActions, PopupTitle, usePopupWindow } from './popupWindow';
 import { Segmented } from './segmented';
 
 const COLORS: [ColorKey, string][] = [
@@ -104,12 +104,10 @@ export function ThemeColorsEditor({ onClose }: { onClose(): void }) {
 				</div>
 			</section>
 		</div>
-		<div className="data-editor-actions">
+		<PopupActions onClose={onClose} onApply={apply}>
 			<button type="button" className="theme-settings-link" onClick={() => post({ type: 'settingsMenu', item: 'themeColors' })}>settings.json에서 열기</button>
 			<button type="button" className="btn btn-secondary" onClick={() => setLayers(current => ({ ...current, [key]: {} }))}>모두 초기화</button>
-			<button type="button" className="btn btn-secondary" onClick={onClose}>닫기</button>
-			<button type="button" className="btn btn-primary" onClick={apply}>확인</button>
-		</div>
+		</PopupActions>
 		{resizeHandles}
 	</dialog>;
 }

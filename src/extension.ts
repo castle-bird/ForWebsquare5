@@ -16,7 +16,7 @@ import { offerSetup, registerSetup, resolvePath, type SetupKey } from './vscode/
 import { applyCodeEdit, applyNodeEdit, formatCode } from './vscode/documentEdit';
 import { LinkedFiles, registerLinks } from './vscode/links';
 import { UsedTablesStore } from './vscode/tables';
-import { saveTabOrder, saveTabPosition, tabOrder, tabPosition } from './vscode/linkTabs';
+import { minimapOn, saveMinimap, saveTabOrder, saveTabPosition, tabOrder, tabPosition } from './vscode/linkTabs';
 import { linkIdOf } from './core/links';
 import { findPaletteDef } from './core/palette';
 import { codeTheme, registerCodeTheme, saveCustomizations } from './vscode/codeTheme';
@@ -126,7 +126,7 @@ async function documentMessage(document: vscode.TextDocument, webview: vscode.We
 }
 
 class DesignerProvider implements vscode.CustomTextEditorProvider {
-	/** tablesFolder: Beta 사용 테이블 기본 저장 폴더(확장 전용, 이 PC) */
+	/** tablesFolder: ERD 사용 테이블 기본 저장 폴더(확장 전용, 이 PC) */
 	constructor(private readonly extensionUri: vscode.Uri, private readonly globalState: vscode.Memento,
 		private readonly workspaceState: vscode.Memento, private readonly tablesFolder: vscode.Uri) {}
 
@@ -246,6 +246,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 				if (msg.type === 'ready') {
 					void post({ type: 'tabOrder', order: tabOrder() ?? [] });
 					void post({ type: 'tabPosition', position: tabPosition() });
+					void post({ type: 'minimap', on: minimapOn() });
 					void post({ type: 'paletteFavorites', keys: paletteFavorites(this.globalState) });
 					void post({ type: 'codeTheme', ...codeTheme() });
 					void post({ type: 'codeOptions', ...codeOptions() });
@@ -317,7 +318,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 						await vscode.window.showTextDocument(vscode.Uri.file(fromWebPath(webRoot, msg.path, ENGINE_PAGE)), { selection: range });
 					}).catch(e => vscode.window.showErrorMessage(`공통 JS 열기 실패: ${errorMessage(e)}`));
 				} else if (usedTables.handle(msg)) {
-					// Beta 사용 테이블(읽기·저장·저장 폴더 고르기)
+					// ERD 사용 테이블(읽기·저장·저장 폴더 고르기)
 				} else if (links.handle(msg)) {
 					// 연결 탭(연결·해제·열기·저장·탭 추가/이름/삭제·자동완성)
 				} else if (msg.type === 'setTabOrder') {
@@ -326,6 +327,11 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 				} else if (msg.type === 'setTabPosition') {
 					void saveTabPosition(msg.position);
 					broadcast(panel, { type: 'tabPosition', position: msg.position });
+				} else if (msg.type === 'navigate') {
+					void vscode.commands.executeCommand(msg.back ? 'workbench.action.navigateBack' : 'workbench.action.navigateForward');
+				} else if (msg.type === 'setMinimap') {
+					void saveMinimap(msg.on);
+					broadcast(panel, { type: 'minimap', on: msg.on });
 				} else if (msg.type === 'editDataFields' || msg.type === 'addSubmission' || msg.type === 'editSubmission' || msg.type === 'editChoices' || msg.type === 'editGridCells') {
 					const apply = msg.version === document.version ? applyNodeEdit(document, msg, toast) : Promise.resolve(false);
 					void apply.then(async ok => {

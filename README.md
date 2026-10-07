@@ -16,7 +16,7 @@ VS Code에서 WebSquare5 화면을 편집하는 **비공식** 확장입니다.
 - **Info**: 프로그램 정보와 개정 이력
 - **Script·Source**: 자동완성, 마우스 오버 설명, 정의로 이동, 파라미터 힌트, 포맷, 문법 오류 표시, 코드 테마
 - **연결 파일**: Java·XML·SQL 파일을 화면 탭으로 열어 편집(설치된 언어 확장의 자동완성·포맷 사용)
-- **Beta**: 화면이 쓰는 테이블을 적고 관계를 그림으로 보기(이 PC에만 저장)
+- **ERD**: 화면이 쓰는 테이블을 적고 관계를 그림으로 보기(이 PC에만 저장)
 - **저장**: 저장하면 wpack 변환으로 JS 산출물 갱신
 
 XML은 바뀐 부분만 고치고, 저장·Undo는 VS Code 방식 그대로입니다.
@@ -42,7 +42,7 @@ XML은 바뀐 부분만 고치고, 저장·Undo는 VS Code 방식 그대로입�
 - **직접 설치**: [Releases](https://github.com/castle-bird/ForWebsquare5/releases)에서 `.vsix`를 받아
 
 ```bash
-code --install-extension websquare5-editor-0.6.0.vsix
+code --install-extension websquare5-editor-0.7.0.vsix
 ```
 
 ## 처음 설정

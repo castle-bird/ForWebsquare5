@@ -11,7 +11,7 @@ export function Tabs({ items, actions, start, end, pinned = [], position = 'top'
 	items: Record<string, ReactNode>; actions?: Record<string, ReactNode>;
 	/** 탭 줄 맨 앞(탭 앞)에 둘 것 */
 	start?: ReactNode; end?: ReactNode; position?: 'top' | 'bottom'; keepMounted?: string[];
-	/** 탭 줄 오른쪽(end 앞)에 고정할 탭(Beta 등). 끌어 순서 바꾸기·저장 순서에서 빠진다 */
+	/** 탭 줄 오른쪽(end 앞)에 고정할 탭(ERD 등). 끌어 순서 바꾸기·저장 순서에서 빠진다 */
 	pinned?: string[];
 	active?: string; onActive?(name: string): void;
 	/** onReorder가 있으면 탭을 끌어 순서를 바꾼다 */

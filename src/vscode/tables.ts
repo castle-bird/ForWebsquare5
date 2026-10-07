@@ -1,4 +1,4 @@
-// Beta 사용 테이블: 이 PC에 고른 폴더(작업 공간마다 기억)의 화면별 JSON을 읽고 쓴다. 화면 XML은 건드리지 않는다
+// ERD 사용 테이블: 이 PC에 고른 폴더(작업 공간마다 기억)의 화면별 JSON을 읽고 쓴다. 화면 XML은 건드리지 않는다
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import * as vscode from 'vscode';

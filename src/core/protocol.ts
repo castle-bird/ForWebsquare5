@@ -25,6 +25,7 @@ export type ToWebview =
 	| { type: 'tabOrder'; order: string[] }
 	| { type: 'paletteFavorites'; keys: string[] }
 	| { type: 'tabPosition'; position: TabPosition }
+	| { type: 'minimap'; on: boolean } // 코드 편집기 미니맵 켜기·끄기(모든 화면 공통)
 	| { type: 'linkTabs'; tabs: LinkTab[]; exts: string[]; select?: string } // select: 이 탭으로 넘어간다(방금 추가한 탭). exts: 연결할 수 있는 확장자
 	| { type: 'xmlSchema'; kind: string; elements?: XmlElementSpec[]; source?: string } // 연결한 XML의 DTD 스키마(없으면 기본 MyBatis 목록)
 	| ({ type: 'codeTheme' } & CodeThemeState)
@@ -39,7 +40,7 @@ export type ToWebview =
 	| { type: 'files'; kind: string; files: string[] } // 연결할 수 있는 파일(작업 폴더 기준 경로)
 	| { type: 'linkProblem'; kind: string; message: string } // 연결하지 못한 이유(알림을 꺼 둬도 경로 입력 화면에 보인다)
 	| { type: 'toast'; message: string } // 편집기 오른쪽 아래 잠깐 뜨는 알림(VS Code 알림을 꺼 둬도 보임)
-	| { type: 'usedTables'; folder?: string; file?: string; data?: UsedTables; error?: string }; // Beta 사용 테이블. folder 없음 = 저장 폴더를 아직 안 고름
+	| { type: 'usedTables'; folder?: string; file?: string; data?: UsedTables; error?: string }; // ERD 사용 테이블. folder 없음 = 저장 폴더를 아직 안 고름
 
 /**
  * 파라미터 힌트(VS Code Signature Help 한 개): label은 함수 모양 글자, params는 그 안 각 파라미터 자리(글자 범위),
@@ -169,6 +170,8 @@ export type ToExtension =
 	| { type: 'reorderPaletteFavorites'; keys: string[] }
 	| { type: 'setPaletteFavorite'; component: Pick<ComponentDef, 'id' | 'ns' | 'realType'>; favorite: boolean }
 	| { type: 'setTabPosition'; position: TabPosition }
+	| { type: 'setMinimap'; on: boolean }
+	| { type: 'navigate'; back: boolean } // 마우스 뒤로·앞으로 버튼: VS Code 이동 기록(Go Back·Go Forward). 웹뷰 위에서 누른 버튼은 VS Code에 안 가서 넘겨준다
 	| { type: 'loadUsedTables' }
 	| { type: 'saveUsedTables'; data: UsedTables }
 	| { type: 'chooseTablesFolder'; pick: boolean }; // pick: 폴더 고르기 창, 아니면 기본 위치(확장 저장 폴더)

@@ -1,8 +1,9 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { DATA_TYPES, type DataField } from '../../core/data';
 import { VALID_ID, type XmlNode } from '../../core/xmlModel';
-import { PopupTitle, usePopupWindow } from './popupWindow';
+import { PopupActions, PopupTitle, usePopupWindow } from './popupWindow';
 import { useRowDrag } from './rowDrag';
+import { capturePointer } from './pointerCapture';
 
 type Row = DataField & { uid: number; ord?: number };
 
@@ -87,7 +88,7 @@ export function DataEditor({ node, externalError, offsetIndex = 0, onApply, onCl
 							if (e.button !== 0) { return; }
 							e.preventDefault();
 							columnDrag.current = { index, startX: e.clientX, width: columnWidths[index] };
-							e.currentTarget.setPointerCapture(e.pointerId);
+							capturePointer(e);
 						}} onPointerMove={e => {
 							const drag = columnDrag.current;
 							if (drag?.index === index) { setColumnWidths(current => current.map((width, i) => i === index ? Math.max(42, drag.width + e.clientX - drag.startX) : width)); }
@@ -105,11 +106,9 @@ export function DataEditor({ node, externalError, offsetIndex = 0, onApply, onCl
 			</div>
 		</div>
 		{(error || externalError) && <p className="error" role="alert">{error || externalError}</p>}
-		<div className="data-editor-actions">
+		<PopupActions onClose={onClose} onApply={apply}>
 			<span className="actions-hint">행을 끌어 순서 변경 · 화살표로 칸 이동</span>
-			<button type="button" className="btn btn-secondary" onClick={onClose}>닫기</button>
-			<button type="button" className="btn btn-primary" onClick={apply}>확인</button>
-		</div>
+		</PopupActions>
 		{resizeHandles}
 	</dialog>;
 }

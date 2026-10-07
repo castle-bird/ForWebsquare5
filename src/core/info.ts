@@ -2,15 +2,35 @@
 import { eolOf, escape, INVALID_XML_CHAR, leadOf, lineIndent, startTagEnd, type TextEdit } from './edit';
 import { localName, WEBSQUARE_NS, type XmlNode } from './xmlModel';
 
-/** head 속성 이름 → 화면 이름. multiline은 여러 줄 입력, date는 달력(yyyy-MM-dd) */
+/**
+ * head 속성 → 화면 이름. multiline은 여러 줄 입력, date는 달력(yyyy-MM-dd).
+ * meta_*는 엔진이 읽지 않는 자유 속성이라 프로젝트·템플릿마다 이름이 다르다. names: 같은 칸으로 읽는 이름(앞이 새로 쓸 때 기본), `infoAttr`.
+ * pair: ID·이름은 meta_screen*(새 화면 기본으로 추정)·meta_program*(프로젝트 템플릿) 두 계열이 짝으로 쓰여, 없으면 짝이 쓰는 계열을 따른다.
+ * 설명은 meta_programDesc가 실제로 쓰이고(meta_desc 일부), meta_screenDesc는 쓰는 곳을 못 봐서 새로 만들지 않는다
+ */
 export const INFO_FIELDS = [
-	{ name: 'meta_programId', label: '프로그램 ID' },
-	{ name: 'meta_programName', label: '프로그램명' },
-	{ name: 'meta_author', label: '작성자' },
-	{ name: 'meta_date', label: '작성일', date: true },
-	{ name: 'meta_programDesc', label: '프로그램 설명', multiline: true },
-	{ name: 'meta_memo', label: '비고', multiline: true },
+	{ names: ['meta_screenId', 'meta_programId'], label: '프로그램 ID', pair: true },
+	{ names: ['meta_screenName', 'meta_programName'], label: '프로그램명', pair: true },
+	{ names: ['meta_author'], label: '작성자' },
+	{ names: ['meta_date'], label: '작성일', date: true },
+	{ names: ['meta_programDesc', 'meta_desc', 'meta_screenDesc'], label: '프로그램 설명', multiline: true },
+	{ names: ['meta_memo'], label: '비고', multiline: true },
 ] as const;
+export type InfoField = typeof INFO_FIELDS[number];
+
+/** 이 화면에서 그 칸이 쓰는 속성 이름: 이미 있는 이름 그대로(저장할 때 다른 이름으로 바꾸지 않음). 없으면 짝 칸이 쓰는 계열, 그것도 없으면 첫 이름 */
+export function infoAttr(head: XmlNode, field: InfoField): string {
+	const names: readonly string[] = field.names;
+	const own = names.find(n => n in head.attrs);
+	if (own) { return own; }
+	if ('pair' in field) {
+		for (const other of INFO_FIELDS) {
+			const i = 'pair' in other && other !== field ? other.names.findIndex(n => n in head.attrs) : -1;
+			if (i >= 0) { return names[i]; }
+		}
+	}
+	return names[0];
+}
 
 export interface HistoryRow { no: string; desc: string; date: string; user: string }
 /** 이력 칸 → `<w2:history>` 속성(이 순서로 쓴다) */

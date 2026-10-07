@@ -45,13 +45,51 @@ const GRID_MENU = { columnLeft: '왼쪽에 Column 추가', column: 'Column 추�
 
 const LOADING = <p className="empty">불러오는 중…</p>;
 /** 실험 기능 탭: 탭 줄 오른쪽(설정 버튼 왼쪽)에 고정 */
-const BETA_TAB = 'Beta';
+const ERD_TAB = 'ERD';
 
 type Popup = { key: string; error?: string; busy?: boolean } & (
 	| { kind: 'data'; id: string }
 	| { kind: 'submission'; initial: SubmissionFields; source?: { id?: string; index: number } }
 	| { kind: 'choices'; index: number; id?: string; choices: ChoicesKind }
 	| { kind: 'gridCells'; index: number; id?: string });
+
+/**
+ * 마우스 뒤로·앞으로 버튼(button 3·4), IDE처럼: 이 편집기 안에서 본 탭 순서를 먼저 따라가고, 끝에 닿으면 VS Code 이동 기록(이전·다음 파일)으로 넘긴다.
+ * 탭이 바뀌는 길(클릭·이벤트 코드 버튼 → Script 등)이 여러 곳이라 보이는 탭(shownTab)이 바뀔 때 기록한다. 지워진 연결 탭은 건너뜀(exists).
+ * 버튼을 누를 때도 막아야 웹뷰 안에서 브라우저 뒤로 가기가 안 일어난다
+ */
+function useTabHistory(shownTab: string, show: (name: string) => void, exists: (name: string) => boolean) {
+	const back = useRef<string[]>([]), forward = useRef<string[]>([]), prev = useRef(shownTab), moving = useRef(false);
+	useEffect(() => {
+		if (prev.current === shownTab) { return; }
+		if (!moving.current) { back.current.push(prev.current); forward.current = []; }
+		moving.current = false;
+		prev.current = shownTab;
+	}, [shownTab]);
+	const navigate = useRef<(isBack: boolean) => void>(undefined);
+	navigate.current = isBack => {
+		const from = isBack ? back.current : forward.current;
+		let name = from.pop();
+		while (name !== undefined && (name === shownTab || !exists(name))) { name = from.pop(); }
+		if (name === undefined) { post({ type: 'navigate', back: isBack }); return; }
+		(isBack ? forward.current : back.current).push(shownTab);
+		moving.current = true;
+		show(name);
+	};
+	useEffect(() => {
+		const onMouse = (e: globalThis.MouseEvent) => {
+			if (e.button !== 3 && e.button !== 4) { return; }
+			e.preventDefault();
+			if (e.type === 'mouseup') { navigate.current?.(e.button === 3); }
+		};
+		window.addEventListener('mousedown', onMouse, true);
+		window.addEventListener('mouseup', onMouse, true);
+		return () => {
+			window.removeEventListener('mousedown', onMouse, true);
+			window.removeEventListener('mouseup', onMouse, true);
+		};
+	}, []);
+}
 
 function useComponentShortcuts() {
 	useEffect(() => {
@@ -60,8 +98,9 @@ function useComponentShortcuts() {
 		const inEditable = (e: Event) => {
 			const el = e.composedPath()[0] as HTMLElement;
 			// 팝업 안에 포커스가 있으면 이벤트가 body로 와도(VS Code 복사·붙여넣기는 글자 선택이 없으면 body로 보낸다) 팝업 것
-			// Beta 사용 테이블 그림(React Flow)의 Delete는 선 지우기
-			return !!el.closest?.('input, textarea, select, dialog, [contenteditable], .code-editor, .used-tables') && !el.closest('[data-wse]') || !!document.activeElement?.closest('dialog');
+			// ERD 탭(사용 테이블 그림)이 보이면 Design 단축키는 쉰다: 그림의 Delete·복붙은 그림 것(포커스가 body여도). 숨은 ERD는 상관없음
+			return !!el.closest?.('input, textarea, select, dialog, [contenteditable], .code-editor, .used-tables') && !el.closest('[data-wse]') || !!document.activeElement?.closest('dialog')
+				|| !!document.querySelector('.used-tables')?.getClientRects().length;
 		};
 		const onClip = (e: ClipboardEvent) => {
 			if (inEditable(e) || String(window.getSelection() ?? '')) {
@@ -75,6 +114,10 @@ function useComponentShortcuts() {
 		};
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === 'Delete' && !inEditable(e) && useEditorStore.getState().del()) {
+				e.preventDefault();
+			}
+			// 포커스가 아무 데도 없을 때(VS Code가 웹뷰로 돌아오며 body에 둔 경우) Space·PageUp/Down으로 브라우저가 스크롤하지 않게
+			if (e.target === document.body && [' ', 'PageDown', 'PageUp'].includes(e.key) && !e.defaultPrevented) {
 				e.preventDefault();
 			}
 		};
@@ -114,6 +157,7 @@ function App() {
 	const tabOrder = useEditorStore(s => s.tabOrder);
 	const setTabOrder = useEditorStore(s => s.setTabOrder);
 	const tabPosition = useEditorStore(s => s.tabPosition);
+	const minimapOn = useEditorStore(s => s.minimap);
 	const setTabPosition = useEditorStore(s => s.setTabPosition);
 	const otherSide = tabPosition === 'top' ? 'bottom' : 'top';
 	const events = api?.events;
@@ -121,13 +165,13 @@ function App() {
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const rightPanel = usePanelRef();
 	const [rightOpen, setRightOpen] = useState(true);
-	// Beta(그림이 넓어야 함)에 들어가면 우측 패널을 접고, 나오면 들어가기 전 상태로
+	// ERD(그림이 넓어야 함)에 들어가면 우측 패널을 접고, 나오면 들어가기 전 상태로
 	const reopenRight = useRef(false);
 	const showTab = (name: string) => {
-		if (name === BETA_TAB && shownTab !== BETA_TAB) {
+		if (name === ERD_TAB && shownTab !== ERD_TAB) {
 			reopenRight.current = !rightPanel.current?.isCollapsed();
 			rightPanel.current?.collapse();
-		} else if (name !== BETA_TAB && shownTab === BETA_TAB && reopenRight.current) {
+		} else if (name !== ERD_TAB && shownTab === ERD_TAB && reopenRight.current) {
 			reopenRight.current = false;
 			rightPanel.current?.expand();
 		}
@@ -145,7 +189,8 @@ function App() {
 	const [gridBind, setGridBind] = useState<{ grid: number; list: number }>();
 	const linkTabs = useLinkTabs(activeTab, LOADING);
 	// 보고 있던 연결 탭이 지워지면 Design으로
-	const shownTab = FIXED_TABS.includes(activeTab) || activeTab === BETA_TAB || linkTabs.labels.includes(activeTab) ? activeTab : 'Design';
+	const shownTab = FIXED_TABS.includes(activeTab) || activeTab === ERD_TAB || linkTabs.labels.includes(activeTab) ? activeTab : 'Design';
+	useTabHistory(shownTab, showTab, name => FIXED_TABS.includes(name) || name === ERD_TAB || linkTabs.labels.includes(name));
 	const pendingDataCreate = useRef<{ kind: DataKind; ids: Set<string>; version: number } | undefined>(undefined);
 	const scriptRef = useRef<CodeEditorHandle>(null);
 
@@ -338,7 +383,7 @@ function App() {
 						onClick={() => { if (rightPanel.current?.isCollapsed()) { rightPanel.current.expand(); } else { rightPanel.current?.collapse(); } }} /></>} start={<><button className={`tab-palette codicon codicon-layout-sidebar-left${paletteOpen ? ' active' : ''}`}
 						title={paletteOpen ? '팔레트 접기' : '팔레트 펼치기'} aria-label="팔레트" aria-expanded={paletteOpen} draggable={false} disabled={shownTab !== 'Design'} onClick={() => setPaletteOpen(open => !open)} />
 						<button draggable={false} className={`tab-move codicon codicon-arrow-${otherSide === 'top' ? 'up' : 'down'}`}
-						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} /></>} pinned={[BETA_TAB]} keepMounted={['Script', 'Source', ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={showTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
+						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} /></>} pinned={[ERD_TAB]} keepMounted={['Script', 'Source', ERD_TAB, ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={showTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
 						Design: doc?.error ? <p className="error">{doc.error}</p>
 							: body && defs ? <Group orientation="horizontal" className="design-layout">
 								{paletteOpen && <Panel key="palette" id="palette" defaultSize={220} minSize={150} maxSize={360}><PalettePane /></Panel>}
@@ -357,7 +402,7 @@ function App() {
 							: head && doc ? <InfoPane head={head} onAttr={(name, value) => editAttr(name, value, head.index)}
 								onHistory={rows => post({ type: 'editHistory', version: doc.version, index: head.index, rows })} />
 							: doc ? <p className="empty">head가 없는 화면입니다.</p> : LOADING,
-						[BETA_TAB]: <UsedTablesPane />,
+						[ERD_TAB]: <UsedTablesPane />,
 						Script: doc ? <CodeEditor ref={scriptRef} target="script" lang={scriptLanguage} complete={jsTools.complete} hover={jsTools.hover} definition={jsTools.definition} signature={jsTools.signature} lint="js" text={doc.script.text} version={doc.version}
 							readOnly={!!doc.script.note} notes={[api?.error, modules?.error, doc.script.note]} post={post} /> : LOADING,
 						Source: doc ? <CodeEditor target="source" lang={XML} complete={xmlComplete} hover={xmlHoverSource} lint="xml" text={doc.text} version={doc.version} post={post} /> : LOADING,
@@ -412,6 +457,10 @@ function App() {
 					if (item[0] === 'themeColors') { setThemeColors(true); } else { post({ type: 'settingsMenu', item: item[0] }); }
 				}}>{item[1]}</button>
 				: <div key={i} className="menu-separator" role="separator" />)}
+			<div className="menu-separator" role="separator" />
+			{/* 웹뷰 안 설정: 바로 바꾸고 메뉴는 닫는다 */}
+			<button role="menuitemcheckbox" aria-checked={minimapOn} onClick={() => { setSettingsMenu(undefined); useEditorStore.getState().setMinimap(!minimapOn); }}>
+				<span className="menu-label"><span className={`codicon codicon-${minimapOn ? 'check' : 'blank'}`} />코드 미니맵</span></button>
 		</Menu>}
 		{themeColors && <ThemeColorsEditor onClose={() => setThemeColors(false)} />}
 		<Toast />

@@ -6,8 +6,9 @@ import { GRID_CELL_PARTS, gridPartCells, type GridCellEdit, type GridCellPart } 
 import { defOf, type XmlNode } from '../../core/xmlModel';
 import type { ComponentDef } from '../../core/protocol';
 import { ComboInput } from './combo';
-import { PopupTitle, usePopupWindow } from './popupWindow';
+import { PopupActions, PopupTitle, usePopupWindow } from './popupWindow';
 import { Segmented } from './segmented';
+import { capturePointer } from './pointerCapture';
 
 const PART_LABELS: Record<GridCellPart, string> = { header: 'Header', gBody: 'Body', subTotal: 'SubTotal', footer: 'Footer' };
 const HEAD_PARTS = GRID_CELL_PARTS.filter(p => p !== 'gBody');
@@ -23,7 +24,7 @@ const at = (target: EventTarget) => {
 };
 const same = (a: At, b: At) => a.r === b.r && a.c === b.c;
 /** 끄는 중인 표(스크롤 칸)와 포인터 */
-type Drag = { wrap: HTMLElement; x: number; y: number; frame?: number };
+type Drag = { wrap: HTMLElement; x: number; y: number; frame?: number; captured?: boolean };
 const EDGE = 24;
 /** 칸이 보이는 영역: 위 머리글·왼쪽 행,열 칸은 고정이라 그 밑의 칸은 가려져 있다 */
 const bodyBox = (wrap: HTMLElement) => {
@@ -139,7 +140,7 @@ export function GridCellsEditor({ grid, defs, externalError, offsetIndex = 0, on
 			// 다른 칸이나 보이는 영역 밖으로 가면 범위: 표 밖에서도 계속 받고 가장자리에서는 굴린다(한 칸 안 글자 고르기는 그대로)
 			if (!multi && !outside && (!p || same(mine.anchor, p))) { return; }
 			if (p && !same(mine.focus, p)) { toRange(e, p); }
-			if (!e.currentTarget.hasPointerCapture(e.pointerId)) { e.currentTarget.setPointerCapture(e.pointerId); }
+			if (!e.currentTarget.hasPointerCapture(e.pointerId) && !d.captured) { d.captured = true; capturePointer(e); }
 			if (!d.frame) { autoScroll(); }
 		};
 		const paste = (data: DataTransfer) => {
@@ -232,11 +233,9 @@ export function GridCellsEditor({ grid, defs, externalError, offsetIndex = 0, on
 			</section>
 		</div>
 		{externalError && <p className="error" role="alert">{externalError}</p>}
-		<div className="data-editor-actions">
+		<PopupActions onClose={onClose} onApply={apply}>
 			<label className="actions-hint grid-cells-all"><input type="checkbox" checked={all} onChange={e => { setAll(e.target.checked); setSel(undefined); clip.current = undefined; }} />모든 속성 보기</label>
-			<button type="button" className="btn btn-secondary" onClick={onClose}>닫기</button>
-			<button type="button" className="btn btn-primary" onClick={apply}>확인</button>
-		</div>
+		</PopupActions>
 		{resizeHandles}
 	</dialog>;
 }

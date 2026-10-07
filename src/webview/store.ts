@@ -37,6 +37,8 @@ interface EditorState {
 	linkTabs: LinkTab[];
 	tabOrder?: string[];
 	tabPosition: TabPosition;
+	/** 코드 편집기 미니맵(모든 화면 공통) */
+	minimap: boolean;
 	paletteFavorites: string[];
 	codeTheme: CodeThemeState;
 	/** 테마 색 덮어쓰기 팝업이 고치는 중인 공통·이 테마 층(열린 코드 편집기 미리 보기) */
@@ -77,6 +79,7 @@ interface EditorState {
 	move: (dragged: number, target: number, position: DropPosition) => void;
 	setTabOrder: (order: string[]) => void;
 	setTabPosition: (position: TabPosition) => void;
+	setMinimap: (on: boolean) => void;
 	togglePaletteFavorite: (component: ComponentDef) => void;
 	reorderPaletteFavorites: (keys: string[]) => void;
 }
@@ -107,6 +110,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	codeOptions: DEFAULT_CODE_OPTIONS,
 	gitBases: {},
 	tabPosition: 'top',
+	minimap: true,
 	paletteFavorites: [],
 	diagnostics: {},
 	linkFiles: {},
@@ -162,6 +166,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 			set({ tabOrder: data.order });
 		} else if (data.type === 'tabPosition') {
 			set({ tabPosition: data.position });
+		} else if (data.type === 'minimap') {
+			set({ minimap: data.on });
 		}
 	},
 
@@ -339,6 +345,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	setTabPosition: (position) => {
 		set({ tabPosition: position });
 		post({ type: 'setTabPosition', position });
+	},
+
+	setMinimap: (on) => {
+		set({ minimap: on });
+		post({ type: 'setMinimap', on });
 	},
 }));
 

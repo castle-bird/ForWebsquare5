@@ -16,12 +16,13 @@ import { codeVars, editorBase, editorClass, followsVsCode, keepSearchMatchColors
 import { baseEffect, gitChanges } from './changes';
 import { markdownDoc, remoteCompletion, remoteHover, remoteSignature } from './remoteCompletion';
 import { signatureHelp } from './signatureHelp';
+import { minimap } from './minimap';
 import { notInComment } from './docComment';
 import type { ScriptDefinition } from './completions';
 import { isModKey } from '../keys';
 import { useEditorStore } from '../store';
 
-const theme = new Compartment(), readOnlyConf = new Compartment(), wrapConf = new Compartment(), langConf = new Compartment();
+const theme = new Compartment(), readOnlyConf = new Compartment(), wrapConf = new Compartment(), langConf = new Compartment(), minimapConf = new Compartment();
 
 /** 마우스를 올린 자리의 설명(WebSquare API 등). 없으면 null */
 export type HoverSource = (view: EditorView, pos: number, side: -1 | 1) => Tooltip | null | Promise<Tooltip | null>;
@@ -91,6 +92,68 @@ const completion = autocompletion({
 	},
 });
 
+/**
+ * VS Code가 웹뷰를 숨겼다 다시 보이거나(다른 편집기 탭) 다른 창에서 돌아오면, 포커스가 body로 가거나 커서가 엉뚱한 자리로 바뀐 채
+ * 첫 키(Space 등)가 들어와 그 자리로 스크롤이 튈 수 있다. 떠날 때의 커서·스크롤·포커스를 기억했다가
+ * 돌아온 뒤 클릭 없이 누른 첫 키 전에 되돌린다(클릭했으면 그 자리가 맞다). 보이는 편집기만.
+ * 한 번 클릭으로 포커스가 안 들어온 경우도 여기서 넣는다
+ */
+function restoreOnReturn(editor: EditorView): () => void {
+	let saved: { doc: Text; selection: EditorSelection; top: number; focused: boolean; wheeled?: boolean } | undefined;
+	/** 포커스가 아무 데도 없음(검색창 등 다른 입력칸이 아님) */
+	const nowhere = () => !document.activeElement || document.activeElement === document.body;
+	const leave = () => {
+		if (editor.dom.offsetParent) {
+			saved = { doc: editor.state.doc, selection: editor.state.selection, top: editor.scrollDOM.scrollTop, focused: editor.hasFocus };
+		}
+	};
+	const back = () => {
+		if (saved?.focused && editor.dom.offsetParent && !editor.hasFocus && nowhere()) {
+			editor.focus();
+		}
+	};
+	const onVisibility = () => document.visibilityState === 'hidden' ? leave() : back();
+	// 돌아와서 한 번 클릭했는데 포커스가 편집기에 안 들어갔으면(웹뷰 문서가 포커스를 못 받아 CodeMirror의 focus()가 무시됨 → body에 남음)
+	// 클릭이 끝난 뒤 넣는다. 안 그러면 Space는 클릭한 곳의 스크롤 영역을 한 화면 내리고(입력 없이) Ctrl+F도 안 먹어 두 번 클릭해야 했다.
+	// 검색창 등 다른 입력칸에 포커스가 갔으면 그대로 둔다
+	const onPointer = (e: PointerEvent) => {
+		saved = undefined;
+		if (!editor.dom.contains(e.target as Node)) {
+			return;
+		}
+		window.addEventListener('pointerup', () => requestAnimationFrame(() => {
+			if (!editor.hasFocus && nowhere() && editor.dom.offsetParent) {
+				window.focus();
+				editor.focus();
+			}
+		}), { once: true, capture: true });
+	};
+	const onKey = () => {
+		const s = saved;
+		saved = undefined;
+		if (!s || !editor.hasFocus) {
+			return;
+		}
+		// 그사이 문서가 바뀌었으면(Design·VS Code 편집) 옛 커서 자리는 믿지 않는다
+		if (s.doc === editor.state.doc && !editor.state.selection.eq(s.selection)) {
+			editor.dispatch({ selection: s.selection });
+		}
+		if (!s.wheeled && editor.scrollDOM.scrollTop !== s.top) {
+			editor.scrollDOM.scrollTop = s.top;
+		}
+	};
+	// 돌아와서 휠로 스크롤했으면 그 스크롤이 맞다(첫 키에 떠날 때 자리로 되돌리지 않음). 커서는 그대로 되돌린다
+	const onWheel = () => { if (saved) { saved.wheeled = true; } };
+	const stop = new AbortController(), { signal } = stop;
+	window.addEventListener('blur', leave, { signal });
+	window.addEventListener('focus', back, { signal });
+	document.addEventListener('visibilitychange', onVisibility, { signal });
+	window.addEventListener('pointerdown', onPointer, { capture: true, signal });
+	window.addEventListener('keydown', onKey, { capture: true, signal });
+	window.addEventListener('wheel', onWheel, { capture: true, passive: true, signal });
+	return () => stop.abort();
+}
+
 export interface CodeEditorHandle {
 	appendAndFocus(text: string, cursorOffset: number): void;
 	/** 이 편집기 글자(줄바꿈은 \n)에서 찾은 범위를 골라 보인다. 원문 위치를 넘기면 CRLF 파일에서 줄 수만큼 밀린다 */
@@ -120,6 +183,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 	const codeTheme = useMemo(() => themeDraft ? { ...savedTheme, ...themeDraft } : savedTheme, [savedTheme, themeDraft]);
 	const gitBase = useEditorStore(s => s.gitBases[target]);
 	const wordWrap = useEditorStore(s => s.codeOptions.wordWrap);
+	const minimapOn = useEditorStore(s => s.minimap);
 	const themeState = useRef(codeTheme);
 
 	const send = (changes: ChangeSet, doc: Text) => {
@@ -243,6 +307,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 				basicSetup, searchTop, selectionClass, keys, completion, indent, indentGuides, lintFor(lint, remoteLint), gitChanges,
 				langConf.of(languageOf.current(lang)),
 				wrapConf.of(wordWrap ? EditorView.lineWrapping : []),
+				minimapConf.of(minimapOn ? minimap : []),
 				hoverTooltip((view, pos, side) => hoverSource.current?.(view, pos, side) ?? remoteHoverSource?.(view, pos) ?? null),
 				definitionKeys, signatures,
 				theme.of(themeOf(codeTheme)),
@@ -338,9 +403,11 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 			}
 		};
 		window.addEventListener('message', onMessage);
+		const stopRestoring = restoreOnReturn(editor);
 		return () => {
 			window.removeEventListener('message', onMessage);
 			observer.disconnect();
+			stopRestoring();
 			editor.destroy();
 		};
 	}, []); // 편집기는 한 번만 만들고 아래 effect들로 갱신
@@ -379,7 +446,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 		signatureSource.current = signature;
 	}, [definition, signature]);
 	// 처음 값은 편집기를 만들 때 이미 넣었다
-	const applied = useRef({ lang, wordWrap });
+	const applied = useRef({ lang, wordWrap, minimapOn });
 	useEffect(() => {
 		if (applied.current.lang !== lang) {
 			applied.current.lang = lang;
@@ -392,6 +459,12 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 			view.current?.dispatch({ effects: wrapConf.reconfigure(wordWrap ? EditorView.lineWrapping : []) });
 		}
 	}, [wordWrap]);
+	useEffect(() => {
+		if (applied.current.minimapOn !== minimapOn) {
+			applied.current.minimapOn = minimapOn;
+			view.current?.dispatch({ effects: minimapConf.reconfigure(minimapOn ? minimap : []) });
+		}
+	}, [minimapOn]);
 	useEffect(() => {
 		view.current?.dispatch({ effects: baseEffect(gitBase) });
 	}, [gitBase]);

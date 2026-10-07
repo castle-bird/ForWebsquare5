@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { resizeBox, resizeEdges, type Box, type ResizeEdge } from './resizeBox';
 import { isModKey } from '../keys';
+import { capturePointer } from './pointerCapture';
 
 let globalPopupZIndex = 100;
 
@@ -43,7 +44,7 @@ export function usePopupWindow(options: { initialOffset?: number; onClose?(): vo
 			bringToFront();
 			const rect = dialog.current.getBoundingClientRect();
 			windowDrag.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-			e.currentTarget.setPointerCapture(e.pointerId);
+			capturePointer(e);
 		},
 		onPointerMove: (e: PointerEvent<HTMLElement>) => {
 			const grab = windowDrag.current;
@@ -66,7 +67,7 @@ export function usePopupWindow(options: { initialOffset?: number; onClose?(): vo
 				bringToFront();
 				const rect = dialog.current.getBoundingClientRect();
 				resizeDrag.current = { edge, startX: e.clientX, startY: e.clientY, box: { x: rect.left, y: rect.top, width: rect.width, height: rect.height } };
-				e.currentTarget.setPointerCapture(e.pointerId);
+				capturePointer(e);
 			}}
 			onPointerMove={e => {
 				const drag = resizeDrag.current;
@@ -110,6 +111,15 @@ function leavesOnEnter(e: KeyboardEvent<HTMLElement>) {
 	const input = e.target;
 	return e.key === 'Enter' && !e.defaultPrevented && !e.nativeEvent.isComposing && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
 		&& input instanceof HTMLInputElement && !['checkbox', 'radio', 'color', 'file', 'button', 'submit'].includes(input.type);
+}
+
+/** 팝업 아래 버튼 줄: 왼쪽 children(안내·추가 버튼) · 닫기 · 확인 */
+export function PopupActions({ onClose, onApply, applyDisabled, children }: { onClose(): void; onApply(): void; applyDisabled?: boolean; children?: ReactNode }) {
+	return <div className="data-editor-actions">
+		{children}
+		<button type="button" className="btn btn-secondary" onClick={onClose}>닫기</button>
+		<button type="button" className="btn btn-primary" disabled={applyDisabled} onClick={onApply}>확인</button>
+	</div>;
 }
 
 export function PopupTitle({ titleProps, badge, onClose, children }: {
