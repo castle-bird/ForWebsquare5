@@ -2,16 +2,14 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as vscode from 'vscode';
 import { findNode, parseXml, pathTo, type XmlNode } from '../core/xmlModel';
 import { mergeCells, mergeProblem } from '../core/merge';
 import { pasteNode } from '../core/paste';
-import { moveNode } from '../core/move';
-import { boundColumnIds, gridPartCells } from '../core/grid';
+import { movedIndexes, moveNode } from '../core/move';
+import { boundColumnIds } from '../core/grid';
 import { loadDefaultStyles, parseComponents } from '../project/components';
 import { readWebConfig } from '../project/config';
 import { cached, serial } from '../project/paths';
-import { applyCodeEdit, applyNodeEdit } from '../vscode/documentEdit';
 import { applyEdits, deleteNode, encodeScript, leadOf, scriptBody, setAttribute, setText, sourceChange } from '../core/edit';
 import { setStyle, styleChanges } from '../core/style';
 import { SCREEN } from './helpers';
@@ -30,56 +28,33 @@ suite('edit', () => {
 		assert.strictEqual(boundColumnIds(root, path('x')), undefined, '바인딩 안 된 그리드');
 	});
 
-	test('editGridCells: 칸마다 여러 속성 바꾸기·지우기, 칸끼리 id 맞바꾸기는 되고 겹치면 안 바꿈', async () => {
-		const doc = await vscode.workspace.openTextDocument({ language: 'xml', content: '<html xmlns:w2="urn:w2"><body><w2:gridView id="g">'
-			+ '<w2:header><w2:row><w2:column id="h1" value="이름" class="req"/><w2:column id="h2"/></w2:row></w2:header>'
-			+ '<w2:gBody><w2:row><w2:column id="a" width="70"/><w2:column id="b"/></w2:row></w2:gBody></w2:gridView></body></html>' });
-		const grid = findNode(parseXml(doc.getText())!, n => n.attrs.id === 'g')!;
-		const [h1, h2] = gridPartCells(grid, 'header')!, [a, b] = gridPartCells(grid, 'gBody')!;
-		assert.deepStrictEqual([h1.label, h2.label, b.label], ['0,0', '0,1', '0,1']);
-		const before = doc.getText();
-		await vscode.window.showTextDocument(doc);
-		assert.ok(await applyNodeEdit(doc, { type: 'editGridCells', version: doc.version, index: grid.index, popup: 'p', cells: [
-			{ index: h1.index, attrs: { value: '성명', class: null } }, { index: a.index, attrs: { id: 'b', width: '90' } }, { index: b.index, attrs: { id: 'a' } }] }));
-		assert.ok(doc.getText().includes('<w2:column id="h1" value="성명"/>'), doc.getText());
-		assert.ok(doc.getText().includes('<w2:column id="b" width="90"/><w2:column id="a"/>'), doc.getText());
-		const after = doc.getText();
-		await vscode.commands.executeCommand('undo');
-		assert.strictEqual(doc.getText(), before, '여러 칸 편집도 Undo 한 번');
-		await vscode.commands.executeCommand('redo');
-		assert.strictEqual(doc.getText(), after, 'Redo 한 번으로 모두 복원');
-		const notes: string[] = [];
-		assert.strictEqual(await applyNodeEdit(doc, { type: 'editGridCells', version: doc.version, index: grid.index, popup: 'p', cells: [{ index: a.index, attrs: { id: 'a' } }] }, m => notes.push(m)), false);
-		assert.strictEqual(notes.length, 1, '겹치는 id 알림');
-	});
-
-	test('setAttr more: 여러 노드를 한 편집으로(노드마다 다른 값), 하나라도 없으면 안 바꿈', async () => {
-		const doc = await vscode.workspace.openTextDocument({ content: '<html><body><a id="x" s="1"/><b id="y"/></body></html>', language: 'xml' });
-		const root = parseXml(doc.getText())!, [a, b] = root.children[0].children;
-		assert.ok(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: a.index, name: 's', value: '2', more: [{ index: b.index, value: '3' }] }));
-		assert.strictEqual(doc.getText(), '<html><body><a id="x" s="2"/><b id="y" s="3"/></body></html>');
-		assert.strictEqual(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: a.index, name: 's', value: '9', more: [{ index: 99, value: '9' }] }), false);
-		assert.ok(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: b.index, name: 's', value: '4', more: [{ index: b.index, value: '5' }] }), '같은 노드 중복');
-		assert.ok(doc.getText().includes('<b id="y" s="4"/>'), doc.getText());
-		assert.ok(doc.getText().includes('s="2"'));
-	});
-
-	test('setAttr also: 같은 노드의 여러 속성을 한 편집으로(그리드 헤더 칸 문구·너비·높이), 지우기 포함', async () => {
-		const doc = await vscode.workspace.openTextDocument({ content: '<html><body><w2:column id="c" value="이름" style="height:26px;" width="70"/></body></html>', language: 'xml' });
-		const col = parseXml(doc.getText())!.children[0].children[0];
-		assert.ok(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: col.index, name: 'value', value: '성명',
-			also: [{ name: 'width', value: '120' }, { name: 'style', value: 'height:40px;' }, { name: 'rowSpan', value: '2' }] }));
-		assert.strictEqual(doc.getText(), '<html><body><w2:column id="c" value="성명" style="height:40px;" width="120" rowSpan="2"/></body></html>');
-		assert.ok(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: col.index, name: 'value', value: '성명', also: [{ name: 'style' }, { name: 'rowSpan' }] }));
-		assert.strictEqual(doc.getText(), '<html><body><w2:column id="c" value="성명" width="120"/></body></html>');
-	});
-
 	test('deleteNode: 줄 전체를 차지하면 줄바꿈까지, 아니면 태그만', () => {
 		const apply = (t: string, e: { start: number; end: number; replacement: string }) => t.slice(0, e.start) + e.replacement + t.slice(e.end);
 		const text = '<a>\n\t<b/>\n\t<c/><d/>\n</a>';
 		const root = parseXml(text)!;
 		assert.strictEqual(apply(text, deleteNode(text, root.children[0])), '<a>\n\t<c/><d/>\n</a>', '줄 전체 → 줄바꿈까지');
 		assert.strictEqual(apply(text, deleteNode(text, root.children[2])), '<a>\n\t<b/>\n\t<c/>\n</a>', '한 줄에 여럿 → 태그만');
+	});
+
+	test('movedIndexes: 옮긴 뒤 노드 번호(선택·펼침이 같은 노드를 계속 가리키게) — 실제 moveNode 결과와 같음', () => {
+		const apply = (t: string, es: { start: number; end: number; replacement: string }[]) =>
+			[...es].sort((x, y) => y.start - x.start).reduce((acc, e) => acc.slice(0, e.start) + e.replacement + acc.slice(e.end), t);
+		const text = '<html><head id="h"/><body id="b"><xf:group id="g1"><w2:input id="a"/><xf:group id="g2"><w2:input id="c"/></xf:group></xf:group><xf:group id="g3"><w2:input id="d"/></xf:group><w2:input id="e"/></body></html>';
+		const root = parseXml(text)!, idOf = (n: XmlNode) => n.attrs.id ?? n.tag;
+		const byId = (r: XmlNode, id: string) => findNode(r, n => idOf(n) === id)!;
+		const all = (r: XmlNode): XmlNode[] => [r, ...r.children.flatMap(all)];
+		const cases: [string[], string, 'before' | 'after' | 'inside'][] = [
+			[['g2'], 'e', 'after'], [['e'], 'g1', 'before'], [['g3'], 'g1', 'inside'], [['a'], 'g2', 'after'], [['d', 'a'], 'g2', 'inside'], [['e'], 'a', 'before'],
+		];
+		for (const [ids, to, position] of cases) {
+			const dragged = ids.map(id => byId(root, id)), target = byId(root, to);
+			const moved = parseXml(apply(text, moveNode(text, dragged, target, position)))!;
+			const map = movedIndexes(root, dragged.map(n => n.index), target.index, position)!;
+			for (const n of all(root)) {
+				assert.strictEqual(idOf(all(moved).find(m => m.index === map.get(n.index))!), idOf(n), `${ids} ${position} ${to}: ${idOf(n)}`);
+			}
+		}
+		assert.strictEqual(movedIndexes(root, [999], 1, 'after'), undefined, '없는 번호');
 	});
 
 	test('moveNode: id·이벤트 그대로 전/후/안으로 옮김 (Outline 드래그 앤 드롭), 자기 자신 안으로는 거부', () => {
@@ -144,6 +119,17 @@ suite('edit', () => {
 		const out = apply(grp, pasteNode(grp, groot, groot.children[1], grp.slice(src.start, src.end)));
 		assert.ok(out.includes('<xf:group id="g"><xf:group id="g_copy2"><xf:input id="i_copy1"/></xf:group></xf:group>'), out);
 		assert.throws(() => pasteNode(grp, groot, groot, '<a/><b/>'));
+	});
+
+	test('pasteNode 앞·뒤: 그룹이어도 안이 아니라 그 앞·뒤 형제로, 같은 들여쓰기(id는 보통 붙여 넣기처럼 _copyN). body 앞뒤는 거부', () => {
+		const apply = (t: string, e: { start: number; end: number; replacement: string }) => t.slice(0, e.start) + e.replacement + t.slice(e.end);
+		const text = '<html><body>\n\t<xf:group id="g">\n\t\t<xf:input id="i"/>\n\t</xf:group>\n</body></html>';
+		const root = parseXml(text)!, g = findNode(root, n => n.attrs.id === 'g')!, copied = '\t<xf:trigger id="b"/>';
+		assert.strictEqual(apply(text, pasteNode(text, root, g, copied, 'before')),
+			'<html><body>\n\t<xf:trigger id="b_copy1"/>\n\t<xf:group id="g">\n\t\t<xf:input id="i"/>\n\t</xf:group>\n</body></html>');
+		assert.strictEqual(apply(text, pasteNode(text, root, g, copied, 'after')),
+			'<html><body>\n\t<xf:group id="g">\n\t\t<xf:input id="i"/>\n\t</xf:group>\n\t<xf:trigger id="b_copy1"/>\n</body></html>');
+		assert.throws(() => pasteNode(text, root, root.children[0], copied, 'before'), /앞뒤/);
 	});
 
 	const XMLNS = 'xmlns="http://www.w3.org/1999/xhtml" xmlns:ev="http://www.w3.org/2001/xml-events" xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms"';
@@ -254,13 +240,6 @@ suite('edit', () => {
 		assert.strictEqual(sourceChange('<a/>', '<a/>'), undefined);
 	});
 
-	test('Source 수정은 line:ch 변경분으로 적용', async () => {
-		const doc = await vscode.workspace.openTextDocument({ content: SCREEN, language: 'xml' });
-		const at = doc.positionAt(SCREEN.indexOf('한글'));
-		assert.ok(await applyCodeEdit(doc, 'source', [{ fromLine: at.line, fromCh: at.character, toLine: at.line, toCh: at.character + 2, insert: '수정' }]));
-		assert.ok(doc.getText().includes('label="수정"'));
-	});
-
 	test('scriptBody: CDATA(나눠 적은 인접 CDATA 포함)·일반 텍스트는 편집, 섞이면 안내', () => {
 		const body = (xml: string) => scriptBody(xml, parseXml(xml)!);
 		const res = body(SCREEN);
@@ -283,21 +262,6 @@ suite('edit', () => {
 	test('encodeScript: CDATA 안 ]]>는 나눠 적고, 텍스트는 이스케이프', () => {
 		assert.strictEqual(encodeScript('a]]>b', true), 'a]]]]><![CDATA[>b');
 		assert.strictEqual(encodeScript('a < b && c ]]>', false), 'a &lt; b &amp;&amp; c ]]&gt;');
-	});
-
-	test('Script 수정: 편집기 값에 적용 후 원문으로 되돌려 가운데만 교체', async () => {
-		const doc = await vscode.workspace.openTextDocument({ content: '<html><script><![CDATA[a;\r\n  b;]]></script></html>', language: 'xml' });
-		assert.ok(await applyCodeEdit(doc, 'script', [
-			{ fromLine: 0, fromCh: 0, toLine: 0, toCh: 1, insert: 'x' },
-			{ fromLine: 1, fromCh: 2, toLine: 1, toCh: 3, insert: 'y\nz' },
-		]));
-		assert.strictEqual(doc.getText(), '<html><script><![CDATA[x;\r\n  y\r\nz;]]></script></html>');
-		// CDATA 안에 ]]>를 쳐도 XML이 깨지지 않는다
-		assert.ok(await applyCodeEdit(doc, 'script', [{ fromLine: 0, fromCh: 0, toLine: 0, toCh: 0, insert: ']]>' }]));
-		assert.strictEqual(doc.getText(), '<html><script><![CDATA[]]]]><![CDATA[>x;\r\n  y\r\nz;]]></script></html>');
-		const plain = await vscode.workspace.openTextDocument({ content: '<html><script>a &lt; b;</script></html>', language: 'xml' });
-		assert.ok(await applyCodeEdit(plain, 'script', [{ fromLine: 0, fromCh: 5, toLine: 0, toCh: 5, insert: ' && c' }]));
-		assert.strictEqual(plain.getText(), '<html><script>a &lt; b &amp;&amp; c;</script></html>');
 	});
 
 	test('DOCTYPE이 있으면 파싱 거부, 주석 안은 무시', () => {
@@ -355,14 +319,6 @@ suite('edit', () => {
 		assert.strictEqual(text('<th/>', 'a<b'), '<th>a&lt;b</th>');
 		assert.strictEqual(text('<th>x<w2:attributes/></th>', 'y'), '<th>y<w2:attributes/></th>');
 		assert.strictEqual(text('<th></th>', 'z'), '<th>z</th>');
-	});
-
-	test('문서에 적용 (WorkspaceEdit)', async () => {
-		const doc = await vscode.workspace.openTextDocument({ content: SCREEN, language: 'xml' });
-		const version = doc.version;
-		assert.ok(await applyNodeEdit(doc, { type: 'setAttr', version, index: 7, name: 'label', value: '영문' }));
-		assert.ok(doc.getText().includes('<w2:textbox id="tbx_title" label="영문"/>'));
-		assert.ok(!await applyNodeEdit(doc, { type: 'setAttr', version, index: 999, name: 'x', value: '1' }), '없는 노드');
 	});
 });
 

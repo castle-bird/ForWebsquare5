@@ -3,16 +3,16 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { cleanPath, DEFAULT_LINK_EXTS, DEFAULT_LINK_TABS, linkIdOf, linkProblem, moveTab, newTabId, orderTabs, readLinkExts, readLinkTabs, tabNameProblem } from '../core/links';
-import { doctypeOf, parseDtd } from '../core/dtd';
-import { xmlSchemaOf } from '../vscode/xmlSchema';
+import { cleanPath, DEFAULT_LINK_EXTS, DEFAULT_LINK_TABS, linkIdOf, linkProblem, moveTab, newTabId, orderTabs, readLinkExts, readLinkTabs, tabNameProblem } from '../../core/links';
+import { doctypeOf, parseDtd } from '../../core/dtd';
+import { xmlSchemaOf } from '../../vscode/xmlSchema';
 import { zipSync } from 'fflate';
-import type { LinkState, ToWebview } from '../core/protocol';
-import { LinkedFiles, registerLinks } from '../vscode/links';
-import { linkTabs, saveLinkTabs } from '../vscode/linkTabs';
-import { stagedText } from '../vscode/gitBase';
+import type { LinkState, ToWebview } from '../../core/protocol';
+import { LinkedFiles, registerLinks } from '../../vscode/links';
+import { linkTabs, saveLinkTabs } from '../../vscode/linkTabs';
+import { stagedText } from '../../vscode/gitBase';
 import { execFileSync } from 'child_process';
-import { waitFor, SCREEN } from './helpers';
+import { waitFor, SCREEN } from '../helpers';
 
 suite('links', () => {
 	test('경로 입력 정리·연결 가능 검사', () => {

@@ -1,26 +1,13 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { clsx } from 'clsx';
-import { useDraggable, useDroppable, type ClientRect } from '@dnd-kit/core';
+import { useDraggable } from '@dnd-kit/core';
 import { isContainer, type DropPosition } from '../../core/paste';
 import type { ComponentDef } from '../../core/protocol';
 import { defOf, findNode, nodeAt, VALID_ID, type XmlNode } from '../../core/xmlModel';
 import { post } from '../store';
+import { lastPressedIn } from '../keys';
 import { outlineChildren, outlineIcon } from '../design/renderers';
 import { EditBox } from './editBox';
-
-export function dropZone(activeRect: ClientRect | null, overRect: ClientRect | null, container: boolean, depth: number): DropPosition {
-	if (depth === 0) {
-		return 'inside';
-	}
-	if (!activeRect || !overRect) {
-		return container ? 'inside' : 'after';
-	}
-	const ratio = (activeRect.top + activeRect.height / 2 - overRect.top) / overRect.height;
-	if (!container) {
-		return ratio < 0.5 ? 'before' : 'after';
-	}
-	return ratio < 0.25 ? 'before' : ratio > 0.75 ? 'after' : 'inside';
-}
 
 /** Data 트리 끌어 옮기기(브라우저 기본 끌기: 같은 끌기를 Design에 놓으면 바인딩). zone: 이 행에 놓을 수 있으면 자리 */
 export interface Reorder {
@@ -31,7 +18,7 @@ export interface Reorder {
 }
 const NODE_MIME = 'application/x-wse-node';
 
-export interface DragData { index: number; depth: number; container: boolean }
+export interface DragData { index: number; depth: number }
 
 export function useFold() {
 	const [state, setState] = useState<{ all?: boolean; overrides: Map<number, boolean> }>({ overrides: new Map() });
@@ -39,6 +26,8 @@ export function useFold() {
 		isOpen: (n: XmlNode) => state.overrides.get(n.index) ?? state.all ?? false,
 		toggle: (n: XmlNode, open: boolean) => setState(s => ({ ...s, overrides: new Map(s.overrides).set(n.index, open) })),
 		setAll: (all: boolean) => setState({ all, overrides: new Map() }),
+		/** 문서가 바뀌어 번호가 바뀌면(옮기기) 펼침 상태도 같은 노드로 */
+		remap: (map: Map<number, number>) => setState(s => ({ ...s, overrides: new Map([...s.overrides].flatMap(([i, open]) => map.has(i) ? [[map.get(i)!, open]] : [])) })),
 		reveal: (nodes: XmlNode[]) => setState(s => {
 			const closed = nodes.filter(n => !(s.overrides.get(n.index) ?? s.all ?? false));
 			if (!closed.length) { return s; }
@@ -58,7 +47,7 @@ export interface Rename { index?: number; commit(node: XmlNode, id: string): voi
 /** 화면 점검(core/check): of 노드 → 문제들, inside 안쪽에 문제가 있는 노드 */
 export interface Problems { of: Map<number, string[]>; inside: Set<number> }
 
-export function TreeItem({ node, depth, selected, extra, onSelect, onContextMenu, onDoubleClick, fold, defs, interactive, bindRef, reorder, rename, problems }: {
+export function TreeItem({ node, depth, selected, extra, onSelect, onContextMenu, onDoubleClick, fold, defs, interactive, bindRef, reorder, rename, problems, dropParent }: {
 	node: XmlNode; depth: number; selected?: number;
 	extra?: number[]; onSelect(i: number, additive?: boolean): void; onContextMenu?(e: MouseEvent<HTMLDivElement>, node: XmlNode): void; onDoubleClick?(node: XmlNode): void;
 	fold: Fold; defs?: ComponentDef[]; interactive?: boolean;
@@ -66,6 +55,8 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onContextMenu
 	reorder?: Reorder;
 	rename?: Rename;
 	problems?: Problems;
+	/** Outline 끌기 중 놓일 곳의 부모 줄(inside: 그 줄 자체에 놓임) */
+	dropParent?: { index: number; inside: boolean };
 }) {
 	const ref = bindRef?.(node);
 	const cls = interactive ? classLabel(node) : '';
@@ -77,16 +68,14 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onContextMenu
 	const isExtra = !!extra?.includes(node.index);
 	const container = isContainer(node);
 	const draggable = !!interactive && depth > 0;
-	const drag = useDraggable({ id: node.index, data: { index: node.index, depth, container } satisfies DragData, disabled: !draggable });
-	const drop = useDroppable({ id: node.index, data: { index: node.index, depth, container } satisfies DragData, disabled: !interactive || drag.isDragging });
+	const drag = useDraggable({ id: node.index, data: { index: node.index, depth } satisfies DragData, disabled: !draggable });
 	const [nativeZone, setNativeZone] = useState<DropPosition>();
 	const movable = !!reorder?.canDrag(node);
-	const zone = nativeZone ?? (drop.isOver ? dropZone(drop.active?.rect.current.translated ?? null, drop.rect.current, container, depth) : undefined);
+	const dropHere = dropParent?.index === node.index;
 	const row = useRef<HTMLDivElement>(null);
 	const setRow = (el: HTMLDivElement | null) => {
 		row.current = el;
 		drag.setNodeRef(el);
-		drop.setNodeRef(el);
 	};
 	useEffect(() => {
 		if (isSelected) {
@@ -96,7 +85,8 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onContextMenu
 	return (
 		<>
 			<div ref={setRow} role="treeitem" aria-expanded={hasChildren ? open : undefined}
-				className={clsx('tree-row', { selected: isSelected || isExtra, dragging: drag.isDragging }, zone && `drop-${zone}`)}
+				data-index={node.index} data-depth={depth} data-container={container || undefined} data-open={open && hasChildren || undefined}
+				className={clsx('tree-row', { selected: isSelected || isExtra, dragging: drag.isDragging, 'drop-inside': dropHere && dropParent.inside, 'drop-parent': dropHere && !dropParent.inside }, nativeZone && `drop-${nativeZone}`)}
 				style={{ paddingLeft: 4 + depth * 14 }} onClick={e => onSelect(node.index, e.ctrlKey || e.metaKey)}
 				onContextMenu={e => onContextMenu?.(e, node)}
 				onDoubleClick={() => onDoubleClick?.(node)}
@@ -140,7 +130,7 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onContextMenu
 					: !open && problems && [node, ...children].some(c => problems.inside.has(c.index) || c !== node && problems.of.has(c.index)) && <span className="codicon codicon-warning tree-problem inside" role="img" aria-label="안쪽 점검 문제" title="안쪽에 점검 문제가 있습니다" />}
 				{!interactive && node.attrs.name && <span className="name">{node.attrs.name}</span>}
 			</div>
-			{open && children.map(c => <TreeItem key={c.index} node={c} depth={depth + 1} selected={selected} extra={extra} onSelect={onSelect} onContextMenu={onContextMenu} onDoubleClick={onDoubleClick} fold={fold} defs={defs} interactive={interactive} bindRef={bindRef} reorder={reorder} rename={rename} problems={problems} />)}
+			{open && children.map(c => <TreeItem key={c.index} node={c} depth={depth + 1} selected={selected} extra={extra} onSelect={onSelect} onContextMenu={onContextMenu} onDoubleClick={onDoubleClick} fold={fold} defs={defs} interactive={interactive} bindRef={bindRef} reorder={reorder} rename={rename} problems={problems} dropParent={dropParent} />)}
 		</>
 	);
 }
@@ -182,7 +172,7 @@ export function useDataReorder(version: number | undefined, model?: XmlNode, dat
 }
 
 /**
- * F2: 고른 노드의 id를 트리에서 바로 고친다(없으면 새로 넣는다, VS Code 탐색기 이름 바꾸기처럼). 형식·중복은 반영 전에 확인.
+ * F2: 고른 노드의 id를 트리에서 바로 고친다(없으면 새로 넣는다, VS Code 탐색기 이름 바꾸기처럼). 형식·중복은 반영 전에 확인. 화면에서 고른 뒤면 부모 고르기라 안 함.
  * 그 노드가 보이는 트리(Outline 또는 Data 탭)에 있을 때만
  */
 export function useTreeRename(root: XmlNode | undefined, selected: number | undefined, setId: (id: string, index: number) => void): Rename {
@@ -190,7 +180,8 @@ export function useTreeRename(root: XmlNode | undefined, selected: number | unde
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			const el = e.composedPath()[0] as HTMLElement;
-			if (e.key !== 'F2' || el.closest?.('input, textarea, select, [contenteditable], .code-editor')) { return; }
+			// 화면(캔버스)에서 고른 뒤의 F2는 부모 고르기(main.tsx)
+			if (e.key !== 'F2' || el.closest?.('input, textarea, select, [contenteditable], .code-editor') || lastPressedIn('.canvas-host')) { return; }
 			const n = root && selected !== undefined ? nodeAt(root, selected) : undefined;
 			const row = n && document.querySelector<HTMLElement>('.pane .tree-row.selected');
 			if (n && row?.offsetParent) {

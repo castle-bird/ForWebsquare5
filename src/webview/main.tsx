@@ -1,22 +1,24 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
-import type { SettingsMenuItem, ToExtension, ToWebview } from '../core/protocol';
-import { defOf, findNode, findTag, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
-import { DATA_KINDS, isDataNode, type DataKind } from '../core/data';
-import { newSubmissionFields, submissionFields, type SubmissionFields } from '../core/submission';
+import type { SettingsMenuItem, ToWebview } from '../core/protocol';
+import { defOf, findTag, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
+import { DATA_KINDS, type DataKind } from '../core/data';
+
 import { Canvas } from './design/canvas';
 import { PropertyPane } from './ui/properties';
-import { DataEditor } from './ui/dataEditor';
-import { SubmissionEditor } from './ui/submissionEditor';
+
+
+import { useEditorPopups } from './ui/editorPopups';
 import { GridBindDialog } from './ui/gridBindDialog';
-import { GridCellsEditor } from './ui/gridCellsEditor';
+
 import { InfoPane } from './ui/infoPane';
 import { UsedTablesPane } from './ui/usedTablesPane';
-import { ChoicesEditor, choicesKind, type ChoicesKind } from './ui/choicesEditor';
+
 import { boundColumnIds, canMoveGridColumn, listColumns } from '../core/grid';
 import { xmlSupport } from './editor/xmlSupport';
 import { CodeEditor, type CodeEditorHandle } from './editor/codeEditor';
+import { onJump } from './editor/jumps';
 import { lazy, scriptLanguage, scriptTools, xmlCompletions, xmlHover } from './editor/completions';
 import { Tabs } from './ui/tabs';
 import { PalettePane } from './ui/palette';
@@ -28,8 +30,10 @@ import { FIXED_TABS, linkTarget } from '../core/links';
 import { useFold } from './ui/tree';
 import { TreePane } from './ui/treePane';
 import { useEventHandler } from './eventHandler';
+import { lastPressedIn } from './keys';
 import { canMerge, canUnmerge, gridOfCells, post, targets, useEditorStore } from './store';
 import { isMergeCell } from '../core/merge';
+import { isStructure } from '../core/paste';
 import '@vscode/codicons/dist/codicon.css';
 import './style.css';
 
@@ -47,34 +51,38 @@ const LOADING = <p className="empty">불러오는 중…</p>;
 /** 실험 기능 탭: 탭 줄 오른쪽(설정 버튼 왼쪽)에 고정 */
 const ERD_TAB = 'ERD';
 
-type Popup = { key: string; error?: string; busy?: boolean } & (
-	| { kind: 'data'; id: string }
-	| { kind: 'submission'; initial: SubmissionFields; source?: { id?: string; index: number } }
-	| { kind: 'choices'; index: number; id?: string; choices: ChoicesKind }
-	| { kind: 'gridCells'; index: number; id?: string });
-
 /**
- * 마우스 뒤로·앞으로 버튼(button 3·4), IDE처럼: 이 편집기 안에서 본 탭 순서를 먼저 따라가고, 끝에 닿으면 VS Code 이동 기록(이전·다음 파일)으로 넘긴다.
+ * 마우스 뒤로·앞으로 버튼(button 3·4), IDE처럼: 이 편집기 안에서 본 탭 순서와 코드 편집기 안 정의로 이동(editor/jumps.ts)을 먼저 따라가고,
+ * 끝에 닿으면 VS Code 이동 기록(이전·다음 파일)으로 넘긴다.
  * 탭이 바뀌는 길(클릭·이벤트 코드 버튼 → Script 등)이 여러 곳이라 보이는 탭(shownTab)이 바뀔 때 기록한다. 지워진 연결 탭은 건너뜀(exists).
  * 버튼을 누를 때도 막아야 웹뷰 안에서 브라우저 뒤로 가기가 안 일어난다
  */
 function useTabHistory(shownTab: string, show: (name: string) => void, exists: (name: string) => boolean) {
-	const back = useRef<string[]>([]), forward = useRef<string[]>([]), prev = useRef(shownTab), moving = useRef(false);
+	/** 기록 한 칸: 탭, 정의로 이동한 자리면 그 편집기 자리로 되돌리는 함수 */
+	type Place = { tab: string; restore?: () => void };
+	const back = useRef<Place[]>([]), forward = useRef<Place[]>([]), here = useRef<Place>({ tab: shownTab });
+	// 뒤로·앞으로로 옮긴 탭은 here가 이미 그 탭이라 기록하지 않는다
 	useEffect(() => {
-		if (prev.current === shownTab) { return; }
-		if (!moving.current) { back.current.push(prev.current); forward.current = []; }
-		moving.current = false;
-		prev.current = shownTab;
+		if (here.current.tab === shownTab) { return; }
+		back.current.push(here.current);
+		forward.current = [];
+		here.current = { tab: shownTab };
 	}, [shownTab]);
+	useEffect(() => onJump((from, to) => {
+		back.current.push({ tab: here.current.tab, restore: from });
+		forward.current = [];
+		here.current = { tab: here.current.tab, restore: to };
+	}), []);
 	const navigate = useRef<(isBack: boolean) => void>(undefined);
 	navigate.current = isBack => {
 		const from = isBack ? back.current : forward.current;
-		let name = from.pop();
-		while (name !== undefined && (name === shownTab || !exists(name))) { name = from.pop(); }
-		if (name === undefined) { post({ type: 'navigate', back: isBack }); return; }
-		(isBack ? forward.current : back.current).push(shownTab);
-		moving.current = true;
-		show(name);
+		let place = from.pop();
+		while (place !== undefined && ((place.tab === shownTab && !place.restore) || !exists(place.tab))) { place = from.pop(); }
+		if (place === undefined) { post({ type: 'navigate', back: isBack }); return; }
+		(isBack ? forward.current : back.current).push(here.current);
+		here.current = place;
+		if (place.tab !== shownTab) { show(place.tab); }
+		place.restore?.();
 	};
 	useEffect(() => {
 		const onMouse = (e: globalThis.MouseEvent) => {
@@ -114,6 +122,10 @@ function useComponentShortcuts() {
 		};
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === 'Delete' && !inEditable(e) && useEditorStore.getState().del()) {
+				e.preventDefault();
+			}
+			// F2(이클립스처럼): 화면에서 컴포넌트를 고른 뒤면 부모 컴포넌트로. Outline에서 고른 뒤의 F2는 id 바꾸기(tree.tsx)
+			if (e.key === 'F2' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !inEditable(e) && lastPressedIn('.canvas-host') && useEditorStore.getState().selectParent()) {
 				e.preventDefault();
 			}
 			// 포커스가 아무 데도 없을 때(VS Code가 웹뷰로 돌아오며 body에 둔 경우) Space·PageUp/Down으로 브라우저가 스크롤하지 않게
@@ -158,6 +170,7 @@ function App() {
 	const setTabOrder = useEditorStore(s => s.setTabOrder);
 	const tabPosition = useEditorStore(s => s.tabPosition);
 	const minimapOn = useEditorStore(s => s.minimap);
+	const blameOn = useEditorStore(s => s.codeBlame);
 	const setTabPosition = useEditorStore(s => s.setTabPosition);
 	const otherSide = tabPosition === 'top' ? 'bottom' : 'top';
 	const events = api?.events;
@@ -184,8 +197,9 @@ function App() {
 	 * grid.column: 누른 칸의 열 옮기기·지우기(cells: 지울 칸들, left·right: 옮길 수 있는지)
 	 */
 	const [dataMenu, setDataMenu] = useState<{ x: number; y: number; index: number; merge?: boolean; unmerge?: number[]; mergeOnly?: boolean;
+		/** 붙여 넣기 > 앞·뒤를 넣을 컴포넌트(복사·잘라 둔 것이 있을 때) */
+		pasteAt?: number;
 		grid?: { hasFooter: boolean; at: number; onColumn: boolean; column?: { index: number; cells: number[]; left: boolean; right: boolean } } }>();
-	const [popups, setPopups] = useState<Popup[]>([]);
 	const [gridBind, setGridBind] = useState<{ grid: number; list: number }>();
 	const linkTabs = useLinkTabs(activeTab, LOADING);
 	// 보고 있던 연결 탭이 지워지면 Design으로
@@ -193,13 +207,6 @@ function App() {
 	useTabHistory(shownTab, showTab, name => FIXED_TABS.includes(name) || name === ERD_TAB || linkTabs.labels.includes(name));
 	const pendingDataCreate = useRef<{ kind: DataKind; ids: Set<string>; version: number } | undefined>(undefined);
 	const scriptRef = useRef<CodeEditorHandle>(null);
-
-	const updatePopup = (key: string, patch: Partial<Popup>) => setPopups(curr => curr.map(p => p.key === key ? { ...p, ...patch } as Popup : p));
-	const closePopup = (key: string) => setPopups(curr => curr.filter(p => p.key !== key));
-	const postPopupEdit = (key: string, msg: Extract<ToExtension, { popup: string }>) => {
-		updatePopup(key, { error: '', busy: true });
-		post(msg);
-	};
 
 	useEffect(() => {
 		const onMessage = (e: MessageEvent<ToWebview>) => {
@@ -217,13 +224,7 @@ function App() {
 					setActiveTab(label);
 				}
 			}
-			if (msg.type === 'popupAck') {
-				const { popup, ok, error } = msg;
-				setPopups(curr => ok ? curr.filter(p => p.key !== popup)
-					: curr.map(p => p.key === popup ? { ...p, busy: false, error: error ?? '적용하지 못했습니다.' } : p));
-			} else {
-				handleMessage(msg);
-			}
+			handleMessage(msg);
 		};
 		window.addEventListener('message', onMessage);
 		post({ type: 'ready' });
@@ -251,18 +252,14 @@ function App() {
 	], [dataCollection, submissions, model]);
 
 	const outline = useFold(), data = useFold();
-	const openSubmissionEditor = () => {
-		if (!doc || !root || !model) { return; }
-		setSelected(-1);
-		setPopups(curr => [...curr, { key: crypto.randomUUID(), kind: 'submission', initial: newSubmissionFields(root) }]);
-	};
-	const editSubmission = (item: XmlNode) => {
-		if (!doc) { return; }
-		setSelected(item.index);
-		const key = `sub_${item.attrs.id ?? item.index}`;
-		setPopups(curr => curr.some(p => p.key === key) ? curr
-			: [...curr, { key, kind: 'submission', initial: submissionFields(item), source: { id: item.attrs.id, index: item.index } }]);
-	};
+	// 옮기기로 노드 번호가 바뀌면 펼침 상태도 같은 노드로(번호 그대로 두면 엉뚱한 줄이 펼쳐진다)
+	const remap = useEditorStore(s => s.remap);
+	useEffect(() => { if (remap) { outline.remap(remap.map); data.remap(remap.map); } }, [remap]); // outline·data 객체는 매 렌더 새로 만들어짐
+	const openEventHandler = useEventHandler({ doc, defs: defs?.defs, events, scriptRef, editAttr, showScript: () => setActiveTab('Script') });
+	const { openSubmissionEditor, openDataPopup, openDataEditor, openGridCells, openEditor, editors } = useEditorPopups(openEventHandler, () => {
+		const submissionRoot = dataRoots.find(n => n.index === -1);
+		if (submissionRoot) { data.reveal([submissionRoot]); }
+	});
 	const dataContext = (e: MouseEvent<HTMLDivElement>, n: XmlNode) => {
 		if (n.index !== -1 && n.index !== dataCollection?.index) { return; }
 		e.preventDefault();
@@ -286,31 +283,6 @@ function App() {
 		const created = dataCollection?.children.find(c => c.tag.endsWith(`:${pending.kind}`) && c.attrs.id && !pending.ids.has(c.attrs.id));
 		if (created) { openDataPopup(created.attrs.id); }
 	}, [doc?.version, dataCollection]);
-	const openDataPopup = (id: string) => setPopups(curr => [...curr.filter(p => p.key !== `data:${id}`), { key: `data:${id}`, kind: 'data', id }]);
-	const openDataEditor = (item: XmlNode) => {
-		if (item.index === -1) { openSubmissionEditor(); return; }
-		if (item.tag === 'xf:submission') { editSubmission(item); return; }
-		if (doc && isDataNode(item) && item.attrs.id) {
-			setSelected(item.index);
-			openDataPopup(item.attrs.id);
-		}
-	};
-	const findSubmission = (source: { id?: string; index: number }) => submissions.find(s => source.id ? s.attrs.id === source.id : s.index === source.index);
-	const applySubmission = (key: string, source: { id?: string; index: number } | undefined, fields: SubmissionFields) => {
-		if (!doc || !model) { return; }
-		const submissionRoot = dataRoots.find(n => n.index === -1);
-		if (submissionRoot) { data.reveal([submissionRoot]); }
-		if (!source) {
-			postPopupEdit(key, { type: 'addSubmission', version: doc.version, index: model.index, popup: key, fields });
-			return;
-		}
-		const node = findSubmission(source);
-		if (node) {
-			postPopupEdit(key, { type: 'editSubmission', version: doc.version, index: node.index, popup: key, fields });
-		} else {
-			updatePopup(key, { error: '원래 Submission을 찾지 못했습니다. 다시 열어 주세요.' });
-		}
-	};
 	const bindRefTo = (index: number, value: string) => {
 		if (!doc || !root) { return; }
 		const target = nodeAt(root, index);
@@ -328,47 +300,45 @@ function App() {
 		}
 		post({ type: 'setAttr', version: doc.version, index, name: 'ref', value });
 	};
-	const openGridCells = (grid: XmlNode) => {
-		setSelected(grid.index);
-		setPopups(curr => [...curr.filter(p => p.kind !== 'gridCells'), { key: `gridCells:${grid.attrs.id ?? grid.index}`, kind: 'gridCells', index: grid.index, id: grid.attrs.id }]);
-	};
-	const openEditor = (index: number) => {
-		const n = body && nodeAt(body, index);
-		// 그리드(칸 밖 빈 곳·Outline): 칸 속성 표
-		if (n?.tag.endsWith(':gridView')) { openGridCells(n); return true; }
-		const kind = n && choicesKind(n, defOf(n, defs?.defs));
-		if (!n || !kind) { return false; }
-		setSelected(index);
-		setPopups(curr => [...curr.filter(p => p.kind !== 'choices'), { key: `choices:${n.attrs.id ?? index}`, kind: 'choices', index, id: n.attrs.id, choices: kind }]);
-		return true;
-	};
-	const choicesNode = (p: Extract<Popup, { kind: 'choices' }>) => {
-		const n = root && (p.id ? findNode(root, c => c.attrs.id === p.id && choicesKind(c, defOf(c, defs?.defs)) === p.choices) : nodeAt(root, p.index));
-		return n && choicesKind(n, defOf(n, defs?.defs)) === p.choices ? n : undefined;
-	};
 	// 고른 셀들이 여럿(Ctrl+클릭)이면 그 안에서 연 메뉴는 선택을 그대로 둬야 병합할 수 있다
 	const keepsSelection = (index: number) => extra.length > 0 && (selected === index || extra.includes(index));
+	/** 붙여 넣기 > 앞·뒤를 넣을 수 있는 컴포넌트: 복사·잘라 둔 것이 있고, body 안(구조·그리드 안 칸 말고) */
+	const pasteTarget = (index: number) => {
+		const path = root && useEditorStore.getState().copied?.length ? pathTo(root, index) : undefined, n = path?.at(-1);
+		const inBody = path?.some(p => p.tag.replace(/^.*:/, '') === 'body'), inGrid = path?.slice(0, -1).some(p => p.tag.endsWith(':gridView'));
+		return n && inBody && !inGrid && !isStructure(n) ? n.index : undefined;
+	};
+	const pasteMenu = (index: number, x: number, y: number) => {
+		const pasteAt = pasteTarget(index);
+		if (pasteAt === undefined) { return false; }
+		if (!keepsSelection(index)) { setSelected(index); }
+		setDataMenu({ x, y, index, mergeOnly: true, pasteAt });
+		return true;
+	};
 	const canvasContext = (index: number, x: number, y: number) => {
 		const path = body && pathTo(body, index);
 		const grid = path?.filter(n => n.tag.endsWith(':gridView')).at(-1), cell = path?.filter(isMergeCell).at(-1);
-		if (!grid && !cell) { return; }
+		if (!grid && !cell) { pasteMenu(index, x, y); return; }
 		// 여러 칸을 골라 둔 채 그 안에서 열었으면 고른 칸들, 아니면 누른 칸
 		const multi = !!cell && keepsSelection(cell.index), picked = multi ? targets(useEditorStore.getState()) : cell ? [cell] : [];
 		const column = grid && path?.at(-1)?.tag.endsWith(':column') ? path.at(-1) : undefined;
 		if (!multi) { setSelected(grid ? grid.index : cell!.index); }
 		setDataMenu({ x, y, index: (grid ?? cell)!.index, merge: cell ? canMerge() : undefined, unmerge: cell ? picked.map(n => n.index) : undefined, mergeOnly: !grid,
+			pasteAt: pasteTarget(cell && !multi ? cell.index : index),
 			...grid && { grid: { hasFooter: grid.children.some(c => c.tag.endsWith(':footer')), at: index, onColumn: !!column,
 				column: column && { index: column.index, cells: (multi && root && gridOfCells(root, picked) === grid ? picked : [column]).map(n => n.index),
 					left: canMoveGridColumn(grid, column.index, 'left'), right: canMoveGridColumn(grid, column.index, 'right') } } } });
 	};
 	const outlineContext = (e: MouseEvent<HTMLDivElement>, n: XmlNode) => {
-		if (!isMergeCell(n)) { return; }
+		if (!isMergeCell(n)) {
+			if (pasteMenu(n.index, e.clientX, e.clientY)) { e.preventDefault(); }
+			return;
+		}
 		e.preventDefault();
 		const unmerge = keepsSelection(n.index) ? targets(useEditorStore.getState()).map(t => t.index) : [n.index];
 		if (!keepsSelection(n.index)) { setSelected(n.index); }
-		setDataMenu({ x: e.clientX, y: e.clientY, index: n.index, merge: canMerge(), unmerge, mergeOnly: true });
+		setDataMenu({ x: e.clientX, y: e.clientY, index: n.index, merge: canMerge(), unmerge, mergeOnly: true, pasteAt: pasteTarget(n.index) });
 	};
-	const openEventHandler = useEventHandler({ doc, defs: defs?.defs, events, scriptRef, editAttr, showScript: () => setActiveTab('Script') });
 
 	return (<>
 		<Group orientation="horizontal" className="shell">
@@ -448,6 +418,12 @@ function App() {
 					<button role="menuitem" disabled={!dataMenu.merge} onClick={() => { setDataMenu(undefined); useEditorStore.getState().merge(); }}>병합</button>
 					{dataMenu.unmerge && <button role="menuitem" disabled={!canUnmerge(dataMenu.unmerge)} onClick={() => { setDataMenu(undefined); useEditorStore.getState().unmerge(dataMenu.unmerge); }}>병합 해제</button>}
 				</>}
+				{dataMenu.pasteAt !== undefined && <>
+					{(!dataMenu.mergeOnly || dataMenu.merge !== undefined) && <div className="menu-separator" role="separator" />}
+					{(['before', 'after'] as const).map(position => <button key={position} role="menuitem"
+						onClick={() => { setDataMenu(undefined); useEditorStore.getState().paste(undefined, { index: dataMenu.pasteAt!, position }); }}>
+						붙여 넣기 &gt; {position === 'before' ? '앞' : '뒤'}</button>)}
+				</>}
 			</Menu>}
 		{settingsMenu && <Menu anchor={settingsMenu} placement="bottom-end" onClose={() => setSettingsMenu(undefined)}>
 			{SETTINGS_MENU.map((item, i) => item
@@ -461,34 +437,13 @@ function App() {
 			{/* 웹뷰 안 설정: 바로 바꾸고 메뉴는 닫는다 */}
 			<button role="menuitemcheckbox" aria-checked={minimapOn} onClick={() => { setSettingsMenu(undefined); useEditorStore.getState().setMinimap(!minimapOn); }}>
 				<span className="menu-label"><span className={`codicon codicon-${minimapOn ? 'check' : 'blank'}`} />코드 미니맵</span></button>
+			<button role="menuitemcheckbox" aria-checked={blameOn} onClick={() => { setSettingsMenu(undefined); useEditorStore.getState().setCodeBlame(!blameOn); }}>
+				<span className="menu-label"><span className={`codicon codicon-${blameOn ? 'check' : 'blank'}`} />코드 Git blame</span></button>
 		</Menu>}
 		{themeColors && <ThemeColorsEditor onClose={() => setThemeColors(false)} />}
 		<Toast />
 		{linkTabs.menu}
-		{popups.map((p, offsetIndex) => {
-			const common = { externalError: p.error, offsetIndex, onClose: () => closePopup(p.key) };
-			if (p.kind === 'data') {
-				const node = dataCollection?.children.find(c => c.attrs.id === p.id && isDataNode(c));
-				return node && <DataEditor key={p.key} {...common} node={node}
-					onApply={(fields, id) => { if (doc) { postPopupEdit(p.key, { type: 'editDataFields', version: doc.version, index: node.index, popup: p.key, fields, id }); } }} />;
-			}
-			if (p.kind === 'submission') {
-				const { source } = p;
-				return <SubmissionEditor key={p.key} {...common} initial={p.initial} editing={!!source} busy={!!p.busy}
-					onScript={source && ((eventName, current) => { const target = findSubmission(source); return target && openEventHandler(target, eventName, current); })}
-					onConfirm={fields => applySubmission(p.key, source, fields)} />;
-			}
-			if (p.kind === 'gridCells') {
-				const grid = root && (p.id ? findNode(root, c => c.attrs.id === p.id && c.tag.endsWith(':gridView')) : nodeAt(root, p.index));
-				return grid?.tag.endsWith(':gridView') && <GridCellsEditor key={p.key} {...common} grid={grid} defs={defs?.defs}
-					onApply={cells => { if (doc) { postPopupEdit(p.key, { type: 'editGridCells', version: doc.version, index: grid.index, popup: p.key, cells }); } }} />;
-			}
-			const node = choicesNode(p);
-			return node && <ChoicesEditor key={p.key} {...common} node={node} kind={p.choices}
-				sources={dataCollection?.children.filter(c => isDataNode(c) && c.attrs.id).map(c => ({ nodeset: `data:${c.attrs.id}`,
-					fields: c.children.find(i => /:(columnInfo|keyInfo)$/.test(i.tag))?.children.flatMap(f => f.attrs.id ? [f.attrs.id] : []) ?? [] })) ?? []}
-				onApply={fields => { if (doc) { postPopupEdit(p.key, { type: 'editChoices', version: doc.version, index: node.index, popup: p.key, fields }); } }} />;
-		})}
+		{editors}
 		{gridBind && root && (() => {
 			const grid = nodeAt(root, gridBind.grid), list = nodeAt(root, gridBind.list);
 			if (!grid || !list) { return null; }

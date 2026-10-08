@@ -16,12 +16,13 @@ import { offerSetup, registerSetup, resolvePath, type SetupKey } from './vscode/
 import { applyCodeEdit, applyNodeEdit, formatCode } from './vscode/documentEdit';
 import { LinkedFiles, registerLinks } from './vscode/links';
 import { UsedTablesStore } from './vscode/tables';
-import { minimapOn, saveMinimap, saveTabOrder, saveTabPosition, tabOrder, tabPosition } from './vscode/linkTabs';
+import { blameOn, minimapOn, onBlameToggled, saveBlame, saveMinimap, saveTabOrder, saveTabPosition, tabOrder, tabPosition } from './vscode/linkTabs';
 import { linkIdOf } from './core/links';
 import { findPaletteDef } from './core/palette';
 import { codeTheme, registerCodeTheme, saveCustomizations } from './vscode/codeTheme';
 import { affectsCodeOptions, codeOptions } from './vscode/codeOptions';
-import { onGitChange, stagedText } from './vscode/gitBase';
+import { blameFeed, blameText, onGitChange, stagedText } from './vscode/gitBase';
+import { lineOfOffset, sliceBlame } from './core/blame';
 import { insertFromPalette, paletteFavorites, savePaletteFavorite, reorderPaletteFavorites } from './vscode/palette';
 
 export const VIEW_TYPE = 'websquare5-editor.designer';
@@ -209,6 +210,21 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			}
 			bases = next;
 		};
+		// Git blame(켰을 때만): Source는 화면 XML 전체, Script는 그 안 Script 본문 줄만. 그 사이 문서가 바뀌었으면 보내지 않는다(다음 차례에)
+		const xmlBlame = blameFeed(async () => {
+			if (!blameOn()) { return; }
+			const version = document.version, text = document.getText();
+			const data = await blameText(document.uri, text);
+			if (document.version !== version) { return; }
+			let script: typeof data;
+			try {
+				const body = data && editableScript(text);
+				script = body ? sliceBlame(data, lineOfOffset(text, body.start), lineOfOffset(body.text, body.text.length) + 1) : undefined;
+			} catch {
+			}
+			await post({ type: 'blame', target: 'source', version, data });
+			await post({ type: 'blame', target: 'script', version, data: script });
+		});
 		let gitTimer: NodeJS.Timeout | undefined;
 		// 편집기 변경분은 문서마다 받은 순서대로 하나씩: 버전 확인과 적용 사이에 다른 편집이 끼지 않게.
 		// 화면 XML(Source·Script)과 연결 파일은 따로 줄 세운다(느린 Java 포맷이 화면 편집을 막지 않게)
@@ -235,18 +251,25 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			onGitChange(() => {
 				clearTimeout(gitTimer);
 				gitTimer = setTimeout(() => void sendBases().then(() => links.sendBases()), 500);
+				// 커밋·체크아웃하면 blame도 바뀐다
+				xmlBlame.schedule();
+				links.scheduleBlame();
 			}),
 			vscode.workspace.onDidChangeTextDocument(e => {
 				if (e.document === document) {
 					clearTimeout(timer);
 					timer = setTimeout(sendDocument, 300);
+					xmlBlame.schedule();
 				}
 			}),
+			onBlameToggled(on => { if (on) { xmlBlame.schedule(0); links.scheduleBlame(0); } }),
 			panel.webview.onDidReceiveMessage((msg: ToExtension) => {
 				if (msg.type === 'ready') {
 					void post({ type: 'tabOrder', order: tabOrder() ?? [] });
 					void post({ type: 'tabPosition', position: tabPosition() });
 					void post({ type: 'minimap', on: minimapOn() });
+					void post({ type: 'codeBlame', on: blameOn() });
+					xmlBlame.schedule(0);
 					void post({ type: 'paletteFavorites', keys: paletteFavorites(this.globalState) });
 					void post({ type: 'codeTheme', ...codeTheme() });
 					void post({ type: 'codeOptions', ...codeOptions() });
@@ -329,6 +352,9 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 					broadcast(panel, { type: 'tabPosition', position: msg.position });
 				} else if (msg.type === 'navigate') {
 					void vscode.commands.executeCommand(msg.back ? 'workbench.action.navigateBack' : 'workbench.action.navigateForward');
+				} else if (msg.type === 'setCodeBlame') {
+					void saveBlame(msg.on);
+					broadcast(panel, { type: 'codeBlame', on: msg.on });
 				} else if (msg.type === 'setMinimap') {
 					void saveMinimap(msg.on);
 					broadcast(panel, { type: 'minimap', on: msg.on });
@@ -362,6 +388,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			clearTimeout(timer);
 			clearTimeout(gitTimer);
 			clearTimeout(moduleTimer);
+			xmlBlame.dispose();
 			subs.forEach(s => s.dispose());
 			void links.dispose();
 		});

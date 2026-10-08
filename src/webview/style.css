@@ -381,6 +381,11 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .tree-row .tree-rename { box-sizing: border-box; flex: 0 1 180px; min-width: 60px; height: 20px; padding: 0 4px; font: inherit; line-height: 18px; user-select: text; cursor: text; border-radius: 2px;
 	color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-focusBorder); outline: none; }
 .tree-row.drop-inside { background: var(--vscode-list-dropBackground, var(--vscode-list-hoverBackground)); outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+/* Outline 끌기: 놓일 곳의 부모 그릇(점선), 줄 사이 선(놓일 깊이만큼 들여씀, 앞 점) */
+.tree-row.drop-parent { outline: 1px dashed var(--vscode-focusBorder); outline-offset: -1px; }
+[role="tree"] { position: relative; }
+.tree-drop-line { position: absolute; right: 4px; height: 2px; background: var(--vscode-focusBorder); pointer-events: none; }
+.tree-drop-line::before { content: ''; position: absolute; left: -4px; top: -2px; width: 6px; height: 6px; box-sizing: border-box; border: 2px solid var(--vscode-focusBorder); border-radius: 50%; background: var(--vscode-sideBar-background, var(--vscode-editor-background)); }
 .tree-row.drop-before { box-shadow: inset 0 2px 0 0 var(--vscode-focusBorder); }
 .tree-row.drop-after { box-shadow: inset 0 -2px 0 0 var(--vscode-focusBorder); }
 .chevron { flex: none; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; }
@@ -749,8 +754,11 @@ textarea.edit.style-value {
 .used-tables-setup h3 { margin: 0 0 8px; font-size: 14px; }
 .used-tables-setup p { margin: 0 0 14px; color: var(--vscode-descriptionForeground); font-size: 12px; }
 .setup-actions { display: flex; gap: 8px; }
-/* 메모·그룹 색: 이름만 저장하고 색은 VS Code 테마 charts 색(없으면 VS Code 기본 어두운 테마 값) */
+/* 테이블·메모·그룹·도형 색: 이름만 저장하고 색은 VS Code 테마 charts·터미널 색(없으면 VS Code 기본 어두운 테마 값) */
 .note-yellow { --note: var(--vscode-charts-yellow, #cca700); }
+.note-orange { --note: var(--vscode-charts-orange, #d18616); }
+.note-pink { --note: var(--vscode-terminal-ansiBrightMagenta, #d670d6); }
+.note-cyan { --note: var(--vscode-terminal-ansiCyan, #11a8cd); }
 .note-blue { --note: var(--vscode-charts-blue, #3794ff); }
 .note-green { --note: var(--vscode-charts-green, #89d185); }
 .note-purple { --note: var(--vscode-charts-purple, #b180d7); }
@@ -788,9 +796,18 @@ textarea.edit.style-value {
 	--xy-controls-button-color: var(--vscode-foreground); --xy-controls-button-border-color: var(--vscode-panel-border);
 	--xy-controls-button-background-color-hover: var(--vscode-toolbar-hoverBackground); border-radius: 6px; overflow: hidden; }
 .used-tables-flow .react-flow__controls .zoom-level { width: auto; min-width: 26px; padding: 0 4px; font-size: 10px; font-variant-numeric: tabular-nums; }
-.used-tables-flow .flow-full { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; border-radius: 6px;
+.used-tables-flow :is(.flow-full, .flow-export) { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; border-radius: 6px;
 	color: var(--vscode-foreground); background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border: 1px solid var(--vscode-panel-border); }
-.used-tables-flow .flow-full:hover { background: var(--vscode-toolbar-hoverBackground); }
+.used-tables-flow :is(.flow-full, .flow-export):hover:not(:disabled) { background: var(--vscode-toolbar-hoverBackground); }
+.used-tables-flow .flow-export:disabled { opacity: .4; cursor: default; }
+.used-tables-flow .flow-corner { display: flex; gap: 4px; }
+/* 도구를 고른 동안: 그림을 클릭하면 그 자리에 놓는다 */
+.used-tables-flow.placing .react-flow__pane { cursor: crosshair; }
+/* 도구 단축키 숫자(Excalidraw처럼 버튼 오른쪽 아래) */
+.flow-tool { position: relative; }
+.flow-tool .tool-key { position: absolute; right: 1px; bottom: 0; font-size: 8px; line-height: 1; color: var(--vscode-descriptionForeground); pointer-events: none; }
+/* 끌 때 줄 맞춤 안내선 */
+.used-tables-flow .align-guide { position: absolute; box-sizing: content-box; border: 0 dashed var(--vscode-focusBorder); pointer-events: none; z-index: 1000; }
 /* 왼쪽 위 도구 줄(추가·되돌리기·도움말)과 도움말·빈 그림 안내 */
 .used-tables-flow .flow-toolbar { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 8px;
 	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border: 1px solid var(--vscode-panel-border); box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, .2)); }
@@ -828,6 +845,10 @@ textarea.edit.style-value {
 	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border: 1px solid var(--vscode-panel-border);
 	box-shadow: 0 1px 4px var(--vscode-widget-shadow, rgba(0, 0, 0, .2)); transition: border-color .12s, box-shadow .12s; }
 .used-table-node.selected { border-color: var(--vscode-focusBorder); box-shadow: 0 0 0 1px var(--vscode-focusBorder); }
+/* 색을 고른 테이블: 테두리와 머리 띠 */
+.used-table-node.colored { border-color: color-mix(in srgb, var(--note) 70%, transparent); border-top: 4px solid var(--note); }
+.used-table-node.colored .head { background: color-mix(in srgb, var(--note) 14%, transparent); }
+.used-table-node.colored.selected { border-color: var(--vscode-focusBorder); border-top-color: var(--note); }
 .used-table-node .head { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 10px; }
 .used-table-node .name { font-weight: 600; font-family: var(--vscode-editor-font-family); }
 .used-table-node .desc { color: var(--vscode-descriptionForeground); font-size: 13px; }
@@ -877,12 +898,31 @@ textarea.edit.style-value {
 .used-group .group-title .codicon { font-size: 13px; color: var(--note); }
 .used-tables-flow .react-flow__node-group-frame .react-flow__resize-control { pointer-events: all; }
 
+/* 도구 줄 도형 아이콘(도형 SVG 그대로) */
+.flow-tool .shape-icon { width: 15px; height: 15px; overflow: visible; }
+.flow-tool .shape-icon > * { fill: none; stroke: currentColor; stroke-width: 9; stroke-linejoin: round; }
+/* 도형: 테마 색 테두리 + 옅은 채움(SVG를 박스에 늘리고 선 굵기는 그대로) */
+.used-shape { position: relative; width: 100%; height: 100%; }
+.used-shape svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.used-shape svg > * { fill: color-mix(in srgb, var(--note) 15%, transparent); stroke: var(--note); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.used-shape.selected svg > * { stroke: var(--vscode-focusBorder); }
+.used-shape .shape-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 8px; overflow: hidden; text-align: center;
+	font-size: 12px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--vscode-editor-foreground); pointer-events: none; }
+.used-shape .shape-text .memo-input { width: 100%; height: 100%; margin: 0; text-align: center; pointer-events: all; }
+.used-tables-flow .react-flow__minimap-node.shape { fill: var(--vscode-charts-blue, #3794ff); opacity: .5; }
+
 /* 선 가운데 글자 */
 .used-tables-flow .link-label { position: absolute; pointer-events: all; padding: 1px 6px; border-radius: 4px; font-size: 11px; color: var(--vscode-editor-foreground);
 	background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); }
 
+/* 커서 줄 끝 Git blame(editor/blame.ts): VS Code 줄 끝 blame 색 */
+.code-editor .cm-blame { margin-left: 3em; white-space: pre; pointer-events: none; user-select: none;
+	color: var(--vscode-git-blame-editorDecorationForeground, var(--vscode-editorCodeLens-foreground, var(--vscode-descriptionForeground))); }
 /* 코드 편집기 미니맵(막대형, editor/minimap.ts): 스크롤바 왼쪽, 지금 보이는 곳은 슬라이더 */
 .code-editor .cm-minimap { position: absolute; top: 0; bottom: 0; width: 72px; z-index: 2; cursor: default; }
+.code-editor .cm-minimap { --minimap-added: var(--vscode-minimapGutter-addedBackground, var(--vscode-editorGutter-addedBackground, #2ea043));
+	--minimap-modified: var(--vscode-minimapGutter-modifiedBackground, var(--vscode-editorGutter-modifiedBackground, #0078d4));
+	--minimap-deleted: var(--vscode-minimapGutter-deletedBackground, var(--vscode-editorGutter-deletedBackground, #f85149)); }
 .code-editor .cm-minimap canvas { display: block; width: 100%; height: 100%; }
 .code-editor .cm-minimap-slider { position: absolute; left: 0; right: 0; min-height: 4px; background: var(--vscode-minimapSlider-background, rgba(121, 121, 121, .2)); opacity: 0; transition: opacity .15s; }
 .code-editor .cm-minimap:hover .cm-minimap-slider, .code-editor .cm-minimap.dragging .cm-minimap-slider { opacity: 1; }

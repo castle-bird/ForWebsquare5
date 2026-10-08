@@ -44,7 +44,8 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
 		clearTimeout(hoverGridTimer.current);
 		if (grid !== undefined) { setHoverGrid(grid); } else { hoverGridTimer.current = window.setTimeout(() => setHoverGrid(undefined), 400); }
 	};
-	const [drop, setDrop] = useState<{ index: number; position: InsertPosition; moving?: boolean }>();
+	const [drop, setDrop] = useState<{ index: number; position: InsertPosition; side: string }>();
+	const [dragging, setDragging] = useState<number[]>([]);
 	const moving = useRef<{ index: number; body: XmlNode }>(undefined);
 	// form: 그리드 칸이면 문구 아래 입력(헤더: 너비·높이, 본문: 자주 고치는 속성). draft: 그 입력 값
 	const [editing, setEditing] = useState<{ target: TextTarget; rect: CSSProperties; form?: Form }>();
@@ -72,9 +73,11 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
 	const startMove = (e: ReactDragEvent, n: XmlNode) => {
 		if (n.index !== selected && !extra.includes(n.index)) { onSelect(n.index); }
 		moving.current = { index: n.index, body };
+		const group = n.index === selected || extra.includes(n.index) ? [selected, ...extra].filter((i): i is number => i !== undefined) : [n.index];
+		setDragging(group);
 		e.dataTransfer.effectAllowed = 'move';
 		e.dataTransfer.setData(MOVE_MIME, String(n.index));
-		setDragGhost(e.dataTransfer, outlineIcon(n, defs), n.attrs.id ?? defOf(n, defs)?.display ?? localName(n.tag));
+		setDragGhost(e.dataTransfer, outlineIcon(n, defs), `${moveName(n, defs)}${group.length > 1 ? ` 외 ${group.length - 1}개` : ''}`);
 	};
 	const handleGrid = gridOf(hoverGrid) ?? gridOf(selected);
 	useEffect(() => setShadow(host.current!.shadowRoot ?? host.current!.attachShadow({ mode: 'open' })), []);
@@ -110,35 +113,41 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
 		return () => cancelAnimationFrame(frame);
 	}, [tree, shadow, sheets]);
 	const target = (e: { target: EventTarget }) => pick(e.target as Element);
-	/** 놓을 자리(팔레트 넣기·이동 공통): 단위의 위·아래 비율로 안쪽·앞·뒤 */
-	const dropAt = (e: { target: EventTarget; clientY: number }) => {
+	/** 화면 배치 방향으로 판정하되 XML에는 기존 before/after/inside를 보낸다. */
+	const dropAt = (e: { target: EventTarget; clientX: number; clientY: number }) => {
 		const hit = target(e);
 		const node = unitAt(hit ? wseIndex(hit) : body.index);
 		if (!node) { return undefined; }
-		const element = page.current?.querySelector(`[data-wse="${node.index}"]`);
+		const element = page.current?.querySelector<HTMLElement>(`[data-wse="${node.index}"]`);
 		const rect = (element ?? page.current)?.getBoundingClientRect();
-		const position = componentDropPosition(node, rect && rect.height ? (e.clientY - rect.top) / rect.height : 0.5);
-		return insertPositions(node).includes(position) ? { index: node.index, position } : undefined;
+		if (!rect) { return undefined; }
+		const { horizontal, reverse } = element ? dropAxis(element) : { horizontal: false, reverse: false };
+		const ratio = horizontal ? (e.clientX - rect.left) / (rect.width || 1) : (e.clientY - rect.top) / (rect.height || 1);
+		const position = componentDropPosition(node, reverse ? 1 - ratio : ratio);
+		const leading = (position === 'before') !== reverse;
+		const side = position === 'inside' ? 'inside' : horizontal ? leading ? 'left' : 'right' : leading ? 'top' : 'bottom';
+		return insertPositions(node).includes(position) ? { index: node.index, position, side } : undefined;
 	};
 	useEffect(() => {
 		moving.current = undefined;
+		setDragging([]);
 		setDrop(undefined);
 		page.current?.querySelectorAll<HTMLElement>('[data-wse]').forEach(el => {
 			const index = wseIndex(el);
 			el.draggable = !!onMove && index !== body.index && unitAt(index)?.index === index;
 		});
 	}, [body, tree, shadow, onMove]);
-	const moveDrop = (e: { target: EventTarget; clientY: number }) => {
+	const moveDrop = (e: { target: EventTarget; clientX: number; clientY: number }) => {
 		const source = moving.current;
 		const at = dropAt(e);
 		if (!source || source.body !== body || !at) { return undefined; }
 		const dragged = nodeAt(body, source.index), target = nodeAt(body, at.index);
 		if (!dragged || !target || target.start >= dragged.start && target.end <= dragged.end
 			|| extra.some(i => { const n = nodeAt(body, i); return n && target.start >= n.start && target.end <= n.end; })) { return undefined; }
-		return { ...at, moving: true };
+		return at;
 	};
 	useEffect(() => {
-		const clear = () => { moving.current = undefined; setDrop(undefined); };
+		const clear = () => { moving.current = undefined; setDragging([]); setDrop(undefined); };
 		window.addEventListener('dragend', clear);
 		return () => window.removeEventListener('dragend', clear);
 	}, []);
@@ -221,6 +230,7 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
 					onDragLeave={e => { if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) { setDrop(undefined); } }}
 					onDrop={e => {
 						setDrop(undefined);
+						setDragging([]);
 						if (e.dataTransfer.types.includes(MOVE_MIME)) {
 							e.preventDefault();
 							const at = moveDrop(e), source = moving.current;
@@ -258,11 +268,13 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
 				{/* 글자 편집 중에는 선택 테두리·손잡이·표시 점이 편집 상자를 덮지 않게 숨긴다(겹침 층이 페이지 위라 z-index로는 못 내림) */}
 				<div className="wse-overlay" hidden={!!editing}>
 					<Badges page={page} body={body} tree={tree} />
-					{drop && <Frame page={page} index={drop.index} kind={`drop ${drop.position}`} tree={tree} label={`${drop.position === 'inside' ? '안쪽 맨 뒤에' : drop.position === 'before' ? '앞에' : '뒤에'} ${drop.moving ? '이동' : '추가'}`} />}
-					<Frame page={page} index={hover !== selected ? hover : undefined} kind="hover" tree={tree} />
-					{extra.map(i => <Frame key={i} page={page} index={i} kind="selected extra" tree={tree} />)}
-					<Frame page={page} index={selected} kind="selected" tree={tree} onResize={commitStyle}
-						label={selectedNode && label(selectedNode, defOf(selectedNode, defs))} />
+					{!drop && !dragging.length && <Frame page={page} index={hover !== selected ? hover : undefined} kind="hover" tree={tree} />}
+					{!dragging.length && <>
+						{extra.map(i => <Frame key={i} page={page} index={i} kind="selected extra" tree={tree} />)}
+						<Frame page={page} index={selected} kind="selected" tree={tree} onResize={commitStyle}
+							label={!drop && selectedNode ? label(selectedNode, defOf(selectedNode, defs)) : undefined} />
+					</>}
+					{drop && <Frame page={page} index={drop.index} kind={`drop ${drop.position} ${drop.side}`} tree={tree} />}
 					{handleGrid && onMove && <GridHandle page={page} index={handleGrid.index} tree={tree} onEnter={() => keepHoverGrid(handleGrid.index)}
 						onSelect={() => onSelect(handleGrid.index)} onDragStart={e => startMove(e, handleGrid)} />}
 				</div>
@@ -270,6 +282,34 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
 		</div>
 	);
 }
+
+/** flex 방향을 우선하고, 그 밖에는 실제 이웃 배치(같은 줄/열)를 본다. */
+function dropAxis(el: HTMLElement): { horizontal: boolean; reverse: boolean } {
+	const parent = el.parentElement, style = getComputedStyle(el), layout = parent && getComputedStyle(parent);
+	if (layout?.display.includes('flex')) {
+		const horizontal = layout.flexDirection.startsWith('row');
+		return { horizontal, reverse: layout.flexDirection.endsWith('reverse') !== (horizontal && layout.direction === 'rtl') };
+	}
+	const rect = el.getBoundingClientRect();
+	for (const [neighbor, next] of [[el.nextElementSibling, true], [el.previousElementSibling, false]] as const) {
+		if (!neighbor?.hasAttribute('data-wse')) { continue; }
+		const other = neighbor.getBoundingClientRect();
+		if (!other.width || !other.height) { continue; }
+		if (Math.min(rect.bottom, other.bottom) > Math.max(rect.top, other.top) && Math.abs(other.left - rect.left) > 1) {
+			return { horizontal: true, reverse: (other.left < rect.left) === next };
+		}
+		if (Math.min(rect.right, other.right) > Math.max(rect.left, other.left) && Math.abs(other.top - rect.top) > 1) {
+			return { horizontal: false, reverse: (other.top < rect.top) === next };
+		}
+	}
+	const horizontal = style.display.startsWith('inline') || style.display === 'table-cell';
+	return { horizontal, reverse: horizontal && style.direction === 'rtl' };
+}
+
+const moveName = (n: XmlNode, defs: ComponentDef[]) => {
+	const text = textTarget(n, defOf(n, defs))?.value?.trim();
+	return [text, n.attrs.id ? `#${n.attrs.id}` : defOf(n, defs)?.display ?? localName(n.tag)].filter(Boolean).join(' ');
+};
 
 /**
  * 그리드 열 너비: 머리 칸 오른쪽 끝 5px을 끌면 그 <col>을 바로 넓히고, 놓으면 width 속성으로 반영(onResized).

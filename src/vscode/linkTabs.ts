@@ -7,15 +7,19 @@ const TAB_ORDER = 'websquare5-editor.tabOrder';
 const TAB_POSITION = 'websquare5-editor.tabPosition';
 const LINK_TABS = 'websquare5-editor.linkTabs';
 const MINIMAP = 'websquare5-editor.minimap';
+const BLAME = 'websquare5-editor.codeBlame';
 
 let globalState: vscode.Memento;
 /** 탭 목록이 바뀜. from: 바꾼 디자이너(그 화면만 select 탭으로 넘어간다) */
 const tabsChanged = new vscode.EventEmitter<{ tabs: LinkTab[]; from?: unknown; select?: string }>();
 export const onTabsChanged = tabsChanged.event;
+const blameToggled = new vscode.EventEmitter<boolean>();
+/** Git blame을 켜고 끔(모든 화면이 켜지면 다시 구해 보낸다) */
+export const onBlameToggled = blameToggled.event;
 
 export function registerLinkTabs(context: vscode.ExtensionContext): void {
 	globalState = context.globalState;
-	context.subscriptions.push(tabsChanged);
+	context.subscriptions.push(tabsChanged, blameToggled);
 }
 
 /** Design·Script·Source·연결 탭 순서(탭 이름). 모든 화면 공통 */
@@ -27,6 +31,12 @@ export const saveTabPosition = (position: TabPosition) => globalState.update(TAB
 /** 코드 편집기 미니맵. 모든 화면 공통, 기본 켬 */
 export const minimapOn = () => globalState.get<boolean>(MINIMAP) ?? true;
 export const saveMinimap = (on: boolean) => globalState.update(MINIMAP, on);
+/** 코드 편집기 커서 줄 끝 Git blame. 모든 화면 공통, 기본 켬. 끄면 git blame을 돌리지 않는다 */
+export const blameOn = () => globalState.get<boolean>(BLAME) ?? true;
+export async function saveBlame(on: boolean): Promise<void> {
+	await globalState.update(BLAME, on);
+	blameToggled.fire(on);
+}
 
 export const linkTabs = () => readLinkTabs(globalState.get(LINK_TABS));
 /** 연결할 수 있는 확장자(설정 websquare5-editor.linkFileExtensions) */

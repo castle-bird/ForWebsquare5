@@ -63,7 +63,7 @@ export function pathTo(node: XmlNode, index?: number): XmlNode[] | undefined {
 }
 
 /** index 노드(없으면 undefined) */
-export const nodeAt = (node: XmlNode, index?: number) => pathTo(node, index)?.at(-1);
+export const nodeAt = (node: XmlNode, index?: number) => index === undefined ? undefined : findNode(node, n => n.index === index);
 
 /** test를 만족하는 첫 노드(자기 자신부터, 문서 순서) */
 export function findNode(node: XmlNode, test: (n: XmlNode) => boolean): XmlNode | undefined {

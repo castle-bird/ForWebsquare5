@@ -17,12 +17,14 @@ import { baseEffect, gitChanges } from './changes';
 import { markdownDoc, remoteCompletion, remoteHover, remoteSignature } from './remoteCompletion';
 import { signatureHelp } from './signatureHelp';
 import { minimap } from './minimap';
+import { blame, blameEffect } from './blame';
+import { jumped } from './jumps';
 import { notInComment } from './docComment';
 import type { ScriptDefinition } from './completions';
 import { isModKey } from '../keys';
 import { useEditorStore } from '../store';
 
-const theme = new Compartment(), readOnlyConf = new Compartment(), wrapConf = new Compartment(), langConf = new Compartment(), minimapConf = new Compartment();
+const theme = new Compartment(), readOnlyConf = new Compartment(), wrapConf = new Compartment(), langConf = new Compartment(), minimapConf = new Compartment(), blameConf = new Compartment();
 
 /** 마우스를 올린 자리의 설명(WebSquare API 등). 없으면 null */
 export type HoverSource = (view: EditorView, pos: number, side: -1 | 1) => Tooltip | null | Promise<Tooltip | null>;
@@ -35,6 +37,17 @@ export type LocalSignatureSource = (state: EditorState, pos: number) => Signatur
  * 지금 내용을 next로 바꾸는 편집을 바뀐 곳만 잘게(글자 단위 비교, 아주 크면 300ms 뒤 덜 정밀하게).
  * 한 번에 크게 바꾸면 그 안의 커서·선택이 바뀐 범위 시작으로 튄다(포맷 뒤 커서가 위로 감). 잘게 바꾸면 바뀌지 않은 글자에 붙어 남는다
  */
+/** 선택을 가운데 보이게. 숨은 탭이면(탭이 막 바뀜) 보일 때까지 몇 프레임 기다린다(숨은 편집기는 스크롤 위치를 못 잰다) */
+const showSelection = (editor: EditorView, selection: EditorSelection, tries = 30) => {
+	if (!editor.dom.offsetParent && tries > 0) {
+		requestAnimationFrame(() => showSelection(editor, selection, tries - 1));
+		return;
+	}
+	const range = selection.main;
+	editor.dispatch({ selection: range.to <= editor.state.doc.length ? selection : undefined, effects: EditorView.scrollIntoView(Math.min(range.anchor, editor.state.doc.length), { y: 'center' }) });
+	editor.focus();
+};
+
 const changesTo = (editor: EditorView, next: string) => {
 	const doc = editor.state.doc.toString(), target = editor.state.toText(next).toString();
 	return diff(doc, target, { timeout: 300 }).map(c => ({ from: c.fromA, to: c.toA, insert: target.slice(c.fromB, c.toB) }));
@@ -171,6 +184,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 	const source = useRef(complete);
 	const hoverSource = useRef(hover);
 	const definitionSource = useRef(definition);
+	/** 정의를 물을 때의 선택(연결 탭): 답(reveal)이 이 편집기로 오면 뒤로 가기 자리 */
+	const jumpFrom = useRef<EditorSelection>(undefined);
 	const signatureSource = useRef(signature);
 	const languageOf = useRef<(l: LanguageSupport) => Extension>(() => []);
 	const sync = useRef<{ base: number; inFlight: boolean; remote: boolean; conflict: boolean; queued?: [ChangeSet, Text]; formatting?: Text; formatAfter?: boolean }>(
@@ -184,6 +199,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 	const gitBase = useEditorStore(s => s.gitBases[target]);
 	const wordWrap = useEditorStore(s => s.codeOptions.wordWrap);
 	const minimapOn = useEditorStore(s => s.minimap);
+	const blameOn = useEditorStore(s => s.codeBlame);
+	const blameData = useEditorStore(s => s.blames[target]);
 	const themeState = useRef(codeTheme);
 
 	const send = (changes: ChangeSet, doc: Text) => {
@@ -270,8 +287,10 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 				if (!found) {
 					useEditorStore.setState({ toast: { message: '정의를 찾지 못했습니다.', key: Date.now() } });
 				} else if ('from' in found) {
-					view.dispatch({ selection: { anchor: found.from, head: found.to }, effects: EditorView.scrollIntoView(found.from, { y: 'center' }) });
-					view.focus();
+					const from = view.state.selection;
+					const to = EditorSelection.create([EditorSelection.range(found.from, found.to)]);
+					showSelection(view, to);
+					jumped(() => showSelection(view, from), () => showSelection(view, to));
 				} else {
 					post({ type: 'openModule', ...found });
 				}
@@ -279,6 +298,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 			}
 			const version = await whenSynced();
 			if (version !== undefined) {
+				// 이 편집기로 돌아오는 reveal이면(같은 파일 안 정의) 뒤로 가기 기록에 남긴다
+				jumpFrom.current = view.state.selection;
 				const line = view.state.doc.lineAt(pos);
 				post({ type: 'definition', target, version, line: line.number - 1, ch: pos - line.from });
 			}
@@ -308,6 +329,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 				langConf.of(languageOf.current(lang)),
 				wrapConf.of(wordWrap ? EditorView.lineWrapping : []),
 				minimapConf.of(minimapOn ? minimap : []),
+				blameConf.of(blameOn ? blame : []),
 				hoverTooltip((view, pos, side) => hoverSource.current?.(view, pos, side) ?? remoteHoverSource?.(view, pos) ?? null),
 				definitionKeys, signatures,
 				theme.of(themeOf(codeTheme)),
@@ -356,16 +378,17 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 				const given = data.endLine !== undefined && data.endCh !== undefined ? posAt(editor.state.doc, data.endLine, data.endCh) : pos;
 				const word = given > pos ? undefined : editor.state.wordAt(pos);
 				const anchor = word?.from ?? pos, head = word?.to ?? given;
-				const show = (tries: number) => {
-					if (!editor.dom.offsetParent && tries > 0) {
-						requestAnimationFrame(() => show(tries - 1));
-						return;
-					}
-					editor.dispatch({ selection: { anchor, head }, effects: EditorView.scrollIntoView(anchor, { y: 'center' }) });
-					editor.focus();
-				};
-				show(30);
+				const from = jumpFrom.current, to = EditorSelection.create([EditorSelection.range(anchor, head)]);
+				jumpFrom.current = undefined;
+				showSelection(editor, to);
+				if (from) {
+					jumped(() => showSelection(editor, from), () => showSelection(editor, to));
+				}
 				return;
+			}
+			if (data.type === 'reveal') {
+				// 정의가 다른 탭이면 탭 바뀜이 기록된다
+				jumpFrom.current = undefined;
 			}
 			// 숨은 탭(display:none)이면 offsetParent가 없다
 			if (data.type === 'formatKey') {
@@ -468,6 +491,14 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 	useEffect(() => {
 		view.current?.dispatch({ effects: baseEffect(gitBase) });
 	}, [gitBase]);
+	// blame: 켜고 끄기, 표는 지금 편집기 내용과 같은 문서 버전일 때만(보낸 편집이 아직 반영 전이면 줄이 어긋난다)
+	useEffect(() => {
+		const v = view.current, s = sync.current;
+		if (!v) { return; }
+		const effects = [blameConf.reconfigure(blameOn ? blame : [])];
+		if (blameOn && blameData && blameData.version === s.base && !s.inFlight && !s.queued && !s.conflict) { effects.push(blameEffect(blameData.data)); }
+		v.dispatch({ effects });
+	}, [blameOn, blameData]);
 	useEffect(() => {
 		remoteProblems.current = diagnostics;
 		view.current?.dispatch({ effects: remoteProblemsChanged.of(null) });

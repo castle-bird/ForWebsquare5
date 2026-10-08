@@ -8,7 +8,8 @@ import type { CodeChange, RemoteCompletions, ToExtension, ToWebview } from '../c
 import { closeAutoTabs, isOpenByUser, registerAutoTabs } from './autoTabs';
 import { RESOLVE, remoteCompletions, remoteDefinition, remoteHover, remoteSignature } from './completion';
 import { applyCodeEdit, formatCode } from './documentEdit';
-import { stagedText } from './gitBase';
+import { blameFeed, blameText, stagedText } from './gitBase';
+import { blameOn } from './linkTabs';
 import { xmlSchemaOf } from './xmlSchema';
 import { doctypeOf } from '../core/dtd';
 import { addLinkTab, LINK_EXTS_SETTING, linkExts, linkTab, linkTabs, onTabsChanged, registerLinkTabs, removeLinkTab, renameLinkTab, tabOrder } from './linkTabs';
@@ -124,6 +125,8 @@ export class LinkedFiles {
 	private disposed = false;
 	/** reload는 여러 곳(웹뷰 준비·연결 변경·탭 변경·이름 변경)에서 불려 차례로 돌린다(겹치면 연결을 두 번 잡거나 놓친다) */
 	private readonly reloads = new Map<string, Promise<unknown>>();
+	/** 연결 파일마다 Git blame 보내기(입력이 멈춘 뒤) */
+	private readonly blames = new Map<string, ReturnType<typeof blameFeed>>();
 
 	constructor(private readonly owner: vscode.TextDocument, private readonly postToWebview: (msg: ToWebview) => Thenable<boolean>) {
 		this.subs = [
@@ -279,6 +282,25 @@ export class LinkedFiles {
 		}
 	}
 
+	/** Git blame(켰을 때만)을 다시 구해 보낸다. kind가 없으면 연결 파일 모두. 보낼 때 문서 버전이 바뀌었으면 보내지 않는다(다음 차례에) */
+	scheduleBlame(delay?: number, kind?: string): void {
+		for (const k of kind === undefined ? [...this.links.keys()] : [kind]) {
+			let feed = this.blames.get(k);
+			if (!feed) {
+				feed = blameFeed(async () => {
+					const link = this.links.get(k), doc = link && blameOn() ? await this.open(k, link) : undefined;
+					if (!link || !doc) { return; }
+					const version = doc.version + link.offset, data = await blameText(link.uri, doc.getText());
+					if (this.links.get(k) === link && doc.version + link.offset === version) {
+						await this.post({ type: 'blame', target: linkTarget(k), version, data });
+					}
+				});
+				this.blames.set(k, feed);
+			}
+			feed.schedule(delay);
+		}
+	}
+
 	/** Git 상태가 바뀌었을 때: 기준이 바뀐 파일만 다시 보낸다 */
 	async sendBases(): Promise<void> {
 		await Promise.all([...this.links.keys()].map(kind => this.sendBase(kind)));
@@ -291,6 +313,8 @@ export class LinkedFiles {
 		}
 		clearTimeout(link.timer);
 		link.watcher.dispose();
+		this.blames.get(kind)?.dispose();
+		this.blames.delete(kind);
 		this.links.delete(kind);
 		const key = link.uri.toString(), count = (used.get(key) ?? 1) - 1;
 		if (count > 0) {
@@ -352,6 +376,8 @@ export class LinkedFiles {
 		}
 		const text = doc.getText();
 		await this.post({ type: 'linked', kind, path: shown, text, version: this.versionOf(link, doc), dirty: doc.isDirty });
+		// 내용이 바뀔 때마다 불리므로 입력이 멈춘 뒤에
+		this.scheduleBlame(undefined, kind);
 		await this.sendSchema(kind, link, text);
 		await this.sendDiagnostics(kind);
 	}
@@ -523,6 +549,7 @@ export class LinkedFiles {
 	async dispose(): Promise<void> {
 		this.disposed = true;
 		this.subs.forEach(s => s.dispose());
+		this.blames.forEach(b => b.dispose());
 		const uris = [...this.links.values()].map(l => l.uri);
 		[...this.links.keys()].forEach(kind => this.drop(kind));
 		await settleChanges(uris);

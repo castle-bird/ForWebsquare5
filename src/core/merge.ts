@@ -3,7 +3,7 @@
 import { applyEdits, deleteNode, eolOf, escape, leadOf, lineIndent, setAttribute, setText, sourceChange, startTagEnd, type TextEdit } from './edit';
 import { columnLayout, gridColumnXml } from './grid';
 import { insertNode, reindentLines } from './paste';
-import { kid, kids, localName, nodeAt, parseXml, pathTo, prefixOf, uniqueId, usedIds, WEBSQUARE_NS, type XmlNode } from './xmlModel';
+import { EV, kid, kids, localName, nodeAt, parseXml, pathTo, prefixOf, uniqueId, usedIds, WEBSQUARE_NS, type XmlNode } from './xmlModel';
 
 const CELL_TAGS = ['th', 'td'];
 const tagnameOf = (n: XmlNode) => n.attrs.tagname?.toLowerCase();
@@ -171,7 +171,7 @@ function blankCell(cell: XmlNode, used: Set<string>): string {
 	if (isGridCell(cell)) {
 		return gridColumnXml(prefixOf(cell.tag), `id="${uniqueId(used, 'column')}"`);
 	}
-	const attrs = Object.entries(cell.attrs).filter(([name]) => name !== 'id' && !name.startsWith('ev:')).map(([name, value]) => ` ${name}="${escape(value, '"')}"`).join('');
+	const attrs = Object.entries(cell.attrs).filter(([name]) => name !== 'id' && !name.startsWith(EV)).map(([name, value]) => ` ${name}="${escape(value, '"')}"`).join('');
 	return `<${cell.tag}${attrs}></${cell.tag}>`;
 }
 

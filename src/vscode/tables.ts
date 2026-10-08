@@ -6,7 +6,7 @@ import { emptyTables, readUsedTables } from '../core/tables';
 import type { ToExtension, ToWebview } from '../core/protocol';
 
 const FOLDER_KEY = 'websquare5-editor.usedTablesFolder';
-type TablesMessage = Extract<ToExtension, { type: 'loadUsedTables' | 'saveUsedTables' | 'chooseTablesFolder' }>;
+type TablesMessage = Extract<ToExtension, { type: 'loadUsedTables' | 'saveUsedTables' | 'chooseTablesFolder' | 'saveTablesImage' }>;
 
 export class UsedTablesStore {
 	/** 저장은 차례로(빠르게 연달아 고쳐도 옛 내용이 새 내용을 덮지 않게) */
@@ -24,6 +24,7 @@ export class UsedTablesStore {
 				this.saving = this.saving.then(() => this.save(msg.data)).catch(e => this.post({ type: 'usedTables', ...this.where(), error: `저장 실패: ${message(e)}` }));
 				return true;
 			}
+			case 'saveTablesImage': void this.saveImage(msg.dataUrl).catch(e => vscode.window.showErrorMessage(`이미지 저장 실패: ${message(e)}`)); return true;
 			default: return false;
 		}
 	}
@@ -58,6 +59,18 @@ export class UsedTablesStore {
 		await this.load();
 	}
 
+	/** ERD 그림 PNG: 기본 위치는 JSON 옆(폴더를 안 골랐으면 화면 옆) 같은 이름 */
+	private async saveImage(dataUrl: string): Promise<void> {
+		if (!dataUrl.startsWith(PNG_DATA)) { throw new Error('PNG가 아닙니다.'); }
+		const { file } = this.where();
+		const defaultUri = vscode.Uri.file(file ? file.replace(/\.json$/i, '.png') : this.screen.fsPath.replace(/\.xml$/i, '') + '.png');
+		const uri = await vscode.window.showSaveDialog({ title: 'ERD 이미지 저장', defaultUri, filters: { 'PNG 이미지': ['png'] } });
+		if (!uri) { return; }
+		await fs.mkdir(path.dirname(uri.fsPath), { recursive: true });
+		await fs.writeFile(uri.fsPath, Buffer.from(dataUrl.slice(PNG_DATA.length), 'base64'));
+		void vscode.window.showInformationMessage(`ERD 이미지를 저장했습니다: ${path.basename(uri.fsPath)}`);
+	}
+
 	private async save(data: unknown): Promise<void> {
 		const { file } = this.where();
 		if (!file) { return; }
@@ -65,5 +78,7 @@ export class UsedTablesStore {
 		await fs.writeFile(file, JSON.stringify(readUsedTables(data), null, '\t') + '\n', 'utf8');
 	}
 }
+
+const PNG_DATA = 'data:image/png;base64,';
 
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);

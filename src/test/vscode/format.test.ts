@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { formatCode } from '../vscode/documentEdit';
-import { remoteCompletions, remoteSignature } from '../vscode/completion';
+import { formatCode } from '../../vscode/documentEdit';
+import { remoteCompletions, remoteSignature } from '../../vscode/completion';
 
 suite('format', () => {
 	// 문서 전체를 fn 결과로 바꾸는 가짜 포매터
@@ -105,7 +105,8 @@ suite('format', () => {
 	});
 
 	// Script는 VS Code의 JS 포매터(기본 포매터 설정, 없으면 내장)로. 결과 모양은 그 포매터 몫이라 들여쓰기·본문·앞뒤 공백만 본다
-	test('Script: 본문만 VS Code JS 포매터로 포맷하고 CDATA 앞뒤 공백은 유지', async () => {
+	test('Script: 본문만 VS Code JS 포매터로 포맷하고 CDATA 앞뒤 공백은 유지', async function () {
+		this.timeout(10000); // 이 실행에서 JS 포매터 첫 호출: 언어 서버가 뜨는 동안 2초를 넘기기도 한다
 		const doc = await vscode.workspace.openTextDocument({ content: '<html><script><![CDATA[\n\tconst a={b:1}\n\t]]></script></html>', language: 'xml' });
 		const out = await formatCode(doc, 'script');
 		assert.ok(out?.startsWith('\n\t') && out.endsWith('\n\t'), JSON.stringify(out));

@@ -6,6 +6,7 @@ import { forEachDiagnostic } from '@codemirror/lint';
 import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { getStyleTags } from '@lezer/highlight';
 import { capturePointer } from '../ui/pointerCapture';
+import { changedRanges, changesVersion } from './changes';
 
 /** 미니맵 폭(CSS px). 글자 하나 1px, 줄 하나 LINE px */
 export const MINIMAP_WIDTH = 72;
@@ -33,8 +34,11 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 	probe: HTMLElement;
 	readonly onScroll = () => this.schedule();
 	drag?: { y: number; top: number; scale: number };
-	/** 그린 오류 표시(바뀌면 다시 그림) */
+	/** 그린 오류 표시·Git 변경(바뀌면 다시 그림) */
 	problems = '';
+	changes: unknown = null;
+	/** Git 변경 색(테마가 바뀔 때만 잰다): 추가·수정·삭제 */
+	changeColors = { added: '', modified: '', deleted: '' };
 	/** 막대를 미리 그려 둔 그림(보이는 줄 위아래로 한 화면씩 더). 스크롤은 여기서 잘라 붙이기만 한다 */
 	tile = document.createElement('canvas');
 	tileStart = 0;
@@ -68,7 +72,7 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 			this.typingUntil = performance.now() + TYPING_DELAY;
 			clearTimeout(this.timer);
 			this.timer = window.setTimeout(() => this.schedule(), TYPING_DELAY);
-		} else if (problemsOf(u.state) !== this.problems) {
+		} else if (problemsOf(u.state) !== this.problems || changesVersion(u.state) !== this.changes) {
 			this.stale = true;
 			this.schedule();
 		} else if (u.geometryChanged || u.viewportChanged || u.transactions.some(tr => tr.reconfigured)) {
@@ -103,6 +107,8 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 		if (!v.dom.offsetParent) { return; }
 		if (!this.textColor) {
 			this.textColor = getComputedStyle(v.contentDOM).color;
+			const css = getComputedStyle(this.dom);
+			for (const kind of ['added', 'modified', 'deleted'] as const) { this.changeColors[kind] = css.getPropertyValue(`--minimap-${kind}`).trim(); }
 			// 스크롤바 왼쪽, 스크롤 영역 높이만(위 검색창 같은 패널을 가리지 않게). 스크롤바 폭은 테마·OS마다 다름
 			const sc = v.scrollDOM;
 			this.scrollbar = sc.offsetWidth - sc.clientWidth;
@@ -155,6 +161,7 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 		this.tile = tile;
 		this.stale = false;
 		this.problems = problemsOf(this.view.state);
+		this.changes = changesVersion(this.view.state);
 		this.tileStart = first;
 		this.tileRows = last - first + 1;
 	}
@@ -171,6 +178,14 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 			g.fillStyle = LINE_TINT[severity(d)];
 			g.fillRect(0, (doc.lineAt(dFrom).number - top) * LINE, width, LINE);
 		});
+		// Git 변경: 왼쪽 끝 막대(VS Code 미니맵 거터처럼). 삭제는 지워진 자리(줄 위 경계)에 짧은 선
+		for (const { from: c0, to: c1, kind } of changedRanges(v.state)) {
+			if (c1 < a || c0 > b) { continue; }
+			g.fillStyle = this.changeColors[kind];
+			if (kind === 'deleted') { g.fillRect(0, (c0 - top) * LINE - 1, PAD - 1, 2); continue; }
+			const s0 = Math.max(a, c0), s1 = Math.min(b, c1);
+			g.fillRect(0, (s0 - top) * LINE, 2, (s1 - s0 + 1) * LINE);
+		}
 		const columnAt = (line: { from: number; text: string }, pos: number) => {
 			let col = 0;
 			for (let i = 0, limit = pos - line.from; i < limit && i < line.text.length; i++) { col = nextColumn(col, line.text[i], tab); }

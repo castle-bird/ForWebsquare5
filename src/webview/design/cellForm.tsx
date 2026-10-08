@@ -2,7 +2,7 @@
 import { clsx } from 'clsx';
 import type { ComponentDef } from '../../core/protocol';
 import { setStyle, styleChanges } from '../../core/style';
-import type { XmlNode } from '../../core/xmlModel';
+import { localName, type XmlNode } from '../../core/xmlModel';
 import { ComboInput } from '../ui/combo';
 
 /**
@@ -38,7 +38,7 @@ export function cellForm(n: XmlNode, def: ComponentDef | undefined, r: { width: 
 		})),
 	];
 	const height = styleChanges(undefined, n.attrs.style).height?.replace(/px$/, '') ?? '';
-	const part = path.map(a => PARTS[a.tag.slice(a.tag.indexOf(':') + 1)]).reverse().find(Boolean) ?? '그리드 칸';
+	const part = path.map(a => PARTS[localName(a.tag)]).reverse().find(Boolean) ?? '그리드 칸';
 	return { fields, style: n.attrs.style, part, values: Object.fromEntries(fields.map(f => [f.name, f.styleHeight ? height : n.attrs[f.name] ?? ''])) };
 }
 

@@ -1,20 +1,10 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as vscode from 'vscode';
-import { CODE_THEMES, customizationsFor, fromVsCodeTheme, parseJsonc, withCustomizations, type VsTheme } from '../core/codeTheme';
+import { customizationsFor, fromVsCodeTheme, parseJsonc, withCustomizations } from '../core/codeTheme';
 import { DEFAULT_CODE_OPTIONS, readFontLigatures, readSqlDialect, readWordWrap, SQL_DIALECTS } from '../core/codeOptions';
 
 suite('코드 편집기 테마', () => {
-	test('코드 편집기 테마: id 중복 없음, 명령 등록(우클릭 메뉴 대신 탭 줄 톱니바퀴)', async () => {
-		assert.strictEqual(new Set(CODE_THEMES.map(t => t.id)).size, CODE_THEMES.length, 'id 중복 없음');
-		// 명령은 확장이 켜져야 등록된다(다른 테스트 파일이 먼저 켜 줬는지와 상관없게)
-		await vscode.extensions.getExtension('castle-bird.websquare5-editor')?.activate();
-		assert.ok((await vscode.commands.getCommands(true)).includes('websquare5-editor.codeTheme'));
-		assert.strictEqual(vscode.extensions.all.find(e => e.packageJSON.name === 'websquare5-editor')?.packageJSON.contributes.menus['webview/context'], undefined, '코드 편집기 우클릭 메뉴 항목 없음');
-		assert.ok((await vscode.commands.getCommands(true)).includes('websquare5-editor.importCodeTheme'));
-	});
-
 	test('코드 편집기 테마 가져오기: VS Code 테마 .json(JSONC) → 색·문법 색', () => {
 		assert.deepStrictEqual(parseJsonc('{\n // 주석\n "a": "http://x/*y*/", /* 블록 */ "b": [1, 2,],\n}'), { a: 'http://x/*y*/', b: [1, 2] }, '문자열 안 // /* 는 그대로');
 		const theme = fromVsCodeTheme({
@@ -38,19 +28,6 @@ suite('코드 편집기 테마', () => {
 		assert.deepStrictEqual([theme.tokens?.string, theme.tokens?.number], [{ color: '#ce9178' }, { color: '#ce9178' }], '쉼표로 묶은 scope');
 		assert.strictEqual(fromVsCodeTheme({ colors: { 'editor.background': '#fafafa' } }).dark, false, 'type이 없으면 배경 밝기로');
 		assert.throws(() => fromVsCodeTheme({ tokenColors: './x.tmTheme' }), /tmTheme/);
-	});
-
-	test('확장에 든 테마(media/themes): 모두 읽히고 편집기 색·문법 색 14종이 다 있다', () => {
-		const dir = path.join(vscode.extensions.all.find(e => e.packageJSON.name === 'websquare5-editor')!.extensionPath, 'media', 'themes');
-		const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
-		assert.deepStrictEqual(files.filter(f => f.startsWith('intellij-') || f.startsWith('one-')).sort(), ['intellij-dark.json', 'intellij-light.json', 'one-dark.json', 'one-light.json']);
-		for (const file of files) {
-			const theme = parseJsonc(fs.readFileSync(path.join(dir, file), 'utf8')) as VsTheme;
-			const converted = fromVsCodeTheme(theme);
-			assert.ok(theme.name, `${file}: 목록에 보일 이름`);
-			assert.strictEqual(Object.keys(converted.colors ?? {}).length, 7, `${file}: 편집기 색`);
-			assert.strictEqual(Object.keys(converted.tokens ?? {}).length, 14, `${file}: 문법 색`);
-		}
 	});
 
 	test('코드 편집기 테마 덮어쓰기: 공통 다음 [테마 id·이름], 틀린 값은 버림', () => {

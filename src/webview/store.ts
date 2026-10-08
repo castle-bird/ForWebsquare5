@@ -2,9 +2,11 @@ import { create } from 'zustand';
 import type { CodeTarget, LinkState, TabPosition, ToExtension, ToWebview, XmlElementSpec } from '../core/protocol';
 import { DEFAULT_LINK_EXTS, DEFAULT_LINK_TABS, type LinkTab } from '../core/links';
 import type { CodeThemeState } from '../core/codeTheme';
+import type { Blame } from '../core/blame';
 import { DEFAULT_CODE_OPTIONS, type CodeOptions } from '../core/codeOptions';
 import { findNode, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
 import type { DropPosition } from '../core/paste';
+import { movedIndexes } from '../core/move';
 import { leadOf } from '../core/edit';
 import { isStructure } from '../core/paste';
 import { isMerged, mergeProblem } from '../core/merge';
@@ -33,12 +35,20 @@ interface EditorState {
 	extra: number[];
 	copied?: string[];
 	pendingSelect?: string;
+	/** 보낸 옮기기(version: 보낸 때 문서): 그 결과 문서가 오면 선택·펼침 번호를 옮긴 뒤 번호로 바꾼다(movedIndexes) */
+	pendingMove?: { version: number; map: Map<number, number>; check: [number, string][] };
+	/** 문서가 바뀌며 번호가 바뀌었음(펼침 상태도 따라 바꾸게, key: 매번 새 값) */
+	remap?: { map: Map<number, number>; key: number };
 	links: Record<string, LinkState>;
 	linkTabs: LinkTab[];
 	tabOrder?: string[];
 	tabPosition: TabPosition;
 	/** 코드 편집기 미니맵(모든 화면 공통) */
 	minimap: boolean;
+	/** 코드 편집기 커서 줄 끝 Git blame(모든 화면 공통) */
+	codeBlame: boolean;
+	/** 편집기마다 마지막으로 받은 blame(문서 버전과 함께) */
+	blames: Partial<Record<CodeTarget, { version: number; data?: Blame }>>;
 	paletteFavorites: string[];
 	codeTheme: CodeThemeState;
 	/** 테마 색 덮어쓰기 팝업이 고치는 중인 공통·이 테마 층(열린 코드 편집기 미리 보기) */
@@ -60,6 +70,8 @@ interface EditorState {
 
 	handleMessage: (data: ToWebview) => void;
 	setSelected: (selected?: number, additive?: boolean) => void;
+	/** 고른 컴포넌트의 부모를 고른다(body 위로는 안 감). 옮겼으면 true */
+	selectParent: () => boolean;
 	editAttr: (name: string, value: string | undefined, index?: number) => void;
 	editSelected: (name: string, value: string | undefined) => void;
 	/** also: 같은 노드의 다른 속성도 함께(그리드 헤더 칸의 너비·높이) */
@@ -67,7 +79,8 @@ interface EditorState {
 	openFrame: (index: number) => void;
 	/** clip: 복사·붙여넣기 이벤트의 클립보드. 화면(웹뷰)마다 store가 따로라 다른 화면 XML로 붙여 넣으려면 클립보드를 거친다 */
 	copy: (clip?: DataTransfer | null) => boolean;
-	paste: (clip?: DataTransfer | null) => boolean;
+	/** at: 우클릭한 컴포넌트의 앞·뒤에(없으면 고른 것 기준 기본 자리) */
+	paste: (clip?: DataTransfer | null, at?: { index: number; position: 'before' | 'after' }) => boolean;
 	cut: (clip?: DataTransfer | null) => boolean;
 	/** 고른 셀을 하나로 병합(표·그리드). 못 하면 이유를 알리고 false */
 	merge: () => boolean;
@@ -80,6 +93,7 @@ interface EditorState {
 	setTabOrder: (order: string[]) => void;
 	setTabPosition: (position: TabPosition) => void;
 	setMinimap: (on: boolean) => void;
+	setCodeBlame: (on: boolean) => void;
 	togglePaletteFavorite: (component: ComponentDef) => void;
 	reorderPaletteFavorites: (keys: string[]) => void;
 }
@@ -111,6 +125,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	gitBases: {},
 	tabPosition: 'top',
 	minimap: true,
+	codeBlame: true,
+	blames: {},
 	paletteFavorites: [],
 	diagnostics: {},
 	linkFiles: {},
@@ -120,9 +136,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
 	handleMessage: (data) => {
 		if (data.type === 'document') {
-			const { pendingSelect } = get();
+			const { pendingSelect, pendingMove, selected } = get();
 			const added = pendingSelect && data.root && findNode(data.root, n => n.attrs.id === pendingSelect);
-			set({ doc: data, extra: [], ...added && { selected: added.index, pendingSelect: undefined } });
+			// 옮긴 결과 문서: 옮긴 노드가 계산한 번호에 그대로 있을 때만(다른 변경이 섞였으면 번호를 믿을 수 없다)
+			const moved = pendingMove && data.version !== pendingMove.version && data.root
+				&& pendingMove.check.every(([old, tag]) => nodeAt(data.root!, pendingMove.map.get(old))?.tag === tag) ? pendingMove.map : undefined;
+			set({ doc: data, extra: [], ...pendingMove && data.version !== pendingMove.version && { pendingMove: undefined },
+				...moved && { selected: selected === undefined ? undefined : moved.get(selected), remap: { map: moved, key: Date.now() } },
+				...added && { selected: added.index, pendingSelect: undefined } });
 		} else if (data.type === 'select') {
 			set({ pendingSelect: data.id });
 		} else if (data.type === 'definitions') {
@@ -168,7 +189,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 			set({ tabPosition: data.position });
 		} else if (data.type === 'minimap') {
 			set({ minimap: data.on });
+		} else if (data.type === 'codeBlame') {
+			set({ codeBlame: data.on });
+		} else if (data.type === 'blame') {
+			set({ blames: { ...get().blames, [data.target]: { version: data.version, data: data.data } } });
 		}
+	},
+
+	selectParent: () => {
+		const { doc, selected } = get();
+		const path = doc?.root && selected !== undefined ? pathTo(doc.root, selected) : undefined;
+		const body = path?.findIndex(n => n.tag.replace(/^.*:/, '') === 'body') ?? -1;
+		if (!path || body < 0 || path.length - 1 <= body) { return false; }
+		get().setSelected(path[path.length - 2].index);
+		return true;
 	},
 
 	setSelected: (selected, additive) => {
@@ -242,16 +276,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 		return true;
 	},
 
-	paste: (clip) => {
+	paste: (clip, at) => {
 		const { doc, selected } = get();
 		const copied = fromClip(clip) ?? get().copied;
 		// Data 트리의 Submission 루트(번호 -1)는 xf:model에 붙여 넣는다
-		const index = selected === -1 && doc?.root ? findNode(doc.root, n => n.tag === 'xf:model')?.index : selected;
+		const index = at?.index ?? (selected === -1 && doc?.root ? findNode(doc.root, n => n.tag === 'xf:model')?.index : selected);
 		const path = doc?.root && pathTo(doc.root, index);
 		if (!doc || !copied || !path || path.length < 2 || index === undefined) {
 			return false;
 		}
-		post({ type: 'paste', version: doc.version, index, xml: copied });
+		post({ type: 'paste', version: doc.version, index, xml: copied, ...at && { position: at.position } });
 		return true;
 	},
 
@@ -321,6 +355,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 		if (doc) {
 			const group = targets(get()).map(n => n.index);
 			const more = group.includes(dragged) ? group.filter(i => i !== dragged) : [];
+			const map = doc.root && movedIndexes(doc.root, [dragged, ...more], target, position);
+			const check = [dragged, ...more].map(i => [i, (doc.root && nodeAt(doc.root, i)?.tag) ?? ''] as [number, string]);
+			set({ pendingMove: map ? { version: doc.version, map, check } : undefined });
 			post({ type: 'move', version: doc.version, dragged, target, position, ...more.length && { more } });
 		}
 	},
@@ -350,6 +387,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	setMinimap: (on) => {
 		set({ minimap: on });
 		post({ type: 'setMinimap', on });
+	},
+
+	setCodeBlame: (on) => {
+		set({ codeBlame: on });
+		post({ type: 'setCodeBlame', on });
 	},
 }));
 

@@ -50,8 +50,6 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 
 ## 코드 편집 (Source · Script)
 
-![Source 탭](images/sourceTab.png)
-
 - XML·WebSquare API·공통 JS 자동완성과 마우스 오버 설명(공통 JS·같은 Script 함수의 JSDoc 포함). 공통 JS를 저장하면 바로 반영됩니다
 - 미니맵(막대형): 글자 대신 낱말마다 색 막대로 코드 흐름과 오류·경고 줄(오른쪽 끝은 파일 전체에서의 위치)을 보여 줍니다. 끌거나 클릭해 이동, 톱니바퀴 → 코드 미니맵으로 켜고 끔(모든 화면 공통, 기본 켬)
 - 정의로 이동(Ctrl+클릭·F12): 같은 Script 함수는 그 자리로, 공통 JS 함수는 그 파일을 VS Code로 엽니다. 커서 추가는 Alt+클릭
@@ -70,8 +68,6 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 ## 연결 파일 (Controller · Service · Mapper · MyBatis)
 
 화면 탭에서 Java·XML·SQL 등 연결 파일을 열어 편집합니다. 탭 목록과 순서는 직접 바꿀 수 있고, 탭 줄 앞쪽 화살표로 탭 줄을 위·아래로 옮길 수 있습니다(기본 위).
-
-![Java 자동완성](images/java2.png)
 
 - 작업 폴더 안 파일을 이름으로 검색해 연결
 - VS Code에 설치된 언어 확장(Java 등)의 자동완성·포맷·마우스 오버 설명(Javadoc)·정의로 이동(Ctrl+클릭·F12)·파라미터 힌트 사용

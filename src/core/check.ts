@@ -1,6 +1,6 @@
 // 화면 점검: 겹치는 id, 없는 데이터·컬럼을 가리키는 바인딩, Script에 없는 이벤트 함수
 import { isDataKind } from './data';
-import { pathTo, type XmlNode } from './xmlModel';
+import { EV, localName, pathTo, type XmlNode } from './xmlModel';
 
 /** 안에서만 id가 겹치면 안 되는 범위: 그리드(와 그 header·gBody·footer·subTotal), 데이터의 columnInfo·keyInfo. 그 밖은 화면 전체 */
 const SCOPE = /:(gridView|header|gBody|footer|subTotal|columnInfo|keyInfo)$/;
@@ -41,7 +41,7 @@ function dataColumns(root: XmlNode): Map<string, { kind: string; columns?: Set<s
 	const visit = (n: XmlNode) => {
 		if (isDataKind(n) && n.attrs.id) {
 			const info = n.children.find(c => /:(columnInfo|keyInfo)$/.test(c.tag));
-			data.set(n.attrs.id, { kind: n.tag.slice(n.tag.indexOf(':') + 1), columns: info && new Set(info.children.flatMap(c => c.attrs.id ? [c.attrs.id] : [])) });
+			data.set(n.attrs.id, { kind: localName(n.tag), columns: info && new Set(info.children.flatMap(c => c.attrs.id ? [c.attrs.id] : [])) });
 		}
 		n.children.forEach(visit);
 	};
@@ -98,7 +98,7 @@ export function screenProblems(root: XmlNode, script = ''): Map<number, string[]
 					}
 				}
 			}
-			const handler = name.startsWith('ev:') ? /^scwin\.([\w$]+)$/.exec(value.trim())?.[1] : undefined;
+			const handler = name.startsWith(EV) ? /^scwin\.([\w$]+)$/.exec(value.trim())?.[1] : undefined;
 			if (handler && !defined.has(handler)) {
 				add(n, `등록되지 않은 handler가 적용되어 있습니다. \`scwin.${handler}\``);
 			}

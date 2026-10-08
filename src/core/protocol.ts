@@ -5,6 +5,7 @@ import type { GridBindMode, GridCellEdit, GridExtras, GridPart } from './grid';
 import type { ChoicesFields } from './choices';
 import type { HistoryRow } from './info';
 import type { UsedTables } from './tables';
+import type { Blame } from './blame';
 import type { InsertPosition, DropPosition } from './paste';
 import type { LinkTab, LinkTarget } from './links';
 import type { CodeThemeState, ThemeOverlay } from './codeTheme';
@@ -26,6 +27,8 @@ export type ToWebview =
 	| { type: 'paletteFavorites'; keys: string[] }
 	| { type: 'tabPosition'; position: TabPosition }
 	| { type: 'minimap'; on: boolean } // 코드 편집기 미니맵 켜기·끄기(모든 화면 공통)
+	| { type: 'codeBlame'; on: boolean } // 코드 편집기 Git blame 켜기·끄기(모든 화면 공통)
+	| { type: 'blame'; target: CodeTarget; version: number; data?: Blame } // 그 문서 버전의 줄별 blame. 없으면 표시 안 함(Git 밖 등)
 	| { type: 'linkTabs'; tabs: LinkTab[]; exts: string[]; select?: string } // select: 이 탭으로 넘어간다(방금 추가한 탭). exts: 연결할 수 있는 확장자
 	| { type: 'xmlSchema'; kind: string; elements?: XmlElementSpec[]; source?: string } // 연결한 XML의 DTD 스키마(없으면 기본 MyBatis 목록)
 	| ({ type: 'codeTheme' } & CodeThemeState)
@@ -137,7 +140,7 @@ export type ToExtension =
 	// also: 같은 노드의 다른 속성도 함께(한 번에 반영해야 버전이 엇갈리지 않는다)
 	| { type: 'setAttr'; version: number; index: number; name: string; value?: string; more?: { index: number; value?: string }[]; also?: { name: string; value?: string }[] }
 	| { type: 'setText'; version: number; index: number; value: string }
-	| { type: 'paste'; version: number; index: number; xml: string | string[] }
+	| { type: 'paste'; version: number; index: number; xml: string | string[]; position?: 'before' | 'after' } // position: 우클릭 붙여 넣기 > 앞·뒤
 	| { type: 'delete'; version: number; index: number; more?: number[] }
 	| { type: 'mergeCells'; version: number; index: number; more: number[] } // 고른 셀(index 포함)을 하나로 병합
 	| { type: 'unmergeCells'; version: number; index: number; more: number[] } // 고른 셀 중 병합된 셀을 원래 칸 수로 나눔
@@ -171,10 +174,12 @@ export type ToExtension =
 	| { type: 'setPaletteFavorite'; component: Pick<ComponentDef, 'id' | 'ns' | 'realType'>; favorite: boolean }
 	| { type: 'setTabPosition'; position: TabPosition }
 	| { type: 'setMinimap'; on: boolean }
+	| { type: 'setCodeBlame'; on: boolean }
 	| { type: 'navigate'; back: boolean } // 마우스 뒤로·앞으로 버튼: VS Code 이동 기록(Go Back·Go Forward). 웹뷰 위에서 누른 버튼은 VS Code에 안 가서 넘겨준다
 	| { type: 'loadUsedTables' }
 	| { type: 'saveUsedTables'; data: UsedTables }
-	| { type: 'chooseTablesFolder'; pick: boolean }; // pick: 폴더 고르기 창, 아니면 기본 위치(확장 저장 폴더)
+	| { type: 'chooseTablesFolder'; pick: boolean } // pick: 폴더 고르기 창, 아니면 기본 위치(확장 저장 폴더)
+	| { type: 'saveTablesImage'; dataUrl: string }; // ERD 그림 PNG(data URL): 저장 위치를 물어 저장
 
 interface PropertyDef { name: string; category: string; order: number; description: string; options?: string[] }
 interface EventDef { name: string; signature: string; description: string }

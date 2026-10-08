@@ -80,7 +80,8 @@ function homeOf(root: XmlNode, tags: string[]): XmlNode | undefined {
 	return home;
 }
 
-export function pasteNode(text: string, root: XmlNode, target: XmlNode, xml: string | string[]): TextEdit {
+/** position: 고른 것의 앞·뒤에 형제로(우클릭 붙여 넣기 > 앞·뒤). 없으면 컨테이너는 안 마지막, 아니면 바로 뒤 */
+export function pasteNode(text: string, root: XmlNode, target: XmlNode, xml: string | string[], position?: 'before' | 'after'): TextEdit {
 	const items = typeof xml === 'string' ? [xml] : xml;
 	if (!items.length) { throw new Error('복사한 내용이 없습니다.'); }
 	const tags = items.map(item => parseXml(item.trim())?.tag ?? '');
@@ -98,6 +99,12 @@ export function pasteNode(text: string, root: XmlNode, target: XmlNode, xml: str
 		const indent = /^[ \t]*/.exec(item)![0];
 		return reindentLines(rename(item.slice(indent.length), used), indent, first);
 	}).join(eolOf(text) + first);
+	if (position && (isStructure(target) || home && !home.children.some(c => c.index === target.index))) {
+		throw new Error(isStructure(target) ? '화면 구조(html·head·body·xf:model)의 앞뒤에는 붙여 넣을 수 없습니다.' : '데이터는 데이터 영역 안 항목의 앞뒤에만 붙여 넣을 수 있습니다.');
+	}
+	if (position) {
+		return insertNode(text, target, position, first + joined);
+	}
 	if (home) {
 		return home.children.some(c => c.index === target.index) ? insertNode(text, target, 'after', first + joined) : insertNode(text, home, 'inside', first + joined);
 	}

@@ -3,10 +3,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { isScreen, parseXml } from '../core/xmlModel';
-import { openFrame, VIEW_TYPE } from '../extension';
-import { clearAutoCache, resolvePath } from '../vscode/setup';
-import { waitFor, SCREEN } from './helpers';
+import { isScreen, parseXml } from '../../core/xmlModel';
+import { openFrame, VIEW_TYPE } from '../../extension';
+import { clearAutoCache, resolvePath } from '../../vscode/setup';
+import { waitFor, SCREEN } from '../helpers';
 
 suite('xmlModel', () => {
 	test('트리·순서·위치·속성', () => {

@@ -74,7 +74,11 @@ const settle = ViewPlugin.fromClass(class {
 /** 기준 내용을 바꾸는 트랜잭션 효과. 기준이 없으면(Git 밖·추적 안 함) null로 표시를 지운다 */
 export const baseEffect = (text: string | undefined) => setBase.of(text === undefined ? null : Text.of(text.split(/\r\n?|\n/)));
 
-const changedRanges = (state: EditorState): Range[] => state.field(changes, false)?.ranges.filter(r => r.to <= state.doc.lines) ?? [];
+/** 바뀐 줄 범위(미니맵도 씀) */
+export const changedRanges = (state: EditorState): Range[] => state.field(changes, false)?.ranges.filter(r => r.to <= state.doc.lines) ?? [];
+
+/** 비교 결과가 바뀌면 다른 값(미니맵 다시 그리기 판단용) */
+export const changesVersion = (state: EditorState) => state.field(changes, false);
 
 class ChangeMarker extends GutterMarker {
 	constructor(readonly kind: Kind) {
