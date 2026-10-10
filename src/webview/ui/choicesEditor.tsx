@@ -109,7 +109,7 @@ export function ChoicesEditor({ node, kind, sources, externalError, offsetIndex 
 								{params ? <><th>Name</th><th>Value</th></> : <><th>Label (화면 글자)</th><th>Value (저장 값)</th></>}
 							</tr></thead>
 							<tbody>{rows.map((r, i) => <tr key={r.uid} className={`${r.checked ? 'selected' : ''} ${dropClass(r.uid)}`} {...bind ? {} : rowProps(r.uid)}>
-								<td><button type="button" className="data-row-handle" disabled={bind} title="끌어서 행 이동" aria-label={`${i + 1}행 이동`} {...bind ? {} : handleProps(r.uid)}>⠿ {i + 1}</button></td>
+								<td><button type="button" className="data-row-handle" disabled={bind} title="끌어서 행 이동" aria-label={`${i + 1}행 이동`} {...bind ? {} : handleProps(r.uid)}><span className="codicon codicon-gripper" aria-hidden="true" /> {i + 1}</button></td>
 								<td><input type="checkbox" aria-label={`${i + 1}행 선택`} disabled={bind} checked={r.checked} onChange={e => update(r.uid, { checked: e.target.checked })} /></td>
 								<td><input aria-label={`${i + 1}행 Label`} disabled={bind} value={r.label} placeholder={params ? 'name' : '항목 이름'} onChange={e => update(r.uid, { label: e.target.value })} /></td>
 								<td><input aria-label={`${i + 1}행 Value`} disabled={bind} value={r.value} placeholder="값" onChange={e => update(r.uid, { value: e.target.value })} /></td>

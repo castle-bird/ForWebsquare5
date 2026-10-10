@@ -360,7 +360,7 @@ export default async function ({ page, pickProperty }) {
 		await page.keyboard.press('Enter');
 		assert.deepEqual(await page.evaluate(() => [document.activeElement?.classList.contains('choices-editor'), document.querySelector('.choices-editor input[aria-label="2행 Value"]').value]), [true, '2'], '선택 항목 팝업도 Enter로 입력칸에서 나옴');
 		await page.evaluate(() => [...document.querySelectorAll('.choices-editor .choices-check')].find(l => l.textContent.includes('All Option')).querySelector('input').click());
-		// 손잡이(⠿)로 2행을 1행 위로 끌어 놓기(DataList와 같은 방식)
+		// 손잡이(Codicon gripper)로 2행을 1행 위로 끌어 놓기(DataList와 같은 방식)
 		const center = sel => page.$eval(sel, el => { const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, top: r.top, bottom: r.bottom, left: r.left }; });
 		const second = await center('.choices-editor button[aria-label="2행 이동"]'), firstRow = await center('.choices-editor tbody tr');
 		await page.mouse.move(second.x, second.y); await page.mouse.down();

@@ -16,6 +16,7 @@ import { componentDropPosition, findPaletteDef, insertPositions } from '../../co
 import type { InsertPosition } from '../../core/paste';
 import canvasCss from './canvas.css';
 import { DataCollection } from './chart';
+import moveIcon from '@vscode/codicons/src/icons/move.svg';
 
 const MOVE_MIME = 'application/x-websquare5-canvas-move';
 let renders = 0;
@@ -638,7 +639,7 @@ function Frame({ page, index, kind, tree, onResize, label }: {
 
 /**
  * 그리드 이동 손잡이(Word 표처럼): 그리드 왼쪽 위 바깥(자리가 없으면 안쪽 모서리). 끌면 그리드 이동, 누르면 그리드 선택.
- * 칸을 끄는 것은 칸 범위 고르기라서 그리드는 이걸로만 옮긴다. 캔버스는 Shadow DOM이라 codicon 대신 SVG
+ * 칸을 끄는 것은 칸 범위 고르기라서 그리드는 이걸로만 옮긴다. 캔버스는 Shadow DOM이라 codicon 글꼴 class 대신 Codicon SVG를 mask로(글자색 = 손잡이 글자색)
  */
 function GridHandle({ page, index, tree, onDragStart, onSelect, onEnter }: {
 	page: RefObject<HTMLDivElement | null>; index: number; tree: ReactNode; onDragStart(e: ReactDragEvent): void; onSelect(): void; onEnter(): void;
@@ -650,7 +651,7 @@ function GridHandle({ page, index, tree, onDragStart, onSelect, onEnter }: {
 	const size = 18, left = rect.left >= size ? rect.left - size : rect.left, top = rect.top >= size ? rect.top - size : rect.top;
 	return <div className="wse-grid-handle" style={{ left, top, width: size, height: size }} draggable role="button" title="그리드 이동(끌기) · 선택(클릭)" aria-label="그리드 이동"
 		onDragStart={onDragStart} onClick={onSelect} onMouseEnter={onEnter}>
-		<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M8 1l2.5 2.5H8.75v3.75h3.75V5.5L15 8l-2.5 2.5V8.75H8.75v3.75h1.75L8 15l-2.5-2.5h1.75V8.75H3.5v1.75L1 8l2.5-2.5v1.75h3.75V3.5H5.5z" /></svg>
+		<span className="wse-grid-move" style={{ maskImage: `url("${moveIcon}")` }} aria-hidden="true" />
 	</div>;
 }
 

@@ -1,5 +1,16 @@
 # 변경 내역
 
+## 0.10.0 (2026-10-10)
+
+### MyBatis
+
+- **SQL 자동완성**: VS Code 편집기에서 연 `.xml` 매퍼의 SQL 본문(select·insert·update·delete·sql 태그 안 글자·CDATA)에서 SQL 키워드·함수(설정 `sqlDialect`, Oracle·PostgreSQL 함수 포함)를 제안. 첫 글자를 대문자로 치면 키워드도 대문자. 연결 탭에도 같은 결과이고, XML 확장이 내는 태그 항목(where 등)은 `MyBatis 태그`로 표시해 SQL 키워드와 구분
+
+### 화면
+
+- **아이콘을 VS Code Codicon으로 통일**: 검색칸 지우기(Property/Event·팔레트), 탭 저장 안 함 표시(circle-filled), 끌기 손잡이(팔레트 즐겨찾기·DataList/DataMap·선택 항목·이력 행, gripper), 그리드 이동 손잡이(move), 연결 탭 자동완성 종류 아이콘(글자 배지 → VS Code와 같은 symbol 아이콘)
+- **ERD 글꼴**: ERD 탭 글자(위 줄·도구·테이블·메모·그룹·도형·선 글자·저장 위치 안내)를 모두 VS Code 편집기 글꼴(종류·크기·굵기)로. 빈 칸 안내 글자의 기울임 제거
+
 ## 0.9.0 (2026-10-10)
 
 ### 새 화면

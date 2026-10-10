@@ -54,7 +54,7 @@ export function PalettePane() {
 					const keys = [...favoriteKeys], at = keys.indexOf(paletteKey(def)), to = keys.indexOf(paletteKey(other));
 					[keys[at], keys[to]] = [keys[to], keys[at]];
 					reorderFavorites(keys);
-				}}>⠿</button>}
+				}}><span className="codicon codicon-gripper" aria-hidden="true" /></button>}
 			<button className="palette-component" data-component={def.realType} title={def.description ?? def.display}
 				disabled={!doc?.root || !!doc.error} draggable={!!doc?.root && !doc.error}
 				aria-haspopup="menu" aria-expanded={!!menu && paletteKey(menu.request.component) === paletteKey(def) && !!menu.anchor.closest('.palette-favorites') === sortable}

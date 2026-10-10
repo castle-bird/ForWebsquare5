@@ -56,6 +56,13 @@ input[type="checkbox"]:not(.switch):indeterminate::before { content: ""; width: 
 input[type="radio"]:checked { border: 5px solid var(--vscode-button-background); background: var(--vscode-button-foreground); }
 input:is([type="checkbox"], [type="radio"]):focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ctl-ring); }
 input:is([type="checkbox"], [type="radio"]):disabled { opacity: .5; cursor: default; }
+/* 검색칸 지우기(브라우저 기본 X) → VS Code Codicon close. 아이콘 모양만 바꾸고 동작(지우면 input 이벤트)은 그대로 */
+input[type="search"]::-webkit-search-cancel-button {
+	appearance: none; width: 16px; height: 16px; margin: 0 -4px 0 4px; cursor: pointer;
+	background: var(--vscode-icon-foreground, currentColor); mask: url('@vscode/codicons/src/icons/close.svg') center / 16px no-repeat;
+	opacity: .8;
+}
+input[type="search"]::-webkit-search-cancel-button:hover { opacity: 1; }
 /* 선택지가 몇 개뿐인 값(Span Direction 등): 버튼 묶음 */
 .segmented { display: inline-flex; align-self: flex-start; height: var(--ctl-height); box-sizing: border-box; border: 1px solid var(--ctl-border); border-radius: var(--ctl-radius); overflow: hidden; }
 .segmented button { display: flex; align-items: center; padding: 0 12px; border: 0; font-size: 12px; line-height: 1; background: none; cursor: pointer; color: var(--vscode-descriptionForeground); }
@@ -93,9 +100,9 @@ input:is([type="checkbox"], [type="radio"]):disabled { opacity: .5; cursor: defa
 .tab-bar button:hover { opacity: 1; background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent); }
 .tab-bar button.active { opacity: 1; background: color-mix(in srgb, var(--vscode-foreground) 14%, transparent); }
 .tab-bar button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
-/* 저장 안 함 표시(●)는 오른쪽 위 모서리에 띄운다(글자와 떨어지게): 자리를 따로 잡지 않아 좌우 여백이 같고, 표시가 생겨도 탭 너비 그대로 */
+/* 저장 안 함 표시(Codicon circle-filled, VS Code 탭과 같음)는 오른쪽 위 모서리에 띄운다(글자와 떨어지게): 자리를 따로 잡지 않아 좌우 여백이 같고, 표시가 생겨도 탭 너비 그대로 */
 .tab-bar button.markable { position: relative; }
-.tab-bar button.markable::after { content: '●'; position: absolute; right: 3px; top: 3px; font-size: .6em; line-height: 1; visibility: hidden; }
+.tab-bar button.markable::after { content: '\ea71'; position: absolute; right: 2px; top: 2px; font: 8px/1 codicon; visibility: hidden; }
 .tab-bar button.dirty::after { visibility: visible; }
 .tab-bar button.dragging { position: relative; z-index: 1; opacity: .6; cursor: grabbing; }
 .tab-bar button.drop-before { box-shadow: inset 2px 0 var(--vscode-focusBorder); }
@@ -131,7 +138,7 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .palette-favorites h2 { margin: 6px 8px; font-size: 12px; font-weight: 600; }
 .palette-favorites .palette-component { padding-left: 4px; }
 .palette-favorite-row { grid-template-columns: 24px minmax(0, 1fr) 30px; }
-.palette-list .palette-drag-handle { width: 24px; padding: 6px 3px; justify-content: center; cursor: grab; user-select: none; touch-action: none; color: var(--vscode-descriptionForeground); font-size: 18px; }
+.palette-list .palette-drag-handle { width: 24px; padding: 6px 3px; justify-content: center; cursor: grab; user-select: none; touch-action: none; color: var(--vscode-descriptionForeground); }
 .palette-drag-handle:active { cursor: grabbing; }
 .palette-favorite-row.drop-before { box-shadow: inset 0 2px var(--vscode-focusBorder); }
 .palette-favorite-row.drop-after { box-shadow: inset 0 -2px var(--vscode-focusBorder); }
@@ -183,7 +190,7 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .code-editor.custom-theme .cm-activeLine { background-color: var(--code-line, color-mix(in srgb, currentColor 7%, transparent)) !important; }
 /* 선택 중에는 현재 줄 배경을 걷는다(불투명한 현재 줄 색이 뒤 층의 선택을 가림, codeEditor selectionClass) */
 .code-editor .cm-editor.cm-has-selection .cm-activeLine { background-color: transparent !important; }
-/* 자동완성 팝업: 둥근 모서리·종류별 색 배지(IntelliJ처럼 C·I·E·m·f…). 색은 VS Code 테마의 심볼 아이콘 색(symbolIcon)을 쓴다.
+/* 자동완성 팝업: 둥근 모서리·종류별 Codicon symbol 아이콘. 색은 VS Code 테마의 심볼 아이콘 색(symbolIcon)을 쓴다.
    고른 코드 테마(custom-theme)는 팝업 색을 테마에 맡기고 모양만 바꾼다 */
 .code-editor .cm-editor .cm-tooltip.cm-tooltip-autocomplete, .code-editor .cm-editor .cm-tooltip.cm-tooltip-autocomplete > ul { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); }
 .code-editor .cm-editor .cm-tooltip.cm-tooltip-autocomplete { padding: 3px; border-radius: 6px; box-shadow: 0 2px 10px var(--vscode-widget-shadow, #0006); }
@@ -214,40 +221,26 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .code-editor:not(.custom-theme) .cm-editor .cm-tooltip-autocomplete li[aria-selected] .cm-completionMatchedText { color: var(--vscode-editorSuggestWidget-focusHighlightForeground, var(--vscode-editorSuggestWidget-highlightForeground)); }
 .code-editor.custom-theme .cm-editor .cm-tooltip-autocomplete ul li:hover:not([aria-selected]) { background: color-mix(in srgb, currentColor 10%, transparent); }
 .code-editor .cm-editor .cm-completionIcon {
-	--ci: var(--vscode-foreground); flex: none; box-sizing: border-box; width: 18px; height: 18px; margin-right: 8px; padding: 0; opacity: 1; display: inline-flex; align-items: center; justify-content: center;
-	border-radius: 4px; font: 700 11px/1 var(--vscode-editor-font-family); color: var(--ci); background: color-mix(in srgb, var(--ci) 20%, transparent); border: 1px solid color-mix(in srgb, var(--ci) 45%, transparent);
+	--ci: var(--vscode-foreground); --cg: '\eb63'; flex: none; width: 16px; margin-right: 6px; padding: 0; opacity: 1; display: inline-flex; align-items: center; justify-content: center;
+	font: 16px/1 codicon; color: var(--ci);
 }
-.code-editor .cm-editor .cm-completionIcon:not([class*="cm-completionIcon-"]) { background: none; border-color: transparent; }
-.code-editor .cm-editor .cm-completionIcon::after { font: inherit; font-size: inherit; vertical-align: baseline; }
-/* 종류별 글자·색·모양: 타입류(C I E T N)는 원, 멤버류(m f p v c)는 둥근 사각 */
-.code-editor .cm-editor .cm-completionIcon-class { --ci: var(--vscode-symbolIcon-classForeground, var(--vscode-foreground)); border-radius: 50%; }
-.code-editor .cm-editor .cm-completionIcon-class::after { content: 'C'; }
-.code-editor .cm-editor .cm-completionIcon-interface { --ci: var(--vscode-symbolIcon-interfaceForeground, var(--vscode-foreground)); border-radius: 50%; }
-.code-editor .cm-editor .cm-completionIcon-interface::after { content: 'I'; }
-.code-editor .cm-editor .cm-completionIcon-enum { --ci: var(--vscode-symbolIcon-enumeratorForeground, var(--vscode-foreground)); border-radius: 50%; }
-.code-editor .cm-editor .cm-completionIcon-enum::after { content: 'E'; }
-.code-editor .cm-editor .cm-completionIcon-type { --ci: var(--vscode-symbolIcon-typeParameterForeground, var(--vscode-foreground)); border-radius: 50%; }
-.code-editor .cm-editor .cm-completionIcon-type::after { content: 'T'; }
-.code-editor .cm-editor .cm-completionIcon-namespace { --ci: var(--vscode-symbolIcon-namespaceForeground, var(--vscode-foreground)); border-radius: 50%; }
-.code-editor .cm-editor .cm-completionIcon-namespace::after { content: 'N'; }
-.code-editor .cm-editor .cm-completionIcon-method { --ci: var(--vscode-symbolIcon-methodForeground, var(--vscode-foreground)); }
-.code-editor .cm-editor .cm-completionIcon-method::after { content: 'm'; }
-.code-editor .cm-editor .cm-completionIcon-function { --ci: var(--vscode-symbolIcon-functionForeground, var(--vscode-foreground)); }
-.code-editor .cm-editor .cm-completionIcon-function::after { content: 'ƒ'; }
-.code-editor .cm-editor .cm-completionIcon-field { --ci: var(--vscode-symbolIcon-fieldForeground, var(--vscode-foreground)); }
-.code-editor .cm-editor .cm-completionIcon-field::after { content: 'f'; }
-.code-editor .cm-editor .cm-completionIcon-property { --ci: var(--vscode-symbolIcon-propertyForeground, var(--vscode-foreground)); }
-.code-editor .cm-editor .cm-completionIcon-property::after { content: 'p'; }
-.code-editor .cm-editor .cm-completionIcon-variable { --ci: var(--vscode-symbolIcon-variableForeground, var(--vscode-foreground)); }
-.code-editor .cm-editor .cm-completionIcon-variable::after { content: 'v'; }
-.code-editor .cm-editor .cm-completionIcon-constant { --ci: var(--vscode-symbolIcon-constantForeground, var(--vscode-foreground)); }
-.code-editor .cm-editor .cm-completionIcon-constant::after { content: 'c'; }
-.code-editor .cm-editor .cm-completionIcon-keyword { --ci: var(--vscode-symbolIcon-keywordForeground, var(--vscode-foreground)); }
-.code-editor .cm-editor .cm-completionIcon-keyword::after { content: 'k'; }
-.code-editor .cm-editor .cm-completionIcon-snippet { --ci: var(--vscode-symbolIcon-snippetForeground, var(--vscode-foreground)); }
-.code-editor .cm-editor .cm-completionIcon-snippet::after { content: 'S'; }
-.code-editor .cm-editor .cm-completionIcon-text { --ci: var(--vscode-symbolIcon-textForeground, var(--vscode-foreground)); }
-.code-editor .cm-editor .cm-completionIcon-text::after { content: 'abc'; font-size: 7px; font-weight: 600; }
+.code-editor .cm-editor .cm-completionIcon::after { content: var(--cg); font: inherit; vertical-align: baseline; }
+.code-editor .cm-editor .cm-completionIcon:not([class*="cm-completionIcon-"])::after { content: none; }
+/* 종류별 아이콘(--cg)·색(--ci): VS Code 자동완성과 같은 Codicon symbol 아이콘과 테마의 심볼 아이콘 색 */
+.code-editor .cm-editor .cm-completionIcon-class { --ci: var(--vscode-symbolIcon-classForeground, var(--vscode-foreground)); --cg: '\eb5b'; }
+.code-editor .cm-editor .cm-completionIcon-interface { --ci: var(--vscode-symbolIcon-interfaceForeground, var(--vscode-foreground)); --cg: '\eb61'; }
+.code-editor .cm-editor .cm-completionIcon-enum { --ci: var(--vscode-symbolIcon-enumeratorForeground, var(--vscode-foreground)); --cg: '\ea95'; }
+.code-editor .cm-editor .cm-completionIcon-type { --ci: var(--vscode-symbolIcon-typeParameterForeground, var(--vscode-foreground)); --cg: '\ea92'; }
+.code-editor .cm-editor .cm-completionIcon-namespace { --ci: var(--vscode-symbolIcon-namespaceForeground, var(--vscode-foreground)); --cg: '\ea8b'; }
+.code-editor .cm-editor .cm-completionIcon-method { --ci: var(--vscode-symbolIcon-methodForeground, var(--vscode-foreground)); --cg: '\ea8c'; }
+.code-editor .cm-editor .cm-completionIcon-function { --ci: var(--vscode-symbolIcon-functionForeground, var(--vscode-foreground)); --cg: '\ea8c'; }
+.code-editor .cm-editor .cm-completionIcon-field { --ci: var(--vscode-symbolIcon-fieldForeground, var(--vscode-foreground)); --cg: '\eb5f'; }
+.code-editor .cm-editor .cm-completionIcon-property { --ci: var(--vscode-symbolIcon-propertyForeground, var(--vscode-foreground)); --cg: '\eb65'; }
+.code-editor .cm-editor .cm-completionIcon-variable { --ci: var(--vscode-symbolIcon-variableForeground, var(--vscode-foreground)); --cg: '\ea88'; }
+.code-editor .cm-editor .cm-completionIcon-constant { --ci: var(--vscode-symbolIcon-constantForeground, var(--vscode-foreground)); --cg: '\eb5d'; }
+.code-editor .cm-editor .cm-completionIcon-keyword { --ci: var(--vscode-symbolIcon-keywordForeground, var(--vscode-foreground)); --cg: '\eb62'; }
+.code-editor .cm-editor .cm-completionIcon-snippet { --ci: var(--vscode-symbolIcon-snippetForeground, var(--vscode-foreground)); --cg: '\eb66'; }
+.code-editor .cm-editor .cm-completionIcon-text { --ci: var(--vscode-symbolIcon-textForeground, var(--vscode-foreground)); --cg: '\ea93'; }
 /* 검색창(Ctrl+F): 고른 코드 테마(custom-theme)면 테마 배경·글자색을 섞어 쓴다(자동완성 팝업과 같음) */
 /* 찾기 일치 표시: 테마(VS Code 다크·라이트)가 일치 글자를 한 색으로 칠하고, 지금 일치는 진한 배경·여백까지 넣는다.
    지금 일치는 이미 선택돼 선택 색으로 보이므로 따로 칠하지 않고, 글자는 원래 문법 색 그대로 */
@@ -500,7 +493,8 @@ button.icon.tree-problems { display: inline-flex; align-items: center; gap: 3px;
 .data-editor-body tr.selected { background: var(--vscode-list-activeSelectionBackground); }
 .data-editor-body tr.drop-before { box-shadow: inset 0 2px var(--vscode-focusBorder); }
 .data-editor-body tr.drop-after { box-shadow: inset 0 -2px var(--vscode-focusBorder); }
-.data-row-handle { width: 100%; padding: 4px 0; border: 0; background: none; cursor: grab; user-select: none; touch-action: none; font-size: 11px; color: var(--vscode-descriptionForeground); }
+.data-row-handle { width: 100%; padding: 4px 0; border: 0; background: none; cursor: grab; user-select: none; touch-action: none; display: inline-flex; align-items: center; justify-content: center; gap: 2px; font-size: 11px; color: var(--vscode-descriptionForeground); }
+.data-row-handle .codicon { font-size: 12px; }
 .data-row-handle:active { cursor: grabbing; }
 .data-editor-body input:not([type="checkbox"]), .data-editor-body select {
 	box-sizing: border-box; width: 100%; min-width: 0; padding: 4px 8px; border: 0;
@@ -753,13 +747,16 @@ textarea.edit.style-value {
 /* ── ERD 탭(탭 줄 오른쪽 고정) > 사용 테이블: 위 줄(저장 위치, ui/usedTablesPane.tsx), 아래 그림 전체(ui/usedTablesDiagram.tsx) ── */
 .canvas-frame > .tab-body:has(.used-tables) { padding: 0; overflow: hidden; }
 .used-tables { --crud-C: #3b82d6; --crud-R: #3fa66b; --crud-U: #c9781c; --crud-D: #d65b5b; height: 100%; display: flex; flex-direction: column; }
-.used-tables-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 12px; }
+/* ERD 탭 글자는 모두 VS Code 편집기 글꼴(종류·크기·굵기). 안쪽은 따로 정하지 않고 물려받는다(작은 숫자 키 표시·확대 비율만 예외) */
+.used-tables, .used-tables-setup { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); font-weight: var(--vscode-editor-font-weight); }
+.used-tables :is(.btn, .btn-tool), .used-tables-setup .btn { font-size: inherit; }
+.used-tables-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--vscode-panel-border); }
 .used-tables-bar .title { font-weight: 600; }
 .used-tables-bar .where { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground); direction: rtl; text-align: left; }
 /* 처음 열 때 저장 위치 고르기 */
 .used-tables-setup { max-width: 520px; margin: 40px auto; padding: 20px; border: 1px solid var(--vscode-panel-border); border-radius: 8px; }
-.used-tables-setup h3 { margin: 0 0 8px; font-size: 14px; }
-.used-tables-setup p { margin: 0 0 14px; color: var(--vscode-descriptionForeground); font-size: 12px; }
+.used-tables-setup h3 { margin: 0 0 8px; font-size: inherit; }
+.used-tables-setup p { margin: 0 0 14px; color: var(--vscode-descriptionForeground); }
 .setup-actions { display: flex; gap: 8px; }
 /* 테이블·메모·그룹·도형 색: 이름만 저장하고 색은 VS Code 테마 charts·터미널 색(없으면 VS Code 기본 어두운 테마 값) */
 .note-yellow { --note: var(--vscode-charts-yellow, #cca700); }
@@ -818,28 +815,28 @@ textarea.edit.style-value {
 /* 왼쪽 위 도구 줄(추가·되돌리기·도움말)과 도움말·빈 그림 안내 */
 .used-tables-flow .flow-toolbar { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 8px;
 	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border: 1px solid var(--vscode-panel-border); box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, .2)); }
-.flow-tool { display: inline-flex; align-items: center; gap: 4px; height: 26px; min-width: 26px; justify-content: center; padding: 0 6px; font: inherit; font-size: 12px; cursor: pointer;
+.flow-tool { display: inline-flex; align-items: center; gap: 4px; height: 26px; min-width: 26px; justify-content: center; padding: 0 6px; font: inherit; cursor: pointer;
 	color: var(--vscode-foreground); background: none; border: 0; border-radius: 5px; }
 .flow-tool:hover:not(:disabled), .flow-tool[aria-pressed="true"] { background: var(--vscode-toolbar-hoverBackground); }
 .flow-tool:disabled { opacity: .4; cursor: default; }
 .flow-tool .codicon { font-size: 15px; }
 .flow-sep { width: 1px; height: 18px; margin: 0 3px; background: var(--vscode-panel-border); }
-.used-tables-flow .flow-help { margin-top: 48px; max-width: 420px; padding: 8px 12px; border-radius: 8px; font-size: 11px; line-height: 1.8; color: var(--vscode-descriptionForeground);
+.used-tables-flow .flow-help { margin-top: 48px; max-width: 420px; padding: 8px 12px; border-radius: 8px; line-height: 1.8; color: var(--vscode-descriptionForeground);
 	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border: 1px solid var(--vscode-panel-border); box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, .2)); }
 .used-tables-flow .flow-help ul { margin: 0; padding-left: 14px; }
 .used-tables-flow .flow-help b { font-weight: 600; color: var(--vscode-foreground); }
-.used-tables-flow .flow-empty { margin-top: 30vh; text-align: center; font-size: 12px; color: var(--vscode-descriptionForeground); }
+.used-tables-flow .flow-empty { margin-top: 30vh; text-align: center; color: var(--vscode-descriptionForeground); }
 .used-tables-flow .flow-empty p { margin: 0 0 10px; }
 
 /* 그림 안 글자 칸: 평소 글자, 더블클릭하면 입력칸(같은 자리·크기) */
 .used-tables-flow .field { min-width: 1ch; border-radius: 3px; white-space: nowrap; }
-.used-tables-flow .field.placeholder { color: var(--vscode-input-placeholderForeground, var(--vscode-descriptionForeground)); font-style: italic; font-weight: 400; opacity: .7; }
+.used-tables-flow .field.placeholder { color: var(--vscode-input-placeholderForeground, var(--vscode-descriptionForeground)); opacity: .7; }
 .used-tables-flow .field-input { box-sizing: border-box; max-width: 100%; min-width: 0; margin: -2px -4px; padding: 1px 3px; font: inherit; color: var(--vscode-input-foreground);
 	background: var(--vscode-input-background); border: 1px solid var(--vscode-focusBorder); border-radius: 3px; outline: none; }
 
 /* CRUD: 켠 것만 색(등록 파랑·조회 초록·수정 주황·삭제 빨강) */
 .used-table-node .crud { display: flex; gap: 3px; margin-top: 4px; }
-.used-table-node .crud :is(span, button) { padding: 0 4px; font: inherit; font-size: 12px; line-height: 18px; border-radius: 3px; border: 1px solid transparent; }
+.used-table-node .crud :is(span, button) { padding: 0 4px; font: inherit; line-height: 18px; border-radius: 3px; border: 1px solid transparent; }
 .used-table-node .crud button { cursor: pointer; color: var(--vscode-descriptionForeground); background: none; border-color: var(--vscode-panel-border); }
 .used-table-node .crud button[aria-pressed="false"]:hover { border-color: var(--vscode-focusBorder); }
 .used-table-node .crud .crud-C:is(span, [aria-pressed="true"]) { color: #fff; background: var(--crud-C); border-color: var(--crud-C); }
@@ -848,7 +845,7 @@ textarea.edit.style-value {
 .used-table-node .crud .crud-D:is(span, [aria-pressed="true"]) { color: #fff; background: var(--crud-D); border-color: var(--crud-D); }
 
 /* ERD 박스: 위 테이블 머리(이름·설명·CRUD), 아래 컬럼 줄(PK·이름·설명·타입 열 맞춤, PK 먼저, PK 아래 점선), 맨 아래 컬럼 추가·PK만 보기 */
-.used-table-node { min-width: 200px; max-width: 720px; border-radius: 6px; font-size: 14px; color: var(--vscode-editor-foreground);
+.used-table-node { min-width: 200px; max-width: 720px; border-radius: 6px; color: var(--vscode-editor-foreground);
 	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border: 1px solid var(--vscode-panel-border);
 	box-shadow: 0 1px 4px var(--vscode-widget-shadow, rgba(0, 0, 0, .2)); transition: border-color .12s, box-shadow .12s; }
 .used-table-node.selected { border-color: var(--vscode-focusBorder); box-shadow: 0 0 0 1px var(--vscode-focusBorder); }
@@ -857,19 +854,19 @@ textarea.edit.style-value {
 .used-table-node.colored .head { background: color-mix(in srgb, var(--note) 14%, transparent); }
 .used-table-node.colored.selected { border-color: var(--vscode-focusBorder); border-top-color: var(--note); }
 .used-table-node .head { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 10px; }
-.used-table-node .name { font-weight: 600; font-family: var(--vscode-editor-font-family); }
-.used-table-node .desc { color: var(--vscode-descriptionForeground); font-size: 13px; }
+.used-table-node .name { font-weight: 600; }
+.used-table-node .desc { color: var(--vscode-descriptionForeground); }
 .used-table-node .columns { display: grid; grid-template-columns: 26px auto auto auto 16px; column-gap: 8px; list-style: none; margin: 0; padding: 2px 0;
-	border-top: 1px solid var(--vscode-panel-border); font-family: var(--vscode-editor-font-family); font-size: 13px; }
+	border-top: 1px solid var(--vscode-panel-border); }
 .used-table-node .columns li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; min-height: 24px; padding: 0 6px 0 10px; }
 .used-table-node .columns li:hover { background: var(--vscode-list-hoverBackground); }
 .used-table-node .columns li.last { border-bottom: 1px dashed var(--vscode-panel-border); }
-.used-table-node .columns .key { padding: 0; font: inherit; font-size: 11px; font-weight: 700; text-align: left; cursor: pointer; background: none; border: 0; color: transparent; }
+.used-table-node .columns .key { padding: 0; font: inherit; font-weight: 700; text-align: left; cursor: pointer; background: none; border: 0; color: transparent; }
 .used-table-node .columns .key[aria-pressed="true"] { color: var(--vscode-charts-yellow, #d7ba7d); }
 .used-table-node .columns li:hover .key[aria-pressed="false"] { color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground)); }
 .used-table-node .columns .col-name { min-width: 24px; }
 .used-table-node .columns li.pk .col-name { font-weight: 600; }
-.used-table-node .columns .col-desc { min-width: 16px; font-family: var(--vscode-font-family); color: var(--vscode-descriptionForeground); }
+.used-table-node .columns .col-desc { min-width: 16px; color: var(--vscode-descriptionForeground); }
 .used-table-node .columns .col-type { min-width: 16px; color: var(--vscode-descriptionForeground); }
 /* 비어 있는 설명·타입은 박스를 고르거나 줄에 올렸을 때만 자리 표시 글자 */
 .used-table-node:not(.selected) .columns li:not(:hover) :is(.col-desc, .col-type).placeholder { color: transparent; }
@@ -877,19 +874,19 @@ textarea.edit.style-value {
 .used-table-node .columns li:hover .col-remove { visibility: visible; }
 .used-table-node .col-remove:hover { color: var(--vscode-errorForeground); }
 .used-table-node .foot { display: flex; border-top: 1px solid var(--vscode-panel-border); }
-.used-table-node .foot button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 3px; padding: 4px 0; font: inherit; font-size: 12px; cursor: pointer; border: 0;
+.used-table-node .foot button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 3px; padding: 4px 0; font: inherit; cursor: pointer; border: 0;
 	color: var(--vscode-textLink-foreground); background: none; }
 .used-table-node .foot button + button { border-left: 1px solid var(--vscode-panel-border); }
 .used-table-node .foot button:hover { background: var(--vscode-toolbar-hoverBackground); }
 .used-table-node .foot .codicon { font-size: 14px; }
 
 /* 메모지: 테마 색을 옅게 깐 종이 */
-.used-memo { box-sizing: border-box; width: 100%; height: 100%; overflow: hidden; padding: 8px 10px; border-radius: 4px; font-size: 12px; line-height: 1.5; color: var(--vscode-editor-foreground);
+.used-memo { box-sizing: border-box; width: 100%; height: 100%; overflow: hidden; padding: 8px 10px; border-radius: 4px; line-height: 1.5; color: var(--vscode-editor-foreground);
 	background: color-mix(in srgb, var(--note) 22%, var(--vscode-editor-background)); border: 1px solid color-mix(in srgb, var(--note) 55%, transparent);
 	box-shadow: 0 2px 6px var(--vscode-widget-shadow, rgba(0, 0, 0, .2)); }
 .used-memo.selected { border-color: var(--vscode-focusBorder); }
 .used-memo .memo-text { white-space: pre-wrap; overflow-wrap: anywhere; }
-.used-memo .memo-text.placeholder { font-style: italic; color: var(--vscode-descriptionForeground); }
+.used-memo .memo-text.placeholder { color: var(--vscode-descriptionForeground); }
 .used-memo .memo-input { box-sizing: border-box; display: block; width: calc(100% + 8px); height: calc(100% + 8px); margin: -4px; padding: 3px; resize: none; font: inherit; line-height: inherit; color: inherit;
 	background: color-mix(in srgb, var(--vscode-editor-background) 40%, transparent); border: 1px solid var(--vscode-focusBorder); border-radius: 3px; outline: none; }
 
@@ -900,7 +897,7 @@ textarea.edit.style-value {
 .used-group .group-handle { box-sizing: border-box; display: inline-flex; max-width: 100%; min-width: 120px; padding: 6px 24px 14px 8px; border-radius: 10px 0 10px 0;
 	pointer-events: all; cursor: pointer; user-select: none; -webkit-user-drag: none; }
 .used-group .group-handle:hover { background: color-mix(in srgb, var(--note) 10%, transparent); }
-.used-group .group-title { display: inline-flex; align-items: center; gap: 5px; min-width: 0; padding: 2px 8px; border-radius: 5px; font-size: 12px; font-weight: 600;
+.used-group .group-title { display: inline-flex; align-items: center; gap: 5px; min-width: 0; padding: 2px 8px; border-radius: 5px; font-weight: 600;
 	color: var(--vscode-editor-foreground); background: color-mix(in srgb, var(--note) 25%, var(--vscode-editor-background)); }
 .used-group .group-title .codicon { font-size: 13px; color: var(--note); }
 .used-tables-flow .react-flow__node-group-frame .react-flow__resize-control { pointer-events: all; }
@@ -914,12 +911,12 @@ textarea.edit.style-value {
 .used-shape svg > * { fill: color-mix(in srgb, var(--note) 15%, transparent); stroke: var(--note); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .used-shape.selected svg > * { stroke: var(--vscode-focusBorder); }
 .used-shape .shape-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 8px; overflow: hidden; text-align: center;
-	font-size: 12px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--vscode-editor-foreground); pointer-events: none; }
+	line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--vscode-editor-foreground); pointer-events: none; }
 .used-shape .shape-text .memo-input { width: 100%; height: 100%; margin: 0; text-align: center; pointer-events: all; }
 .used-tables-flow .react-flow__minimap-node.shape { fill: var(--vscode-charts-blue, #3794ff); opacity: .5; }
 
 /* 선 가운데 글자 */
-.used-tables-flow .link-label { position: absolute; pointer-events: all; padding: 1px 6px; border-radius: 4px; font-size: 11px; color: var(--vscode-editor-foreground);
+.used-tables-flow .link-label { position: absolute; pointer-events: all; padding: 1px 6px; border-radius: 4px; color: var(--vscode-editor-foreground);
 	background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); }
 
 /* 커서 줄 끝 Git blame(editor/blame.ts): VS Code 줄 끝 blame 색 */

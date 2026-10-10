@@ -36,7 +36,7 @@ export function InfoPane({ head, onAttr, onHistory }: { head: XmlNode; onAttr(na
 		if (JSON.stringify(plain) !== savedKey) { onHistory(plain); }
 	};
 	const update = (next: Row[]) => { setRows(next); commit(next); };
-	// 손잡이(⠿)로 끌어 순서 바꾸기: 놓으면 바로 반영
+	// 손잡이(Codicon gripper)로 끌어 순서 바꾸기: 놓으면 바로 반영
 	const { handleProps, rowProps, dropClass } = useRowDrag<Row>(change => update(typeof change === 'function' ? change(rows) : change), setSelected);
 	const add = () => {
 		const no = Math.max(0, ...rows.map(r => Number(r.no) || 0)) + 1, uid = Math.max(-1, ...rows.map(r => r.uid)) + 1;
@@ -69,7 +69,7 @@ export function InfoPane({ head, onAttr, onHistory }: { head: XmlNode; onAttr(na
 						<colgroup><col style={{ width: 48 }} /><col style={{ width: 90 }} /><col /><col style={{ width: 120 }} /><col style={{ width: 120 }} /></colgroup>
 						<thead><tr><th>No</th>{HISTORY_COLUMNS.map(([key, label]) => <th key={key}>{label}</th>)}</tr></thead>
 						<tbody>{rows.map((row, i) => <tr key={row.uid} className={`${selected === row.uid ? 'selected' : ''} ${dropClass(row.uid)}`} onClick={() => setSelected(row.uid)} {...rowProps(row.uid)}>
-							<td><button type="button" className="data-row-handle" title="끌어서 순서 변경" aria-label={`${i + 1}행 이동`} {...handleProps(row.uid)}>⠿ {i + 1}</button></td>
+							<td><button type="button" className="data-row-handle" title="끌어서 순서 변경" aria-label={`${i + 1}행 이동`} {...handleProps(row.uid)}><span className="codicon codicon-gripper" aria-hidden="true" /> {i + 1}</button></td>
 							{HISTORY_COLUMNS.map(([key, label]) => {
 								const common = { 'aria-label': `${i + 1}행 ${label}`, onFocus: () => setSelected(row.uid) };
 								const set = (v: string) => setRows(current => current.map(r => r.uid === row.uid ? { ...r, [key]: v } : r));

@@ -64,7 +64,7 @@ export default async function ({ page }) {
 			return ['2행 개정번호', '2행 제/개정 일자', '2행 제/개정자'].every(l => Math.abs(mid(cell(l)) - mid(row)) < 2); }), '내용이 여러 줄이어도 다른 칸은 세로 가운데');
 		await page.keyboard.press('Tab');
 		assert.equal(await page.evaluate(() => window.sent.findLast(m => m.type === 'editHistory').rows[1].desc), '수정\n둘째 줄', '칸에서 나오면 반영');
-		// 손잡이(⠿)로 2행을 1행 위로 끌면 바로 반영
+		// 손잡이(Codicon gripper)로 2행을 1행 위로 끌면 바로 반영
 		const historyHandle = await page.$eval('.info-pane button[aria-label="2행 이동"]', b => { const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
 		const firstRowTop = await page.$eval('.info-pane tbody tr', tr => tr.getBoundingClientRect().top);
 		await page.mouse.move(historyHandle.x, historyHandle.y); await page.mouse.down();

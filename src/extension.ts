@@ -26,12 +26,14 @@ import { blameFeed, blameText, onGitChange, stagedText } from './vscode/gitBase'
 import { lineOfOffset, sliceBlame } from './core/blame';
 import { insertFromPalette, paletteFavorites, savePaletteFavorite, reorderPaletteFavorites } from './vscode/palette';
 import { createScreen } from './vscode/createScreen';
+import { registerSqlCompletion } from './vscode/sqlCompletion';
 
 export const VIEW_TYPE = 'websquare5-editor.designer';
 
 export function activate(context: vscode.ExtensionContext) {
 	registerSetup(context);
 	registerLinks(context);
+	registerSqlCompletion(context);
 	registerCodeTheme(context, msg => panels.forEach(p => void p.webview.postMessage(msg)));
 	context.subscriptions.push(
 		vscode.commands.registerCommand('websquare5-editor.createFile', createScreen),

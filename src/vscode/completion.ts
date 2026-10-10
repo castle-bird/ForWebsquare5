@@ -1,6 +1,7 @@
 // 연결 탭 자동완성: VS Code에 설치된 언어 확장(Java 언어 서버·XML 등)의 자동완성 결과를 웹뷰 편집기 모양으로 바꾼다
 import * as vscode from 'vscode';
 import type { CodeChange, RemoteCompletions, SignatureInfo } from '../core/protocol';
+import { isMapper } from '../core/sqlCompletion';
 
 const K = vscode.CompletionItemKind;
 // CodeMirror 아이콘 종류(type)로. 없는 종류는 기본 아이콘
@@ -75,6 +76,8 @@ export async function remoteCompletions(document: vscode.TextDocument, line: num
 	if (!list || !items.length) {
 		return undefined;
 	}
+	// 설명 없는 태그 넣기(XML 확장의 where 등)는 SQL 키워드와 이름이 같아도 구분되게
+	const tagDetail = document.languageId === 'xml' ? isMapper(own) ? 'MyBatis 태그' : 'XML 태그' : undefined;
 	const first = items[0].range, start = first && ('inserting' in first ? first.inserting : first).start;
 	return {
 		from: start && { line: start.line, ch: start.character },
@@ -82,14 +85,14 @@ export async function remoteCompletions(document: vscode.TextDocument, line: num
 		items: items.slice(0, MAX_ITEMS).map(item => {
 			const label = labelOf(item);
 			const details = typeof item.label === 'string' ? undefined : item.label;
-			const insert = item.insertText ?? label;
+			const insert = item.insertText ?? label, inserted = typeof insert === 'string' ? insert : insert.value;
 			return {
 				label: item.filterText ?? label,
 				display: label + (details?.detail ?? ''),
 				type: item.kind === undefined ? undefined : TYPES.get(item.kind),
-				detail: details?.description ?? item.detail,
+				detail: details?.description ?? item.detail ?? (inserted.startsWith('<') ? tagDetail : undefined),
 				info: text(item.documentation),
-				insert: typeof insert === 'string' ? insert : insert.value,
+				insert: inserted,
 				snippet: typeof insert !== 'string',
 				sort: item.sortText,
 				edits: item.additionalTextEdits?.map(toChange),

@@ -191,16 +191,16 @@ export default async function ({ page, modifiedKey, reset, checkIndentUnit, cont
 	await page.waitForFunction(n => document.querySelectorAll('.cm-tooltip-autocomplete li').length === n, {timeout: 4000}, kinds.length + 1);
 	const icons = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.cm-tooltip-autocomplete li')].map(li => {
 		const icon = li.querySelector('.cm-completionIcon'), style = getComputedStyle(icon);
-		return [li.querySelector('.cm-completionLabel').textContent, { letter: getComputedStyle(icon, '::after').content.replace(/"/g, ''), round: style.borderTopLeftRadius === '50%' || parseFloat(style.borderTopLeftRadius) >= 9, color: style.color }];
+		return [li.querySelector('.cm-completionLabel').textContent, { letter: getComputedStyle(icon, '::after').content.replace(/"/g, ''), font: style.fontFamily, color: style.color }];
 	})));
-	assert.deepEqual(Object.fromEntries(kinds.map(k => [k, icons['icon' + k]?.letter])), { class: 'C', interface: 'I', enum: 'E', type: 'T', namespace: 'N', method: 'm', field: 'f', property: 'p', variable: 'v', constant: 'c', function: 'ƒ', keyword: 'k', snippet: 'S' }, '종류별 아이콘 글자');
-	assert.deepEqual(['class', 'interface', 'enum', 'type', 'namespace'].filter(k => !icons['icon' + k].round), [], '타입류는 원');
-	assert.deepEqual(['method', 'field', 'property', 'variable', 'constant', 'function'].filter(k => icons['icon' + k].round), [], '멤버류는 둥근 사각');
+	const glyph = code => String.fromCharCode(code);
+	assert.deepEqual(Object.fromEntries(kinds.map(k => [k, icons['icon' + k]?.letter])), { class: glyph(0xeb5b), interface: glyph(0xeb61), enum: glyph(0xea95), type: glyph(0xea92), namespace: glyph(0xea8b), method: glyph(0xea8c), field: glyph(0xeb5f), property: glyph(0xeb65), variable: glyph(0xea88), constant: glyph(0xeb5d), function: glyph(0xea8c), keyword: glyph(0xeb62), snippet: glyph(0xeb66) }, '종류별 Codicon symbol 아이콘');
+	assert.ok(icons.iconclass.font.includes('codicon'), 'Codicon 글꼴');
 	assert.notEqual(icons.iconclass.color, icons.iconmethod.color, '종류마다 색이 다름(VS Code 심볼 아이콘 색)');
-	assert.equal(icons.iconNone.letter, 'none', '종류 없으면 글자 없음');
+	assert.equal(icons.iconNone.letter, 'none', '종류 없으면 아이콘 없음');
 	await page.keyboard.press('Escape');
 	await page.evaluate(() => { window.remoteItems = undefined; });
-	console.log('Link: 자동완성 아이콘(종류별 글자·모양·색) passed');
+	console.log('Link: 자동완성 아이콘(종류별 Codicon·색) passed');
 	// 키 입력: Tab은 커서 자리에 다음 4칸 자리까지(줄 전체가 아니라), Java Enter는 윗줄 기준(+ { 뒤 한 단계, } 앞 한 단계 덜), XML 태그 자동 닫기
 	const typed = async (doc, pos, keys) => {
 		await page.evaluate((d, p) => { const v = window.editor(); v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: d }, selection: { anchor: p } }); v.focus(); }, doc, pos);

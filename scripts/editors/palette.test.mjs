@@ -241,7 +241,7 @@ export default async function ({ clickTab, page, lastSent }) {
 	assert.equal(await page.$$eval('.palette-favorites [data-component]', bs => bs.length), 2);
 	const favoriteOrder = () => page.$$eval('.palette-favorites .palette-component', buttons => buttons.map(b => b.dataset.component));
 	assert.deepEqual(await favoriteOrder(), ['radio', 'selectbox']);
-	assert.equal(await page.$eval('.palette-favorites .palette-drag-handle', b => b.textContent), '⠿', 'DataList와 같은 손잡이');
+	assert.ok(await page.$eval('.palette-favorites .palette-drag-handle', b => !!b.querySelector('.codicon-gripper')), 'DataList와 같은 손잡이(Codicon gripper)');
 	await page.evaluate(() => { window.sent.length = 0; });
 	const selectHandle = await page.$('.palette-favorites .palette-row:has([data-component="selectbox"]) .palette-drag-handle');
 	const radioRow = await page.$('.palette-favorites .palette-row:has([data-component="radio"])');

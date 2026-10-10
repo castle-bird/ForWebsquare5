@@ -1,4 +1,4 @@
-// 표 행을 손잡이(⠿)로 끌어 순서 바꾸기(DataList·DataMap, 선택 항목 팝업, 팔레트 즐겨찾기). 놓을 자리는 행의 위·아래 절반
+// 표 행을 손잡이(Codicon gripper)로 끌어 순서 바꾸기(DataList·DataMap, 선택 항목 팝업, 팔레트 즐겨찾기). 놓을 자리는 행의 위·아래 절반
 // 브라우저 끌기(draggable)는 끄는 동안 휠을 막아서 포인터 이벤트로 끈다: 휠로 굴리거나 목록 위·아래 가장자리로 가져가면 스크롤
 import { useRef, useState, type Dispatch, type PointerEvent, type SetStateAction } from 'react';
 import { capturePointer } from './pointerCapture';

@@ -95,7 +95,7 @@ export function DataEditor({ node, externalError, offsetIndex = 0, onApply, onCl
 						}} onPointerUp={() => columnDrag.current = undefined} onPointerCancel={() => columnDrag.current = undefined} />}</th>)}</tr></thead><tbody>
 					{rows.map((row, i) => <tr key={row.uid} className={`${selected === row.uid ? 'selected' : ''} ${dropClass(row.uid)}`}
 						onClick={() => setSelected(row.uid)} {...rowProps(row.uid)}>
-						<td><button className="data-row-handle" title="끌어서 행 이동" aria-label={`${i + 1}행 이동`} {...handleProps(row.uid)}>⠿ {i + 1}</button></td>
+						<td><button className="data-row-handle" title="끌어서 행 이동" aria-label={`${i + 1}행 이동`} {...handleProps(row.uid)}><span className="codicon codicon-gripper" aria-hidden="true" /> {i + 1}</button></td>
 						<td><input aria-label={`${i + 1}행 id`} value={row.id} onChange={e => update(row.uid, { id: e.target.value })} /></td>
 						<td><input aria-label={`${i + 1}행 name`} value={row.name} onChange={e => update(row.uid, { name: e.target.value })} /></td>
 						<td><select aria-label={`${i + 1}행 dataType`} value={row.dataType} onChange={e => update(row.uid, { dataType: e.target.value })}>{DATA_TYPES.map(type => <option key={type}>{type}</option>)}</select></td>
