@@ -18,6 +18,14 @@
 .wse-unknown, .wse-todo { border: 1px dashed #999; min-height: 20px; padding: 2px; box-sizing: border-box; }
 .wse-unknown::before, .wse-todo::before { content: attr(data-tag); font: 11px monospace; color: #888; }
 .wse-overlay { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
+.wse-spacing { position: absolute; overflow: hidden; pointer-events: none; }
+.wse-spacing .padding { fill: rgb(147 196 125 / 55%); }
+.wse-spacing .margin { fill: rgb(246 178 107 / 55%); }
+.wse-measure { position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden; pointer-events: none; color: #c72b78; }
+.wse-measure line, .wse-measure path { stroke: currentColor; stroke-width: 1; fill: none; }
+.wse-measure .guide { stroke-dasharray: 3 3; opacity: .6; }
+.wse-measure rect { fill: currentColor; stroke: currentColor; }
+.wse-measure text { fill: #fff; font: 12px var(--vscode-editor-font-family, monospace); }
 .wse-frame { position: absolute; box-sizing: border-box; }
 .wse-frame.selected { outline: 2px solid var(--vscode-focusBorder); }
 .wse-frame.selected.extra { outline-style: dashed; }
@@ -89,7 +97,7 @@
 .wse-badges > span { width: 5px; height: 5px; border-radius: 50%; box-shadow: 0 0 0 1px #fff; }
 .wse-badges > .bind { background: #8fd19e; }
 .wse-badges > .event { background: #f4a09a; }
-.wse-chip { position: absolute; max-width: 100%; box-sizing: border-box; padding: 0 8px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 14px/22px var(--vscode-font-family, sans-serif); color: var(--vscode-button-foreground, #fff); background: var(--vscode-focusBorder); transition: opacity .12s; }
+.wse-chip { position: absolute; max-width: 100%; box-sizing: border-box; padding: 0 8px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 14px/22px var(--vscode-editor-font-family, monospace); color: var(--vscode-button-foreground, #fff); background: var(--vscode-focusBorder); transition: opacity .12s; }
 .wse-chip.faded { opacity: .15; }
 
 /* 입력칸 + 고를 값 목록(ui/combo.tsx). 캔버스 편집 상자처럼 늘 밝게(테마를 따르지 않음) */

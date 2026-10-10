@@ -62,4 +62,43 @@ export default async function ({ page }) {
 		}
 		console.log('Outline: 실제 끌기·표시(선·부모 강조), 옮긴 뒤 선택·펼침 유지 passed');
 	}
+	// 긴 id·class가 만드는 가로 스크롤에서도 짧은 줄까지 배경이 끝을 채운다.
+	await page.evaluate(() => {
+		const long = 'long_' + 'component'.repeat(12);
+		const text = '<html xmlns:t="urn:test" xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms"><head><xf:model><w2:dataCollection><w2:dataMap id="' + long + '"/><w2:dataMap id="dataShort"/></w2:dataCollection></xf:model></head><body><t:group id="' + long + '" class="' + 'layout-class '.repeat(20) + '"><t:input id="outlineShort"/></t:group></body></html>';
+		window.send({ type: 'document', version: 200003, text, root: window.parseXml(text), script: { text: '' } });
+	});
+	for (const tab of ['Outline', 'Data']) {
+		await page.evaluate(tab => window.tab(tab, '.pane').click(), tab);
+		await page.evaluate(() => [...document.querySelectorAll('.pane .codicon-expand-all')].find(b => b.offsetParent)?.click());
+		const id = tab === 'Outline' ? 'outlineShort' : 'dataShort';
+		await page.waitForFunction(id => [...document.querySelectorAll('.pane .tree-row .id')].some(el => el.textContent === id), {}, id);
+		await page.evaluate(id => [...document.querySelectorAll('.pane .tree-row')].find(row => row.querySelector('.id')?.textContent === id).click(), id);
+		await page.waitForFunction(id => document.querySelector('.pane .tree-row.selected .id')?.textContent === id, {}, id);
+		for (const ratio of [0, .5, 1]) {
+			await page.evaluate(id => [...document.querySelectorAll('.pane .tree-row')].find(row => row.querySelector('.id')?.textContent === id).click(), id);
+			await page.evaluate(ratio => { const pane = document.querySelector('.pane [role="tree"]').closest('.tab-body'); pane.scrollLeft = (pane.scrollWidth - pane.clientWidth) * ratio; }, ratio);
+			const state = await page.evaluate(id => {
+				const tree = document.querySelector('.pane [role="tree"]'), pane = tree.closest('.tab-body'), clip = pane.getBoundingClientRect();
+				const row = [...tree.querySelectorAll('.tree-row')].find(row => row.querySelector('.id')?.textContent === id);
+				return { max: pane.scrollWidth - pane.clientWidth, end: clip.left + pane.clientLeft + pane.clientWidth - 5, right: row.getBoundingClientRect().right, x: clip.left + pane.clientLeft + pane.clientWidth - 10, y: row.getBoundingClientRect().top + 12 };
+			}, id);
+			assert.ok(state.max > 100, tab + ': 가로 스크롤 재현');
+			assert.ok(state.right >= state.end - 1, tab + ': 선택 배경이 보이는 오른쪽 끝까지 채움, scroll=' + ratio);
+			await page.mouse.move(state.x, state.y);
+			assert.equal(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('.tree-row')?.querySelector('.id')?.textContent, state), id, tab + ': 오른쪽 빈 공간도 같은 행');
+			// 선택을 옮긴 후에도 오른쪽 빈 공간까지 hover가 유지된다.
+			await page.evaluate(ratio => {
+				const tree = document.querySelector('.pane [role="tree"]'), pane = tree.closest('.tab-body');
+				[...tree.querySelectorAll('.tree-row')].find(row => row.querySelector('.id')?.textContent.startsWith('long_')).click();
+				pane.scrollLeft = (pane.scrollWidth - pane.clientWidth) * ratio;
+			}, ratio);
+			assert.ok(await page.evaluate(id => {
+				const rows = [...document.querySelectorAll('.pane .tree-row')], row = rows.find(row => row.querySelector('.id')?.textContent === id);
+				return row.matches(':hover') && !row.classList.contains('selected') && rows.every(other => Math.abs(other.getBoundingClientRect().width - row.getBoundingClientRect().width) < 1);
+			}, id), tab + ': hover·선택 행은 같은 전체 폭');
+		}
+	}
+	console.log('Outline·Data: 긴 id·class, 좌·중간·우 가로 스크롤에서 hover·선택 배경 전체 폭 passed');
+
 }

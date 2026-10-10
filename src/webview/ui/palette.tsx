@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { ComponentDef, ToExtension } from '../../core/protocol';
-import { matchPalette, paletteDefs, paletteKey } from '../../core/palette';
+import { insertPositions, insertTarget, INSERT_POSITION_LABELS, matchPalette, paletteDefs, paletteKey } from '../../core/palette';
+import { pathTo } from '../../core/xmlModel';
+import type { InsertPosition } from '../../core/paste';
+import { Menu } from './menu';
 import { COMPONENT_ICONS } from '../../core/icons';
 import { post, useEditorStore } from '../store';
 import { useRowDrag } from './rowDrag';
@@ -30,6 +33,7 @@ export function PalettePane() {
 		const next = typeof update === 'function' ? update(current) : update;
 		if (next !== current) { reorderFavorites(next.map(row => row.uid)); }
 	});
+	const [menu, setMenu] = useState<{ anchor: Element; request: Extract<ToExtension, { type: 'insertComponent' }>; positions: InsertPosition[] }>();
 	const [query, setQuery] = useState('');
 	const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 	const defs = useMemo(() => matchPalette(paletteDefs(definitions?.defs ?? []), query), [definitions, query]);
@@ -53,8 +57,17 @@ export function PalettePane() {
 				}}>⠿</button>}
 			<button className="palette-component" data-component={def.realType} title={def.description ?? def.display}
 				disabled={!doc?.root || !!doc.error} draggable={!!doc?.root && !doc.error}
-				onClick={() => { if (doc) { post({ type: 'insertComponent', ...payload(def), index: useEditorStore.getState().selected }); } }}
-				onDragStart={e => { if (!doc) { e.preventDefault(); return; } e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData(PALETTE_MIME, JSON.stringify(payload(def))); setDragGhost(e.dataTransfer, icon, def.display ?? def.id); }}>
+				aria-haspopup="menu" aria-expanded={!!menu && paletteKey(menu.request.component) === paletteKey(def) && !!menu.anchor.closest('.palette-favorites') === sortable}
+				onClick={e => {
+					if (!doc?.root) { return; }
+					const index = useEditorStore.getState().selected, path = index === undefined ? undefined : pathTo(doc.root, index);
+					if (index !== undefined && !path) { return; }
+					const target = insertTarget(doc.root, path);
+					if (!target) { useEditorStore.setState({ toast: { message: 'body가 없는 화면이라 넣을 수 없습니다.', key: Date.now() } }); return; }
+					setMenu({ anchor: e.currentTarget, request: { type: 'insertComponent', ...payload(def), index },
+						positions: insertPositions(target) });
+				}}
+				onDragStart={e => { setMenu(undefined); if (!doc) { e.preventDefault(); return; } e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData(PALETTE_MIME, JSON.stringify(payload(def))); setDragGhost(e.dataTransfer, icon, def.display ?? def.id); }}>
 				<span className={`codicon codicon-${icon}`} aria-hidden="true" /><span>{def.display}</span>
 			</button>
 			<button className="palette-star" draggable={false} aria-pressed={favorite} aria-label={`${def.display} 즐겨찾기 ${favorite ? '해제' : '추가'}`} title={favorite ? '즐겨찾기 해제' : '즐겨찾기 추가'} onClick={() => toggleFavorite(def)}>
@@ -82,5 +95,10 @@ export function PalettePane() {
 				</section>;
 			})}
 		</div>
+		{menu && <Menu anchor={menu.anchor} placement="right-start" onClose={() => setMenu(undefined)}>
+			{menu.positions.map(position => <button key={position} role="menuitem" onClick={() => {
+				setMenu(undefined); post({ ...menu.request, position });
+			}}>{INSERT_POSITION_LABELS[position]}</button>)}
+		</Menu>}
 	</aside>;
 }

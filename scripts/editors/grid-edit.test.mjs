@@ -99,9 +99,9 @@ export default async function ({ clickTab, page }) {
 	await (await (await cell('td1')).asElement()).click({ button: 'right' });
 	await page.waitForSelector('.context-menu');
 	// 이 테스트에서 복사한 컴포넌트가 있어 붙여 넣기 > 앞·뒤도 표시된다.
-	assert.deepEqual(await menuItems(), [{ text: '병합', disabled: false }, { text: '병합 해제', disabled: true }, { text: '붙여 넣기 > 앞', disabled: false }, { text: '붙여 넣기 > 뒤', disabled: false }], 'group th·td 우클릭: 병합 메뉴');
+	assert.deepEqual(await menuItems(), [{ text: 'CSS 보기', disabled: false }, { text: '병합', disabled: false }, { text: '병합 해제', disabled: true }, { text: '붙여 넣기 > 앞', disabled: false }, { text: '붙여 넣기 > 뒤', disabled: false }], 'group th·td 우클릭: 병합 메뉴');
 	await page.evaluate(() => { window.sent.length = 0; });
-	await page.$eval('.context-menu button', b => b.click());
+	await page.$$eval('.context-menu button', bs => bs.find(b => b.textContent === '병합').click());
 	assert.deepEqual(await lastMerge(), { type: 'mergeCells', version: 900, index: mergeDoc.th1, more: [mergeDoc.td1] }, 'group 셀 병합 요청');
 	await page.evaluate(() => { window.sent.length = 0; });
 	await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row')].some(r => r.querySelector('.id')?.textContent === 'th1'));
@@ -110,7 +110,7 @@ export default async function ({ clickTab, page }) {
 	await clickRow('td1', { button: 'right' });
 	await page.waitForSelector('.context-menu');
 	assert.deepEqual(await menuItems(), [{ text: '병합', disabled: false }, { text: '병합 해제', disabled: true }, { text: '붙여 넣기 > 앞', disabled: false }, { text: '붙여 넣기 > 뒤', disabled: false }], 'Outline 우클릭: 병합 메뉴');
-	await page.$eval('.context-menu button', b => b.click());
+	await page.$$eval('.context-menu button', bs => bs.find(b => b.textContent === '병합').click());
 	assert.deepEqual(await lastMerge(), { type: 'mergeCells', version: 900, index: mergeDoc.th1, more: [mergeDoc.td1] }, 'Outline 병합 요청');
 	console.log('Design·Outline: group th·td 병합(우클릭 메뉴) passed');
 	// F2(이클립스처럼): 화면에서 컴포넌트를 고른 뒤면 부모로(Outline 선택도 같이), body에서 멈춤. Outline에서 고른 뒤의 F2는 그대로 id 바꾸기
@@ -138,13 +138,13 @@ export default async function ({ clickTab, page }) {
 		await page.evaluate(() => document.activeElement.dispatchEvent(new ClipboardEvent('copy', { bubbles: true, cancelable: true, clipboardData: new DataTransfer() })));
 		await (await (await cell('th1')).asElement()).click({ button: 'right' });
 		await page.waitForSelector('.context-menu');
-		assert.deepEqual((await menuItems()).map(m => m.text), ['병합', '병합 해제', '붙여 넣기 > 앞', '붙여 넣기 > 뒤'], '칸 우클릭: 병합 아래에 붙여 넣기');
+		assert.deepEqual((await menuItems()).map(m => m.text), ['CSS 보기', '병합', '병합 해제', '붙여 넣기 > 앞', '붙여 넣기 > 뒤'], '칸 우클릭: 병합 아래에 붙여 넣기');
 		await page.evaluate(() => { window.sent.length = 0; [...document.querySelectorAll('.context-menu button')].find(b => b.textContent === '붙여 넣기 > 앞').click(); });
 		const pasted = await page.evaluate(() => window.sent.find(m => m.type === 'paste'));
 		assert.deepEqual({ index: pasted?.index, position: pasted?.position, xml: pasted?.xml.map(x => x.trim()) }, { index: mergeDoc.th1, position: 'before', xml: ['<xf:group tagname="td" id="td1"/>'] }, '앞에 붙여 넣기 요청');
 		await clickRow('t', { button: 'right' });
 		await page.waitForSelector('.context-menu');
-		assert.deepEqual((await menuItems()).map(m => m.text), ['붙여 넣기 > 앞', '붙여 넣기 > 뒤'], 'Outline 컴포넌트 우클릭: 붙여 넣기만');
+		assert.deepEqual((await menuItems()).map(m => m.text), ['그룹으로 감싸기', '붙여 넣기 > 앞', '붙여 넣기 > 뒤'], 'Outline 컴포넌트 우클릭: 그룹 감싸기·붙여 넣기');
 		await page.evaluate(() => { window.sent.length = 0; [...document.querySelectorAll('.context-menu button')].find(b => b.textContent === '붙여 넣기 > 뒤').click(); });
 		assert.deepEqual(await page.evaluate(() => { const m = window.sent.find(m => m.type === 'paste'); return m && [m.index, m.position]; }), [mergeDoc.t, 'after'], '뒤에 붙여 넣기 요청');
 		await (await page.evaluateHandle(() => [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.tag')?.textContent === 'body'))).asElement().click({ button: 'right' });

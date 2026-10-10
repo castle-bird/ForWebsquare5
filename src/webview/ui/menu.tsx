@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Placement } from '@floating-ui/dom';
 import { pointAt, useFloating } from './floating';
 
@@ -23,4 +23,30 @@ export function Menu({ x = 0, y = 0, anchor, placement = 'bottom-start', onClose
 		return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
 	}, []);
 	return <div ref={ref} className="context-menu" role="menu" style={style}>{children}</div>;
+}
+
+/** 부모 메뉴 안에 두어 바깥 클릭·Esc 닫기를 함께 처리한다. */
+export function Submenu({ label, children }: { label: string; children: ReactNode }) {
+	const trigger = useRef<HTMLButtonElement>(null);
+	const [open, setOpen] = useState(false);
+	const keyboard = useRef(false);
+	const { ref, style, placed } = useFloating<HTMLDivElement>(open ? trigger.current ?? undefined : undefined, 'right-start');
+	useEffect(() => {
+		if (placed && keyboard.current) { ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus(); }
+	}, [placed]);
+	return <div onMouseEnter={() => { keyboard.current = false; setOpen(true); }} onMouseLeave={() => setOpen(false)} onKeyDown={e => {
+		if (e.key === 'ArrowLeft') { e.preventDefault(); setOpen(false); trigger.current?.focus(); }
+		if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+			e.preventDefault();
+			const buttons = [...ref.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? []];
+			const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+			buttons[at < 0 ? (e.key === 'ArrowDown' ? 0 : buttons.length - 1) : (at + (e.key === 'ArrowDown' ? 1 : buttons.length - 1)) % buttons.length]?.focus();
+		}
+	}}>
+		<button ref={trigger} role="menuitem" aria-haspopup="menu" aria-expanded={open} onClick={() => { keyboard.current = true; setOpen(true); ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus(); }}
+			onKeyDown={e => { if (e.key === 'ArrowRight') { e.preventDefault(); keyboard.current = true; setOpen(true); ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus(); } }}>
+			{label}<span className="codicon codicon-chevron-right" aria-hidden="true" />
+		</button>
+		{open && <div ref={ref} className="context-menu" role="menu" aria-label={label} style={{ ...style, maxHeight: 'calc(100vh - 8px)', maxWidth: 'calc(100vw - 8px)', overflowY: 'auto', overflowWrap: 'anywhere' }}>{children}</div>}
+	</div>;
 }

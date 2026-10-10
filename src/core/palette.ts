@@ -7,6 +7,8 @@ import { localName, uniqueId, usedIds, XFORMS_NS, type XmlNode } from './xmlMode
 
 export const paletteKey = (def: Pick<ComponentDef, 'id' | 'ns' | 'realType'>) => JSON.stringify([def.ns, def.id, def.realType]);
 
+export const INSERT_POSITION_LABELS: Record<InsertPosition, string> = { first: '하위 맨 앞', inside: '하위 맨 뒤', before: '앞', after: '뒤' };
+
 const isBody = (n: XmlNode) => localName(n.tag) === 'body';
 
 const DATA_TYPE = /^(alias)?(linked)?data(map|list)$/i;

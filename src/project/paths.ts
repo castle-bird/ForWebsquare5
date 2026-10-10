@@ -63,5 +63,11 @@ export async function findWebRoot(file: string): Promise<string | undefined> {
 
 export const webPath = (webRoot: string, file: string) => '/' + path.relative(webRoot, file).split(path.sep).join('/');
 
-export const fromWebPath = (webRoot: string, href: string, from: string) =>
-	path.join(webRoot, decodeURIComponent(new URL(href, 'http://root' + encodeURI(from)).pathname));
+export function fromWebPath(webRoot: string, href: string, from: string): string {
+	const file = path.resolve(path.join(webRoot, decodeURIComponent(new URL(href, 'http://root' + encodeURI(from)).pathname)));
+	const relative = path.relative(path.resolve(webRoot), file);
+	if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+		throw new Error('웹 루트 밖의 경로는 사용할 수 없습니다.');
+	}
+	return file;
+}

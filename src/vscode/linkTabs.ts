@@ -1,11 +1,12 @@
 // 연결 탭 목록·순서(모든 화면 공통, globalState)와 추가·이름 변경·삭제. 연결한 파일은 links.ts가 다룬다
 import * as vscode from 'vscode';
 import { newTabId, readLinkExts, readLinkTabs, tabNameProblem, type LinkTab } from '../core/links';
-import type { TabPosition } from '../core/protocol';
+import type { PanelFont, TabPosition } from '../core/protocol';
 
 const TAB_ORDER = 'websquare5-editor.tabOrder';
 const TAB_POSITION = 'websquare5-editor.tabPosition';
 const LINK_TABS = 'websquare5-editor.linkTabs';
+const PANEL_FONT = 'websquare5-editor.panelFont';
 const MINIMAP = 'websquare5-editor.minimap';
 const BLAME = 'websquare5-editor.codeBlame';
 
@@ -28,6 +29,9 @@ export const saveTabOrder = (order: string[]) => globalState.update(TAB_ORDER, o
 /** 탭 줄 위치. 모든 화면 공통, 기본 위 */
 export const tabPosition = (): TabPosition => globalState.get<TabPosition>(TAB_POSITION) ?? 'top';
 export const saveTabPosition = (position: TabPosition) => globalState.update(TAB_POSITION, position);
+/** 우측 패널 글꼴. 모든 화면 공통, 기본 VS Code 편집기 글꼴 */
+export const panelFont = (): PanelFont => globalState.get(PANEL_FONT) === 'ui' ? 'ui' : 'editor';
+export const savePanelFont = (font: PanelFont) => globalState.update(PANEL_FONT, font);
 /** 코드 편집기 미니맵. 모든 화면 공통, 기본 켬 */
 export const minimapOn = () => globalState.get<boolean>(MINIMAP) ?? true;
 export const saveMinimap = (on: boolean) => globalState.update(MINIMAP, on);

@@ -54,6 +54,20 @@ suite('XML 편집 계획', () => {
 		assert.strictEqual(prepareNodeEdit(text, { type: 'mergeCells', version: 1, index: a, more: [999] }), undefined);
 	});
 
+	test('Data 루트는 삭제하지 않고 하위 데이터·submission 삭제는 허용', () => {
+		const text = '<html xmlns:d="http://www.inswave.com/websquare" xmlns:f="http://www.w3.org/2002/xforms"><head><f:model id="model"><d:dataCollection id="collection"><d:dataMap id="map"/><d:dataList id="list"/></d:dataCollection><f:submission id="submission"/></f:model></head><body/></html>';
+		for (const id of ['model', 'collection']) {
+			const request: NodeEdit = { type: 'delete', version: 1, index: indexOf(text, id) };
+			assert.strictEqual(prepareNodeEdit(text, request), undefined, id + ' 루트 보호');
+			assert.strictEqual(prepareNodeEdit(text, { ...request, index: indexOf(text, 'map'), more: [request.index] }), undefined, '루트가 섞인 다중 삭제는 전체 거부');
+		}
+		assert.strictEqual(prepareNodeEdit(text, { type: 'delete', version: 1, index: -1 }), undefined, '가상 Submission 루트');
+		for (const id of ['map', 'list', 'submission']) {
+			const removed = plan(text, { type: 'delete', version: 1, index: indexOf(text, id) });
+			assert.ok(!findNode(parseXml(applyEdits(text, removed.changes))!, n => n.attrs.id === id));
+		}
+	});
+
 	test('XML 문서가 없으면 적용하지 않고 DOCTYPE 거부는 유지', () => {
 		const request: NodeEdit = { type: 'setText', version: 1, index: 0, value: 'changed' };
 		assert.strictEqual(prepareNodeEdit('', request), undefined);

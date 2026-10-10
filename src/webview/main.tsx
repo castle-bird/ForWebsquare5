@@ -24,7 +24,7 @@ import { Tabs } from './ui/tabs';
 import { PalettePane } from './ui/palette';
 import { ThemeColorsEditor } from './ui/themeColorsEditor';
 import { Toast } from './ui/toast';
-import { Menu } from './ui/menu';
+import { Menu, Submenu } from './ui/menu';
 import { useLinkTabs } from './ui/linkedFile';
 import { FIXED_TABS, linkTarget } from '../core/links';
 import { useFold } from './ui/tree';
@@ -32,6 +32,7 @@ import { TreePane } from './ui/treePane';
 import { useEventHandler } from './eventHandler';
 import { lastPressedIn } from './keys';
 import { canMerge, canUnmerge, gridOfCells, post, targets, useEditorStore } from './store';
+import { wrapProblem } from '../core/wrap';
 import { isMergeCell } from '../core/merge';
 import { isStructure } from '../core/paste';
 import '@vscode/codicons/dist/codicon.css';
@@ -85,16 +86,24 @@ function useTabHistory(shownTab: string, show: (name: string) => void, exists: (
 		place.restore?.();
 	};
 	useEffect(() => {
+		let pressed: number | undefined;
+		const clear = () => { pressed = undefined; };
 		const onMouse = (e: globalThis.MouseEvent) => {
 			if (e.button !== 3 && e.button !== 4) { return; }
 			e.preventDefault();
-			if (e.type === 'mouseup') { navigate.current?.(e.button === 3); }
+			if (e.type === 'mousedown') { pressed = e.button; return; }
+			// VS Code에서 누르고 돌아온 뒤의 놓음은 이미 이동한 클릭이다.
+			const button = pressed;
+			clear();
+			if (button === e.button) { navigate.current?.(e.button === 3); }
 		};
 		window.addEventListener('mousedown', onMouse, true);
 		window.addEventListener('mouseup', onMouse, true);
+		window.addEventListener('blur', clear);
 		return () => {
 			window.removeEventListener('mousedown', onMouse, true);
 			window.removeEventListener('mouseup', onMouse, true);
+			window.removeEventListener('blur', clear);
 		};
 	}, []);
 }
@@ -170,6 +179,7 @@ function App() {
 	const setTabOrder = useEditorStore(s => s.setTabOrder);
 	const tabPosition = useEditorStore(s => s.tabPosition);
 	const minimapOn = useEditorStore(s => s.minimap);
+	const panelFont = useEditorStore(s => s.panelFont);
 	const blameOn = useEditorStore(s => s.codeBlame);
 	const setTabPosition = useEditorStore(s => s.setTabPosition);
 	const otherSide = tabPosition === 'top' ? 'bottom' : 'top';
@@ -199,6 +209,8 @@ function App() {
 	const [dataMenu, setDataMenu] = useState<{ x: number; y: number; index: number; merge?: boolean; unmerge?: number[]; mergeOnly?: boolean;
 		/** 붙여 넣기 > 앞·뒤를 넣을 컴포넌트(복사·잘라 둔 것이 있을 때) */
 		pasteAt?: number;
+		wrap?: { indexes: number[]; version: number; problem?: string };
+		cssRules?: number[];
 		grid?: { hasFooter: boolean; at: number; onColumn: boolean; column?: { index: number; cells: number[]; left: boolean; right: boolean } } }>();
 	const [gridBind, setGridBind] = useState<{ grid: number; list: number }>();
 	const linkTabs = useLinkTabs(activeTab, LOADING);
@@ -252,9 +264,9 @@ function App() {
 	], [dataCollection, submissions, model]);
 
 	const outline = useFold(), data = useFold();
-	// 옮기기로 노드 번호가 바뀌면 펼침 상태도 같은 노드로(번호 그대로 두면 엉뚱한 줄이 펼쳐진다)
+	// 구조 편집으로 노드 번호가 바뀌면 펼침 상태도 같은 노드로(번호 그대로 두면 엉뚱한 줄이 접히거나 펼쳐진다)
 	const remap = useEditorStore(s => s.remap);
-	useEffect(() => { if (remap) { outline.remap(remap.map); data.remap(remap.map); } }, [remap]); // outline·data 객체는 매 렌더 새로 만들어짐
+	useEffect(() => { if (remap) { outline.remap(remap.to); data.remap(remap.to); } }, [remap]); // outline·data 객체는 매 렌더 새로 만들어짐
 	const openEventHandler = useEventHandler({ doc, defs: defs?.defs, events, scriptRef, editAttr, showScript: () => setActiveTab('Script') });
 	const { openSubmissionEditor, openDataPopup, openDataEditor, openGridCells, openEditor, editors } = useEditorPopups(openEventHandler, () => {
 		const submissionRoot = dataRoots.find(n => n.index === -1);
@@ -308,22 +320,38 @@ function App() {
 		const inBody = path?.some(p => p.tag.replace(/^.*:/, '') === 'body'), inGrid = path?.slice(0, -1).some(p => p.tag.endsWith(':gridView'));
 		return n && inBody && !inGrid && !isStructure(n) ? n.index : undefined;
 	};
+	const wrapTarget = (index: number) => {
+		const path = root && pathTo(root, index), n = path?.at(-1);
+		if (!n || isStructure(n) || !path!.slice(0, -1).some(p => p.tag.replace(/^.*:/, '') === 'body')
+			|| path!.slice(0, -1).some(p => p.tag.endsWith(':gridView'))) { return undefined; }
+		const { selected, extra } = useEditorStore.getState();
+		const nodes = [...new Set([...extra, ...selected === undefined ? [] : [selected]])].map(i => nodeAt(root!, i));
+		return { indexes: nodes.map(n => n?.index ?? -1), version: doc!.version,
+			problem: nodes.some(n => !n) ? '화면 안의 컴포넌트만 선택해 주세요.' : wrapProblem(root!, nodes as XmlNode[]) };
+	};
 	const pasteMenu = (index: number, x: number, y: number) => {
 		const pasteAt = pasteTarget(index);
-		if (pasteAt === undefined) { return false; }
 		if (!keepsSelection(index)) { setSelected(index); }
-		setDataMenu({ x, y, index, mergeOnly: true, pasteAt });
+		const wrap = wrapTarget(index);
+		if (pasteAt === undefined && !wrap) { return false; }
+		setDataMenu({ x, y, index, mergeOnly: true, pasteAt, wrap });
 		return true;
 	};
-	const canvasContext = (index: number, x: number, y: number) => {
+	const canvasContext = (index: number, x: number, y: number, cssRules: number[]) => {
 		const path = body && pathTo(body, index);
-		const grid = path?.filter(n => n.tag.endsWith(':gridView')).at(-1), cell = path?.filter(isMergeCell).at(-1);
-		if (!grid && !cell) { pasteMenu(index, x, y); return; }
+		const grid = path?.filter(n => n.tag.endsWith(':gridView')).at(-1), clicked = path?.at(-1);
+		const cell = clicked && isMergeCell(clicked) ? clicked : undefined;
+		if (!grid && !cell) {
+			if (!keepsSelection(index)) { setSelected(index); }
+			setDataMenu({ x, y, index, mergeOnly: true, pasteAt: pasteTarget(index), cssRules, wrap: wrapTarget(index) });
+			return;
+		}
 		// 여러 칸을 골라 둔 채 그 안에서 열었으면 고른 칸들, 아니면 누른 칸
-		const multi = !!cell && keepsSelection(cell.index), picked = multi ? targets(useEditorStore.getState()) : cell ? [cell] : [];
+		const multi = !!clicked && (!!cell || clicked === grid) && keepsSelection(clicked.index), picked = multi ? targets(useEditorStore.getState()) : cell ? [cell] : [];
 		const column = grid && path?.at(-1)?.tag.endsWith(':column') ? path.at(-1) : undefined;
 		if (!multi) { setSelected(grid ? grid.index : cell!.index); }
-		setDataMenu({ x, y, index: (grid ?? cell)!.index, merge: cell ? canMerge() : undefined, unmerge: cell ? picked.map(n => n.index) : undefined, mergeOnly: !grid,
+		setDataMenu({ x, y, cssRules, index: (grid ?? cell)!.index, merge: cell ? canMerge() : undefined, unmerge: cell ? picked.map(n => n.index) : undefined, mergeOnly: !grid,
+			wrap: clicked === grid ? wrapTarget(index) : undefined,
 			pasteAt: pasteTarget(cell && !multi ? cell.index : index),
 			...grid && { grid: { hasFooter: grid.children.some(c => c.tag.endsWith(':footer')), at: index, onColumn: !!column,
 				column: column && { index: column.index, cells: (multi && root && gridOfCells(root, picked) === grid ? picked : [column]).map(n => n.index),
@@ -360,7 +388,7 @@ function App() {
 								{paletteOpen && <Separator key="palette-resizer" className="resizer" />}
 								<Panel key="design-canvas" id="design-canvas" minSize={100}><div className="design-canvas">
 									{styles?.error && <p className="warning" title={styles.error}>{styles.error}</p>}
-									<Canvas body={body} dataCollection={dataCollection} defs={defs.defs} sheets={styles?.css} selected={selected} extra={extra} onSelect={setSelected} onEditText={editText}
+									<Canvas body={body} dataCollection={dataCollection} defs={defs.defs} sheets={styles?.css} styleRules={styles?.rules} selected={selected} extra={extra} onSelect={setSelected} onEditText={editText}
 										onSelectCells={(primary, cells) => useEditorStore.setState({ selected: primary, extra: cells.filter(i => i !== primary) })}
 										onMove={move} onEditAttr={editAttr} onOpenFrame={openFrame} onOpenEditor={openEditor} onBindRef={bindRefTo} onContextMenu={canvasContext}
 										onInsertComponent={(drag, index, position) => post({ type: 'insertComponent', ...drag, index, position })}
@@ -382,7 +410,7 @@ function App() {
 			</Panel>
 			<Separator className={`resizer${rightOpen ? '' : ' collapsed'}`} />
 			<Panel id="right-panel" className="right-panel" panelRef={rightPanel} defaultSize={320} minSize={220} collapsible collapsedSize={0} onResize={size => setRightOpen(size.asPercentage > 0)}>
-				<div className="right-panel-content" inert={!rightOpen}>
+				<div className="right-panel-content" data-panel-font={panelFont} inert={!rightOpen}>
 				<Group orientation="vertical">
 					<Panel defaultSize="55%" minSize={120}>
 						<PropertyPane node={node} def={node && defOf(node, defs?.defs)} choices={cellIds ? { id: cellIds } : undefined} warning={defs?.error} onEdit={editSelected} onScript={eventName => node && openEventHandler(node, eventName)} />
@@ -397,6 +425,16 @@ function App() {
 			</Panel>
 		</Group>
 		{dataMenu && <Menu key={`${dataMenu.x},${dataMenu.y}`} x={dataMenu.x} y={dataMenu.y} onClose={() => setDataMenu(undefined)}>
+				{dataMenu.cssRules && <>
+					<Submenu label="CSS 보기">
+						{dataMenu.cssRules.length ? dataMenu.cssRules.map(i => <button key={i} role="menuitem"
+							onClick={() => { setDataMenu(undefined); post({ type: 'openCss', rules: [i] }); }}>{styles?.rules?.[i].file.split(/[\\/]/).at(-1)}</button>)
+							: <button role="menuitem" disabled>일치하는 CSS 없음</button>}
+					</Submenu>
+					{(!dataMenu.mergeOnly || dataMenu.merge !== undefined || dataMenu.pasteAt !== undefined || dataMenu.wrap) && <div className="menu-separator" role="separator" />}
+				</>}
+				{dataMenu.wrap && <button role="menuitem" disabled={!!dataMenu.wrap.problem} title={dataMenu.wrap.problem}
+					onClick={() => { setDataMenu(undefined); useEditorStore.getState().wrap(dataMenu.wrap!.indexes, dataMenu.wrap!.version); }}>그룹으로 감싸기</button>}
 				{dataMenu.mergeOnly ? null : dataMenu.grid ? (Object.keys(GRID_MENU) as (keyof typeof GRID_MENU)[]).filter(part => part !== 'columnLeft' || dataMenu.grid!.onColumn).map(part => <button key={part} role="menuitem" disabled={part === 'footer' && dataMenu.grid!.hasFooter}
 					onClick={() => { if (doc) { post({ type: 'addGridPart', version: doc.version, index: dataMenu.index, part, at: dataMenu.grid!.at }); } setDataMenu(undefined); }}>
 					{part === 'column' && dataMenu.grid!.onColumn ? '오른쪽에 Column 추가' : GRID_MENU[part]}</button>).concat(dataMenu.grid.column ? [
@@ -426,6 +464,13 @@ function App() {
 				</>}
 			</Menu>}
 		{settingsMenu && <Menu anchor={settingsMenu} placement="bottom-end" onClose={() => setSettingsMenu(undefined)}>
+			<Submenu label="패널 글꼴 변경">
+				{(['ui', 'editor'] as const).map(font => <button key={font} role="menuitemradio" aria-checked={panelFont === font}
+					onClick={() => { setSettingsMenu(undefined); useEditorStore.getState().setPanelFont(font); }}>
+					<span className="menu-label"><span className={`codicon codicon-${panelFont === font ? 'check' : 'blank'}`} />{font === 'ui' ? 'VS Code UI' : 'VS Code Editor'}</span>
+				</button>)}
+			</Submenu>
+			<div className="menu-separator" role="separator" />
 			{SETTINGS_MENU.map((item, i) => item
 				? <button key={item[0]} role="menuitem" onClick={() => {
 					setSettingsMenu(undefined);

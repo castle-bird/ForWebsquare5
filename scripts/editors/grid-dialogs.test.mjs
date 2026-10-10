@@ -44,8 +44,8 @@ export default async function ({ page }) {
 		});
 		await page.waitForSelector('.context-menu');
 		assert.equal(await page.$$eval('.context-menu button', bs => bs.find(b => b.textContent === 'footer 추가').disabled), true, 'footer 있으면 footer 추가 비활성');
-		assert.deepEqual(await page.$$eval('.context-menu button', bs => bs.map(b => b.textContent)), ['왼쪽에 Column 추가', '오른쪽에 Column 추가', 'Row 추가', 'Header 추가', 'subTotal 추가', 'footer 추가', '열 왼쪽으로 이동', '열 오른쪽으로 이동', '열 삭제Delete', '칸 속성 표…']);
-		await page.$eval('.context-menu button:nth-child(2)', b => b.click());
+		assert.deepEqual(await page.$$eval('.context-menu button', bs => bs.map(b => b.textContent)), ['CSS 보기', '왼쪽에 Column 추가', '오른쪽에 Column 추가', 'Row 추가', 'Header 추가', 'subTotal 추가', 'footer 추가', '열 왼쪽으로 이동', '열 오른쪽으로 이동', '열 삭제Delete', '칸 속성 표…']);
+		await page.$$eval('.context-menu button', bs => bs.find(b => b.textContent === '오른쪽에 Column 추가').click());
 		const addPart = await page.evaluate(() => window.sent.find(m => m.type === 'addGridPart'));
 		assert.equal(addPart?.part, 'column');
 		assert.equal(addPart?.at, 5, '우클릭한 본문 컬럼 기준');

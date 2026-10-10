@@ -4,9 +4,10 @@ import * as vscode from 'vscode';
 import { defOf, isScreen, nodeAt, parseXml, type XmlNode } from './core/xmlModel';
 import { editableScript, scriptBody } from './core/edit';
 import { errorMessage } from './core/errors';
-import type { CodeTarget, SettingsMenuItem, ToExtension, ToWebview } from './core/protocol';
+import type { CodeTarget, CssRuleSource, SettingsMenuItem, ToExtension, ToWebview } from './core/protocol';
 import { ENGINE_PAGE, findWebRoot, fromWebPath, serial } from './project/paths';
 import { scopeCss, stylesheetFiles } from './project/styles';
+import { openCss } from './vscode/css';
 import { attachFrames, resolveSrc } from './project/frames';
 import { loadApiDocs } from './project/apiDocs';
 import { engineModules, udcNames } from './project/modules';
@@ -16,7 +17,7 @@ import { offerSetup, registerSetup, resolvePath, type SetupKey } from './vscode/
 import { applyCodeEdit, applyNodeEdit, formatCode } from './vscode/documentEdit';
 import { LinkedFiles, registerLinks } from './vscode/links';
 import { UsedTablesStore } from './vscode/tables';
-import { blameOn, minimapOn, onBlameToggled, saveBlame, saveMinimap, saveTabOrder, saveTabPosition, tabOrder, tabPosition } from './vscode/linkTabs';
+import { blameOn, minimapOn, panelFont, savePanelFont, onBlameToggled, saveBlame, saveMinimap, saveTabOrder, saveTabPosition, tabOrder, tabPosition } from './vscode/linkTabs';
 import { linkIdOf } from './core/links';
 import { findPaletteDef } from './core/palette';
 import { codeTheme, registerCodeTheme, saveCustomizations } from './vscode/codeTheme';
@@ -24,6 +25,7 @@ import { affectsCodeOptions, codeOptions } from './vscode/codeOptions';
 import { blameFeed, blameText, onGitChange, stagedText } from './vscode/gitBase';
 import { lineOfOffset, sliceBlame } from './core/blame';
 import { insertFromPalette, paletteFavorites, savePaletteFavorite, reorderPaletteFavorites } from './vscode/palette';
+import { createScreen } from './vscode/createScreen';
 
 export const VIEW_TYPE = 'websquare5-editor.designer';
 
@@ -32,6 +34,7 @@ export function activate(context: vscode.ExtensionContext) {
 	registerLinks(context);
 	registerCodeTheme(context, msg => panels.forEach(p => void p.webview.postMessage(msg)));
 	context.subscriptions.push(
+		vscode.commands.registerCommand('websquare5-editor.createFile', createScreen),
 		vscode.window.registerCustomEditorProvider(VIEW_TYPE, new DesignerProvider(context.extensionUri, context.globalState, context.workspaceState, context.storageUri ?? context.globalStorageUri), {
 			webviewOptions: { retainContextWhenHidden: true },
 		}),
@@ -103,7 +106,7 @@ function broadcast(from: vscode.WebviewPanel, msg: ToWebview) {
 }
 
 /** 웹뷰로 보낼 화면 XML: 노드 트리(정의 표시·연결 화면·이미지 주소)와 Script 본문. 읽지 못하면 이유를 담는다 */
-async function documentMessage(document: vscode.TextDocument, webview: vscode.Webview, webRoot: string, defs: ComponentDef[], udcs: Set<string>): Promise<ToWebview> {
+async function documentMessage(document: vscode.TextDocument, webview: vscode.Webview, webRoot: string, defs: ComponentDef[], udcs: Set<string>): Promise<Extract<ToWebview, { type: 'document' }>> {
 	const base = { type: 'document', version: document.version, text: document.getText() } as const;
 	try {
 		const root = parseXml(base.text);
@@ -183,7 +186,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		const sendDocument = async () => {
 			const request = ++latest;
 			const msg = await documentMessage(document, panel.webview, webRoot, (await definitions).defs, await udcs);
-			if (request === latest) { await post(msg); }
+			if (request === latest && msg.version === document.version) { await post(msg); }
 		};
 
 		let timer: NodeJS.Timeout | undefined;
@@ -267,6 +270,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 				if (msg.type === 'ready') {
 					void post({ type: 'tabOrder', order: tabOrder() ?? [] });
 					void post({ type: 'tabPosition', position: tabPosition() });
+					void post({ type: 'panelFont', font: panelFont() });
 					void post({ type: 'minimap', on: minimapOn() });
 					void post({ type: 'codeBlame', on: blameOn() });
 					xmlBlame.schedule(0);
@@ -331,6 +335,8 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 					if (command) { void vscode.commands.executeCommand(...command); }
 				} else if (msg.type === 'warn') {
 					void vscode.window.showWarningMessage(msg.message);
+				} else if (msg.type === 'openCss') {
+					void styles.then(s => openCss(s.rules ?? [], msg.rules)).catch(e => vscode.window.showErrorMessage(`CSS 이동 실패: ${errorMessage(e)}`));
 				} else if (msg.type === 'openFrame') {
 					void openFrame(document, msg.index, webRoot);
 				} else if (msg.type === 'openModule') {
@@ -355,15 +361,20 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 				} else if (msg.type === 'setCodeBlame') {
 					void saveBlame(msg.on);
 					broadcast(panel, { type: 'codeBlame', on: msg.on });
+				} else if (msg.type === 'setPanelFont') {
+					if (msg.font === 'ui' || msg.font === 'editor') {
+						void savePanelFont(msg.font);
+						broadcast(panel, { type: 'panelFont', font: msg.font });
+					}
 				} else if (msg.type === 'setMinimap') {
 					void saveMinimap(msg.on);
 					broadcast(panel, { type: 'minimap', on: msg.on });
 				} else if (msg.type === 'editDataFields' || msg.type === 'addSubmission' || msg.type === 'editSubmission' || msg.type === 'editChoices' || msg.type === 'editGridCells') {
-					const apply = msg.version === document.version ? applyNodeEdit(document, msg, toast) : Promise.resolve(false);
-					void apply.then(async ok => {
+					void queue('source', async () => {
+						const ok = msg.version === document.version && await applyNodeEdit(document, msg, toast);
 						await post({ type: 'popupAck', popup: msg.popup, ok, ...!ok && { error: '문서가 바뀌었습니다. 팝업을 다시 열어 주세요.' } });
 						await refresh();
-					}, e => { void post({ type: 'popupAck', popup: msg.popup, ok: false, error: errorMessage(e) }); });
+					}).catch(e => { void post({ type: 'popupAck', popup: msg.popup, ok: false, error: errorMessage(e) }); });
 				} else if (msg.type === 'format') {
 					void queue(msg.target, async () => {
 						const linkId = linkIdOf(msg.target);
@@ -377,8 +388,10 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 					});
 				} else {
 					// 웹뷰가 옛 버전을 보고 보낸 편집은 버린다. 어느 쪽이든 최신 문서를 디바운스 없이 바로 다시 보낸다.
-					const apply = msg.version === document.version ? applyNodeEdit(document, msg, toast) : Promise.resolve(false);
-					void apply.then(refresh, e => vscode.window.showErrorMessage(`변경 실패: ${errorMessage(e)}`));
+					void queue('source', async () => {
+						if (msg.version === document.version) { await applyNodeEdit(document, msg, toast); }
+						await refresh();
+					}).catch(e => vscode.window.showErrorMessage(`변경 실패: ${errorMessage(e)}`));
 				}
 			}),
 		];
@@ -423,25 +436,26 @@ async function loadDefinitions(uri: vscode.Uri, webRoot?: string): Promise<{ def
 }
 
 async function loadStyles(document: vscode.TextDocument, webview: vscode.Webview, webRoot: string): Promise<Extract<ToWebview, { type: 'styles' }>> {
-	const css: string[] = [], imports: string[] = [], failed: string[] = [], broken: string[] = [];
+	const css: string[] = [], rules: CssRuleSource[] = [], imports: string[] = [], failed: string[] = [], broken: string[] = [];
 	try {
 		for (const file of await stylesheetFiles(webRoot, document.uri.fsPath, document.getText())) {
-			const errors: string[] = [];
+			const errors: string[] = [], fileRules: CssRuleSource[] = [];
 			try {
-				css.push(scopeCss(await readFile(file, 'utf8'), file, webRoot, p => webview.asWebviewUri(vscode.Uri.file(p)).toString(), imports, errors));
+				css.push(scopeCss(await readFile(file, 'utf8'), file, webRoot, p => webview.asWebviewUri(vscode.Uri.file(p)).toString(), imports, errors, fileRules));
+				rules.push(...fileRules);
 			} catch {
 				failed.push(path.relative(webRoot, file));
 			}
 			broken.push(...errors.map(e => `${path.relative(webRoot, file)} ${e}`));
 		}
 	} catch (e) {
-		return { type: 'styles', css, imports, error: `websquare/config.xml 읽기 실패: ${errorMessage(e)}` };
+		return { type: 'styles', css, rules, imports, error: `websquare/config.xml 읽기 실패: ${errorMessage(e)}` };
 	}
 	const error = [
 		failed.length && `CSS를 읽지 못함: ${failed.join(', ')}`,
 		broken.length && `CSS 문법 오류(그 부분만 빼고 적용): ${broken.join(', ')}`,
 	].filter(Boolean).join(' / ');
-	return { type: 'styles', css, imports, ...error && { error } };
+	return { type: 'styles', css, rules, imports, ...error && { error } };
 }
 
 async function loadModules(webRoot: string): Promise<Extract<ToWebview, { type: 'modules' }>> {

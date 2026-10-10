@@ -11,6 +11,8 @@ import type { LinkTab, LinkTarget } from './links';
 import type { CodeThemeState, ThemeOverlay } from './codeTheme';
 import type { CodeOptions } from './codeOptions';
 
+export type PanelFont = 'ui' | 'editor';
+
 export type ToWebview =
 	| { type: 'document'; version: number; text: string; script: ScriptInfo; root?: XmlNode; error?: string }
 	| { type: 'popupAck'; popup: string; ok: boolean; error?: string }
@@ -20,12 +22,13 @@ export type ToWebview =
 	| { type: 'formatted'; target: CodeTarget; text?: string }
 	| { type: 'scriptApi'; api: ScriptApi; events: ScriptApi; error?: string }
 	| { type: 'definitions'; defs: ComponentDef[]; error?: string }
-	| { type: 'styles'; css: string[]; imports?: string[]; error?: string }
+	| { type: 'styles'; css: string[]; rules?: CssRuleSource[]; imports?: string[]; error?: string }
 	| { type: 'modules'; files: { path: string; text: string }[]; error?: string }
 	| LinkState
 	| { type: 'tabOrder'; order: string[] }
 	| { type: 'paletteFavorites'; keys: string[] }
 	| { type: 'tabPosition'; position: TabPosition }
+	| { type: 'panelFont'; font: PanelFont }
 	| { type: 'minimap'; on: boolean } // 코드 편집기 미니맵 켜기·끄기(모든 화면 공통)
 	| { type: 'codeBlame'; on: boolean } // 코드 편집기 Git blame 켜기·끄기(모든 화면 공통)
 	| { type: 'blame'; target: CodeTarget; version: number; data?: Blame } // 그 문서 버전의 줄별 blame. 없으면 표시 안 함(Git 밖 등)
@@ -44,6 +47,17 @@ export type ToWebview =
 	| { type: 'linkProblem'; kind: string; message: string } // 연결하지 못한 이유(알림을 꺼 둬도 경로 입력 화면에 보인다)
 	| { type: 'toast'; message: string } // 편집기 오른쪽 아래 잠깐 뜨는 알림(VS Code 알림을 꺼 둬도 보임)
 	| { type: 'usedTables'; folder?: string; file?: string; data?: UsedTables; error?: string }; // ERD 사용 테이블. folder 없음 = 저장 폴더를 아직 안 고름
+
+/** 로드한 CSS 규칙의 원본 위치. line/ch는 0부터 시작한다. */
+export interface CssRuleSource {
+	file: string;
+	line: number;
+	ch: number;
+	selector: string;
+	match: string;
+	media: string[];
+	supports: string[];
+}
 
 /**
  * 파라미터 힌트(VS Code Signature Help 한 개): label은 함수 모양 글자, params는 그 안 각 파라미터 자리(글자 범위),
@@ -141,6 +155,7 @@ export type ToExtension =
 	| { type: 'setAttr'; version: number; index: number; name: string; value?: string; more?: { index: number; value?: string }[]; also?: { name: string; value?: string }[] }
 	| { type: 'setText'; version: number; index: number; value: string }
 	| { type: 'paste'; version: number; index: number; xml: string | string[]; position?: 'before' | 'after' } // position: 우클릭 붙여 넣기 > 앞·뒤
+	| { type: 'wrap'; version: number; index: number; more?: number[] }
 	| { type: 'delete'; version: number; index: number; more?: number[] }
 	| { type: 'mergeCells'; version: number; index: number; more: number[] } // 고른 셀(index 포함)을 하나로 병합
 	| { type: 'unmergeCells'; version: number; index: number; more: number[] } // 고른 셀 중 병합된 셀을 원래 칸 수로 나눔
@@ -156,6 +171,7 @@ export type ToExtension =
 	| { type: 'bindGrid'; version: number; index: number; list: number; mode: GridBindMode; extras: GridExtras }
 	| { type: 'addGridPart'; version: number; index: number; part: GridPart | 'column' | 'columnLeft' | 'row'; at?: number }
 	| { type: 'openFrame'; index: number }
+	| { type: 'openCss'; rules: number[] }
 	| { type: 'link'; kind: string; path?: string } // path 없으면 파일 선택 창
 	| { type: 'unlink'; kind: string }
 	| { type: 'openLink'; kind: string }
@@ -173,6 +189,7 @@ export type ToExtension =
 	| { type: 'reorderPaletteFavorites'; keys: string[] }
 	| { type: 'setPaletteFavorite'; component: Pick<ComponentDef, 'id' | 'ns' | 'realType'>; favorite: boolean }
 	| { type: 'setTabPosition'; position: TabPosition }
+	| { type: 'setPanelFont'; font: PanelFont }
 	| { type: 'setMinimap'; on: boolean }
 	| { type: 'setCodeBlame'; on: boolean }
 	| { type: 'navigate'; back: boolean } // 마우스 뒤로·앞으로 버튼: VS Code 이동 기록(Go Back·Go Forward). 웹뷰 위에서 누른 버튼은 VS Code에 안 가서 넘겨준다

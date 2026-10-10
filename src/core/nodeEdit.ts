@@ -1,17 +1,18 @@
 import { nodeAt, parseXml, pathTo, type XmlNode } from './xmlModel';
 import { applyEdits, deleteNode, setAttribute, setAttributes, setText, type TextEdit } from './edit';
 import { pasteNode } from './paste';
+import { wrapComponents } from './wrap';
 import { moveNode } from './move';
 import { mergeCells, unmergeCells } from './merge';
 import { idConflict } from './check';
-import { addDataNode, editDataFields, isDataKind, renameDataRefs, type DataRename } from './data';
+import { addDataNode, editDataFields, isDataKind, isDataRoot, renameDataRefs, type DataRename } from './data';
 import { addSubmissionNode, editSubmissionNode } from './submission';
 import { editChoices } from './choices';
 import { editHistory } from './info';
 import { addGridColumn, addGridPart, addGridRow, bindGridView, deleteGridColumns, editGridCells, moveGridColumn } from './grid';
 import type { ToExtension } from './protocol';
 
-export type NodeEdit = Extract<ToExtension, { type: 'setAttr' | 'setText' | 'paste' | 'delete' | 'move' | 'addData' | 'editDataFields' | 'addSubmission' | 'editSubmission' | 'editChoices' | 'editGridCells' | 'editHistory' | 'bindGrid' | 'addGridPart' | 'mergeCells' | 'unmergeCells' | 'gridColumns' }>;
+export type NodeEdit = Extract<ToExtension, { type: 'wrap' | 'setAttr' | 'setText' | 'paste' | 'delete' | 'move' | 'addData' | 'editDataFields' | 'addSubmission' | 'editSubmission' | 'editChoices' | 'editGridCells' | 'editHistory' | 'bindGrid' | 'addGridPart' | 'mergeCells' | 'unmergeCells' | 'gridColumns' }>;
 
 /** XML 편집 계획: 규칙·검증·연관 바인딩을 계산한다. 문서 적용과 성공 알림은 호출자가 맡는다. */
 export function prepareNodeEdit(text: string, msg: NodeEdit): { changes: TextEdit[]; notice?: string } | { error: string } | undefined {
@@ -94,7 +95,14 @@ function nodeChanges(text: string, root: XmlNode, msg: NodeEdit): TextEdit[] | u
 		return undefined;
 	}
 	switch (msg.type) {
-		case 'delete': return all([msg.index, ...msg.more ?? []])?.map(n => deleteNode(text, n));
+		case 'wrap': {
+			const nodes = all([msg.index, ...msg.more ?? []]);
+			return nodes && wrapComponents(text, root, nodes).changes;
+		}
+		case 'delete': {
+			const nodes = all([msg.index, ...msg.more ?? []]);
+			return nodes && !nodes.some(isDataRoot) ? nodes.map(n => deleteNode(text, n)) : undefined;
+		}
 		case 'addData': return [addDataNode(text, root, node, msg.kind)];
 		case 'addSubmission': return [addSubmissionNode(text, root, node, msg.fields)];
 		case 'addGridPart': return msg.part === 'column' || msg.part === 'columnLeft' ? addGridColumn(text, root, node, msg.at, msg.part === 'columnLeft' ? 'left' : 'right')

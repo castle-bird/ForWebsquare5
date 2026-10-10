@@ -2,11 +2,13 @@ import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState, type 
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { autoUpdate, getOverflowAncestors } from '@floating-ui/dom';
-import type { ComponentDef } from '../../core/protocol';
+import type { ComponentDef, CssRuleSource } from '../../core/protocol';
 import { defOf, EV, localName, nodeAt, pathTo, type XmlNode } from '../../core/xmlModel';
 import { setStyle } from '../../core/style';
 import { EditBox } from '../ui/editBox';
 import { cellForm, FORM_HEIGHT, FORM_WIDTH, formAttrs, FormFields, FormHeader, type Form } from './cellForm';
+import { matchingCssRules } from './cssRules';
+import { distanceLines, type DistanceLine } from './distance';
 import { render, textTarget, outlineIcon, type TextTarget } from './renderers';
 import { classLabel, REF_MIME, setDragGhost } from '../ui/tree';
 import { PALETTE_MIME, readPaletteDrag, type PaletteDrag } from '../ui/palette';
@@ -18,8 +20,8 @@ import { DataCollection } from './chart';
 const MOVE_MIME = 'application/x-websquare5-canvas-move';
 let renders = 0;
 
-export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [], onSelect, onSelectCells, onEditText, onEditAttr, onOpenFrame, onOpenEditor, onBindRef, onContextMenu, onInsertComponent, onMove, idChoices }: {
-	body: XmlNode; dataCollection?: XmlNode; defs: ComponentDef[]; sheets?: string[]; selected?: number;
+export function Canvas({ body, dataCollection, defs, sheets, styleRules, selected, extra = [], onSelect, onSelectCells, onEditText, onEditAttr, onOpenFrame, onOpenEditor, onBindRef, onContextMenu, onInsertComponent, onMove, idChoices }: {
+	body: XmlNode; dataCollection?: XmlNode; defs: ComponentDef[]; sheets?: string[]; styleRules?: CssRuleSource[]; selected?: number;
 	extra?: number[];
 	onSelect(i: number, additive?: boolean): void;
 	/** 그리드 칸을 끌어 여러 칸 고름: primary는 누른 칸 */
@@ -29,7 +31,7 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
 	onBindRef?(index: number, value: string): void;
 	onMove?(dragged: number, target: number, position: InsertPosition): void;
 	onInsertComponent?(drag: PaletteDrag, index: number, position: InsertPosition): void;
-	onContextMenu?(index: number, x: number, y: number): void;
+	onContextMenu?(index: number, x: number, y: number, rules: number[]): void;
 	/** 이 노드의 id로 고를 값(바인딩된 그리드 본문 셀 → dataList 컬럼 id) */
 	idChoices?(index: number): string[] | undefined;
 }) {
@@ -37,6 +39,13 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
 	const page = useRef<HTMLDivElement>(null);
 	const [shadow, setShadow] = useState<ShadowRoot>();
 	const [hover, setHover] = useState<number>();
+	const [measuring, setMeasuring] = useState(false);
+	useEffect(() => {
+		const key = (e: KeyboardEvent) => { if (e.key === 'Alt') { setMeasuring(e.type === 'keydown'); } };
+		const clear = () => { setMeasuring(false); setHover(undefined); };
+		window.addEventListener('keydown', key); window.addEventListener('keyup', key); window.addEventListener('blur', clear);
+		return () => { window.removeEventListener('keydown', key); window.removeEventListener('keyup', key); window.removeEventListener('blur', clear); };
+	}, []);
 	// 이동 손잡이를 보일 그리드: 마우스가 그리드 위에 있었거나(손잡이로 가는 동안 잠깐 벗어나도 유지) 고른 칸이 그리드 안
 	const [hoverGrid, setHoverGrid] = useState<number>();
 	const hoverGridTimer = useRef<number>(undefined);
@@ -171,7 +180,7 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
 						const el = target(e);
 						if (el && onContextMenu) {
 							e.preventDefault();
-							onContextMenu(wseIndex(el), e.clientX, e.clientY);
+							onContextMenu(wseIndex(el), e.clientX, e.clientY, matchingCssRules(el, styleRules ?? []));
 						}
 					}}
 					onDoubleClick={e => {
@@ -253,7 +262,7 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
 							onBindRef?.(wseIndex(el), value);
 						}
 					}}
-					onMouseOver={e => { const el = target(e); setHover(el ? wseIndex(el) : undefined); keepHoverGrid(el ? gridOf(wseIndex(el))?.index : undefined); }}
+					onMouseOver={e => { setMeasuring(e.altKey); const el = target(e); setHover(el ? wseIndex(el) : undefined); keepHoverGrid(el ? gridOf(wseIndex(el))?.index : undefined); }}
 					onMouseLeave={() => { setHover(undefined); keepHoverGrid(undefined); }}>
 					<Boundary generation={generation}><DataCollection.Provider value={dataCollection}>{tree}</DataCollection.Provider></Boundary>
 					{editing && (
@@ -268,15 +277,19 @@ export function Canvas({ body, dataCollection, defs, sheets, selected, extra = [
 				{/* 글자 편집 중에는 선택 테두리·손잡이·표시 점이 편집 상자를 덮지 않게 숨긴다(겹침 층이 페이지 위라 z-index로는 못 내림) */}
 				<div className="wse-overlay" hidden={!!editing}>
 					<Badges page={page} body={body} tree={tree} />
-					{!drop && !dragging.length && <Frame page={page} index={hover !== selected ? hover : undefined} kind="hover" tree={tree} />}
+					{!drop && !dragging.length && <>
+						<HoverSpacing page={page} index={hover} tree={tree} sheets={sheets} />
+						<Frame page={page} index={hover !== selected ? hover : undefined} kind="hover" tree={tree} />
+					</>}
 					{!dragging.length && <>
 						{extra.map(i => <Frame key={i} page={page} index={i} kind="selected extra" tree={tree} />)}
 						<Frame page={page} index={selected} kind="selected" tree={tree} onResize={commitStyle}
-							label={!drop && selectedNode ? label(selectedNode, defOf(selectedNode, defs)) : undefined} />
+							label={!measuring && !drop && selectedNode ? label(selectedNode, defOf(selectedNode, defs)) : undefined} />
 					</>}
 					{drop && <Frame page={page} index={drop.index} kind={`drop ${drop.position} ${drop.side}`} tree={tree} />}
 					{handleGrid && onMove && <GridHandle page={page} index={handleGrid.index} tree={tree} onEnter={() => keepHoverGrid(handleGrid.index)}
 						onSelect={() => onSelect(handleGrid.index)} onDragStart={e => startMove(e, handleGrid)} />}
+					{!drop && !dragging.length && measuring && hover !== undefined && hover !== selected && !extra.includes(hover) && <Distances page={page} from={selected} extra={extra} to={hover} tree={tree} sheets={sheets} />}
 				</div>
 			</div>, shadow)}
 		</div>
@@ -530,6 +543,81 @@ function watchLayout<T>(elements: Element[], page: HTMLElement, measure: () => T
 		ancestors.forEach(el => { el.removeEventListener('scroll', schedule); el.removeEventListener('resize', schedule); });
 		cancelAnimationFrame(pending);
 	};
+}
+
+function HoverSpacing({ page, index, tree, sheets }: {
+	page: RefObject<HTMLDivElement | null>; index?: number; tree: ReactNode; sheets?: string[];
+}) {
+	const [spacing, setSpacing] = useState<{ clip: Rect; padding: string; margin: string }>();
+	useLayoutEffect(() => {
+		const p = page.current, el = index === undefined ? undefined : p?.querySelector<HTMLElement>(node(index));
+		if (!p || !el) { setSpacing(undefined); return; }
+		return watchLayout([el], p, () => {
+			if (!el.getClientRects().length) { return undefined; }
+			const a = el.getBoundingClientRect(), b = p.getBoundingClientRect(), style = getComputedStyle(el);
+			const scaleX = a.width / (el.offsetWidth || a.width || 1), scaleY = a.height / (el.offsetHeight || a.height || 1);
+			// shortcut: 음수 margin·회전 변형은 정확한 영역을 표시하지 않는다, 해당 배치 지원이 필요하면 사각형 계산을 확장한다.
+			const sides = (prefix: string) => ['top', 'right', 'bottom', 'left'].map((side, i) =>
+				Math.max(0, parseFloat(style.getPropertyValue(prefix + '-' + side + (prefix === 'border' ? '-width' : ''))) || 0) * (i % 2 ? scaleX : scaleY));
+			const [pt, pr, pb, pl] = sides('padding'), [mt, mr, mb, ml] = sides('margin'), [bt, br, bb, bl] = sides('border');
+			if (!(pt || pr || pb || pl || mt || mr || mb || ml)) { return undefined; }
+			let left = b.left + p.clientLeft, top = b.top + p.clientTop, right = left + p.clientWidth, bottom = top + p.clientHeight;
+			for (let parent = el.parentElement; parent && parent !== p; parent = parent.parentElement) {
+				const css = getComputedStyle(parent), r = parent.getBoundingClientRect();
+				if (css.overflowX !== 'visible') { left = Math.max(left, r.left + parent.clientLeft); right = Math.min(right, r.left + parent.clientLeft + parent.clientWidth); }
+				if (css.overflowY !== 'visible') { top = Math.max(top, r.top + parent.clientTop); bottom = Math.min(bottom, r.top + parent.clientTop + parent.clientHeight); }
+			}
+			if (right <= left || bottom <= top) { return undefined; }
+			const x = a.left - left, y = a.top - top;
+			const box = (x: number, y: number, w: number, h: number) => `M${x},${y}h${Math.max(0, w)}v${Math.max(0, h)}h${-Math.max(0, w)}Z`;
+			const width = a.width - bl - br, height = a.height - bt - bb;
+			return {
+				clip: { left: left - b.left, top: top - b.top, width: right - left, height: bottom - top },
+				padding: pt || pr || pb || pl ? box(x + bl, y + bt, width, height) + box(x + bl + pl, y + bt + pt, width - pl - pr, height - pt - pb) : '',
+				margin: mt || mr || mb || ml ? box(x - ml, y - mt, a.width + ml + mr, a.height + mt + mb) + box(x, y, a.width, a.height) : '',
+			};
+		}, setSpacing);
+	}, [page, index, tree, sheets]);
+	return spacing && <svg className="wse-spacing" style={spacing.clip} aria-hidden="true">
+		{spacing.margin && <path className="margin" d={spacing.margin} fillRule="evenodd" />}
+		{spacing.padding && <path className="padding" d={spacing.padding} fillRule="evenodd" />}
+	</svg>;
+}
+
+/** 보이는 요소만 대상으로 하되 잘리기 전의 경계로 실제 간격을 잰다. */
+function Distances({ page, from, extra, to, tree, sheets }: {
+	page: RefObject<HTMLDivElement | null>; from?: number; extra: number[]; to?: number; tree: ReactNode; sheets?: string[];
+}) {
+	const [measurement, setMeasurement] = useState<{ lines: DistanceLine[]; width: number; height: number }>();
+	useLayoutEffect(() => {
+		const p = page.current, b = to === undefined ? undefined : p?.querySelector(node(to));
+		const selected = from === undefined ? [] : [from, ...extra].flatMap(i => p?.querySelector(node(i)) ?? []);
+		if (!p || !selected.length || !b) { setMeasurement(undefined); return; }
+		return watchLayout([...selected, b], p, () => {
+			if (!selected.some(el => visibleRect(el, p)) || !visibleRect(b, p)) { return undefined; }
+			const origin = p.getBoundingClientRect();
+			// shortcut: 회전 요소도 화면의 축에 평행한 경계 상자로 잰다, 회전된 변 사이 측정이 필요하면 다각형 계산으로 확장한다.
+			const bounds = (el: Element) => {
+				const r = el.getBoundingClientRect();
+				return { left: r.left - origin.left, top: r.top - origin.top, right: r.right - origin.left, bottom: r.bottom - origin.top };
+			};
+			const group = selected.filter(el => el.getClientRects().length).map(bounds).reduce((a, r) => ({ left: Math.min(a.left, r.left), top: Math.min(a.top, r.top), right: Math.max(a.right, r.right), bottom: Math.max(a.bottom, r.bottom) }));
+			return { lines: distanceLines(group, bounds(b)), width: p.clientWidth, height: p.clientHeight };
+		}, setMeasurement);
+	}, [page, from, extra, to, tree, sheets]);
+	return measurement && <svg className="wse-measure" aria-hidden="true">{measurement.lines.map((line, i) => {
+		const { x1, y1, x2, y2, horizontal, guide } = line;
+		const text = `${Math.round(Math.abs(horizontal ? x2 - x1 : y2 - y1) * 10) / 10}px`, width = text.length * 7 + 8;
+		const x = Math.max(width / 2, Math.min(measurement.width - width / 2, horizontal ? (x1 + x2) / 2 : x1 + width / 2 + 5));
+		const y = Math.max(9, Math.min(measurement.height - 9, horizontal ? y1 - 12 : (y1 + y2) / 2));
+		return <g key={i}>
+			{guide && <line className="guide" {...guide} />}
+			<line className="distance" x1={x1} y1={y1} x2={x2} y2={y2} />
+			<path d={horizontal ? `M${x1},${y1 - 3}v6M${x2},${y2 - 3}v6` : `M${x1 - 3},${y1}h6M${x2 - 3},${y2}h6`} />
+			<rect x={x - width / 2} y={y - 9} width={width} height={18} rx={3} />
+			<text x={x} y={y} dominantBaseline="central" textAnchor="middle">{text}</text>
+		</g>;
+	})}</svg>;
 }
 
 function Frame({ page, index, kind, tree, onResize, label }: {

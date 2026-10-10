@@ -1,7 +1,7 @@
 // 코드 편집기 미니맵(막대형): 글자 대신 낱말마다 그 색의 막대를 그린다(VS Code minimap.renderCharacters: false처럼).
-// 큰 흐름·오류 위치 보기용. 미니맵에 보이는 줄만 그리고(문서 크기와 상관없이 수백 줄), 문법 색은 편집기가 이미 읽어 둔 만큼만 쓴다
-// (전체를 다시 읽게 하지 않는다). 입력은 잠깐 멈춘 뒤, 스크롤은 프레임당 한 번 다시 그린다. 숨은 탭은 그리지 않는다
-import { highlightingFor, syntaxTree } from '@codemirror/language';
+// 큰 흐름·오류 위치 보기용. 미니맵에 그릴 범위까지 문법을 읽고(유휴 시간에 최대 4ms씩), 준비되면 색칠한다.
+// 입력은 잠깐 멈춘 뒤, 스크롤은 프레임당 한 번 다시 그린다. 숨은 탭은 그리지 않는다
+import { ensureSyntaxTree, highlightingFor, language, syntaxTree } from '@codemirror/language';
 import { forEachDiagnostic } from '@codemirror/lint';
 import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { getStyleTags } from '@lezer/highlight';
@@ -28,6 +28,10 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 	/** 그린 범위(첫 줄 번호)와 줄 수 */
 	start = 1;
 	frame = 0;
+	idle = 0;
+	parseTo = 0;
+	parsedTo = 0;
+	tree?: ReturnType<typeof syntaxTree>;
 	timer = 0;
 	/** 테마가 바뀌면 비움: 문법 class → 색 */
 	colors = new Map<string, string>();
@@ -66,6 +70,9 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 	update(u: ViewUpdate) {
 		if (u.transactions.some(tr => tr.reconfigured)) { this.colors.clear(); this.textColor = ''; this.stale = true; }
 		if (u.geometryChanged) { this.textColor = ''; this.stale = true; }
+		if (u.docChanged || u.startState.facet(language) !== u.state.facet(language)) {
+			cancelIdleCallback(this.idle); this.idle = 0; this.parsedTo = 0; this.parseTo = 0; this.tree = undefined;
+		}
 		if (u.docChanged) {
 			this.stale = true;
 			// 입력 중에는 막대 자리만 맞추고(슬라이더) 다시 그리기는 잠깐 뒤에
@@ -146,17 +153,20 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 	 * (스크롤로 범위를 벗어날 때 한 프레임이 길어지지 않게)
 	 */
 	paintTile(first: number, last: number, width: number, ratio: number) {
+		const state = this.view.state;
+		this.parse(state.doc.line(last).to);
+		const tree = this.tree ?? syntaxTree(state);
 		const old = this.tile, oldFirst = this.tileStart, oldLast = this.tileStart + this.tileRows - 1;
 		const reuse = !this.stale && this.tileRows > 0 && old.width === Math.round(width * ratio) && first <= oldLast && last >= oldFirst;
 		const tile = document.createElement('canvas');
 		Object.assign(tile, { width: Math.round(width * ratio), height: Math.max(1, Math.round((last - first + 1) * LINE * ratio)) });
 		const g = tile.getContext('2d')!;
 		if (reuse) {
-			g.drawImage(old, 0, (first - oldFirst) * LINE * ratio);
-			if (first < oldFirst) { this.paintLines(g, first, first, oldFirst - 1, width, ratio); }
-			if (last > oldLast) { this.paintLines(g, first, oldLast + 1, last, width, ratio); }
+			g.drawImage(old, 0, (oldFirst - first) * LINE * ratio);
+			if (first < oldFirst) { this.paintLines(g, first, first, oldFirst - 1, width, ratio, tree); }
+			if (last > oldLast) { this.paintLines(g, first, oldLast + 1, last, width, ratio, tree); }
 		} else {
-			this.paintLines(g, first, first, last, width, ratio);
+			this.paintLines(g, first, first, last, width, ratio, tree);
 		}
 		this.tile = tile;
 		this.stale = false;
@@ -166,8 +176,27 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 		this.tileRows = last - first + 1;
 	}
 
+	/** 스크롤 프레임 밖에서 필요한 범위만 파싱한다. 완료될 때 한 번 다시 색칠한다. */
+	parse(to: number) {
+		if (to <= this.parsedTo || !this.view.state.facet(language)) { return; }
+		this.parseTo = Math.max(this.parseTo, to);
+		if (this.idle) { return; }
+		this.idle = requestIdleCallback(deadline => {
+			this.idle = 0;
+			if (!this.view.dom.offsetParent || performance.now() < this.typingUntil) { this.stale = true; return; }
+			const budget = Math.min(4, deadline.timeRemaining());
+			if (budget < 1) { this.parse(this.parseTo); return; }
+			const tree = ensureSyntaxTree(this.view.state, this.parseTo, budget);
+			if (!tree) { this.parse(this.parseTo); return; }
+			this.tree = tree;
+			this.parsedTo = this.parseTo;
+			this.stale = true;
+			this.schedule();
+		});
+	}
+
 	/** 그림(첫 줄 top) 위에 a~b 줄의 막대를 그린다 */
-	paintLines(g: CanvasRenderingContext2D, top: number, a: number, b: number, width: number, ratio: number) {
+	paintLines(g: CanvasRenderingContext2D, top: number, a: number, b: number, width: number, ratio: number, tree: ReturnType<typeof syntaxTree>) {
 		const v = this.view, doc = v.state.doc, tab = v.state.tabSize, cols = width - PAD - 4;
 		g.setTransform(ratio, 0, 0, ratio, 0, 0);
 		g.globalAlpha = 1;
@@ -188,7 +217,7 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 		}
 		const columnAt = (line: { from: number; text: string }, pos: number) => {
 			let col = 0;
-			for (let i = 0, limit = pos - line.from; i < limit && i < line.text.length; i++) { col = nextColumn(col, line.text[i], tab); }
+			for (let i = 0, limit = pos - line.from; i < limit && i < line.text.length && col < cols; i++) { col = nextColumn(col, line.text[i], tab); }
 			return col;
 		};
 		// 1) 기본 글자색 막대(공백 없는 덩어리마다)
@@ -204,10 +233,11 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 				else if (!space && run < 0) { run = col; }
 				col = nextColumn(col, ch, tab);
 			}
+			if (run >= 0) { g.fillRect(PAD + run, y, Math.min(col, cols) - run, LINE - .5); }
 		}
-		// 2) 문법 색: 이미 읽은 문법 트리에서 이 범위만. 안쪽 노드가 바깥 위에 덮인다
+		// 2) 문법 색: 그릴 범위까지 읽은 트리에서. 안쪽 노드가 바깥 위에 덮인다
 		g.globalAlpha = .9;
-		syntaxTree(v.state).iterate({
+		tree.iterate({
 			from, to,
 			enter: node => {
 				const style = getStyleTags(node);
@@ -267,6 +297,7 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 
 	destroy() {
 		cancelAnimationFrame(this.frame);
+		cancelIdleCallback(this.idle);
 		clearTimeout(this.timer);
 		this.view.scrollDOM.removeEventListener('scroll', this.onScroll);
 		this.dom.remove();

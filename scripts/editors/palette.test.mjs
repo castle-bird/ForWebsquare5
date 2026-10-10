@@ -36,11 +36,52 @@ export default async function ({ clickTab, page, lastSent }) {
 		const shadow = [...document.querySelectorAll('.design-canvas div')].find(el => el.shadowRoot).shadowRoot;
 		shadow.querySelector(`[data-wse="${index}"]`).click(); window.sent.length = 0;
 	}, paletteIds.group);
+	const choosePosition = async label => {
+		await page.waitForSelector('.palette-pane .context-menu', { visible: true });
+		const buttons = await page.$$('.palette-pane .context-menu button');
+		const labels = await page.$$eval('.palette-pane .context-menu button', bs => bs.map(b => b.textContent));
+		await buttons[labels.indexOf(label)].click();
+		await page.waitForFunction(() => !document.querySelector('.palette-pane .context-menu'));
+	};
 	await page.click('[data-component="input"]');
-	assert.deepEqual(await lastSent('insertComponent'), { type: 'insertComponent', version: 1000, index: paletteIds.group, component: { id: 'input', ns: 'urn:test', realType: 'input' } }, '클릭은 현재 선택 + 기존 위치 선택창 요청');
+	await page.waitForSelector('.palette-pane .context-menu', { visible: true });
+	assert.equal(await lastSent('insertComponent'), undefined, '컴포넌트 클릭만으로 호스트 팝업·삽입 요청하지 않음');
+	assert.deepEqual(await page.$$eval('.palette-pane .context-menu button', bs => bs.map(b => b.textContent)), ['하위 맨 앞', '하위 맨 뒤', '앞', '뒤']);
+	assert.ok(await page.evaluate(() => {
+		const row = document.querySelector('[data-component="input"]').getBoundingClientRect(), menu = document.querySelector('.palette-pane .context-menu').getBoundingClientRect();
+		return Math.abs(menu.left - row.right - 2) < 1 && Math.abs(menu.top - row.top) < 1;
+	}), '클릭한 팔레트 항목 우측에 위치 메뉴 연결');
+	await choosePosition('뒤');
+	assert.deepEqual(await lastSent('insertComponent'), { type: 'insertComponent', version: 1000, index: paletteIds.group, position: 'after', component: { id: 'input', ns: 'urn:test', realType: 'input' } }, '선택한 위치·문서 버전·대상으로 삽입 요청');
+	await page.evaluate(() => { window.sent.length = 0; });
+	await page.click('[data-component="input"]');
+	await page.waitForSelector('.palette-pane .context-menu', { visible: true });
+	assert.equal(await page.$eval('.palette-pane .context-menu button', b => b.textContent), '하위 맨 앞', '최근 선택과 무관하게 위치 순서를 고정');
+	await page.keyboard.press('Escape');
+	assert.equal(await page.$('.palette-pane .context-menu'), null);
+	assert.equal(await lastSent('insertComponent'), undefined, 'Esc 취소는 삽입하지 않음');
+	for (const [selected, labels] of [[paletteIds.input, ['앞', '뒤']], [paletteIds.body, ['하위 맨 앞', '하위 맨 뒤']], [paletteIds.cell, ['앞', '뒤']]]) {
+		await page.evaluate(index => {
+			const target = document.querySelector('.canvas-host').shadowRoot.querySelector('[data-wse="' + index + '"]') ?? document.querySelector('.tree-row[data-index="' + index + '"]');
+			if (!target) { throw Error('선택 대상 없음: ' + index); }
+			target.click();
+		}, selected);
+		await page.click('[data-component="input"]');
+		await page.waitForSelector('.palette-pane .context-menu', { visible: true });
+		assert.deepEqual((await page.$$eval('.palette-pane .context-menu button', bs => bs.map(b => b.textContent))).sort(), labels.sort(), '대상별 가능한 자리만 표시');
+		await page.mouse.click(5, 5);
+		assert.equal(await page.$('.palette-pane .context-menu'), null, '바깥 클릭 취소');
+	}
+	await page.evaluate(index => document.querySelector('.canvas-host').shadowRoot.querySelector('[data-wse="' + index + '"]').click(), paletteIds.group);
+	await page.focus('[data-component="input"]');
+	await page.keyboard.press('Enter');
+	await page.waitForSelector('.palette-pane .context-menu', { visible: true });
+	await page.keyboard.press('Enter');
+	assert.equal((await lastSent('insertComponent')).position, 'first', '키보드로 열기·위치 선택');
 	await page.type('.palette-search input', 'radio');
 	assert.deepEqual(await page.$$eval('.palette-category', bs => bs.map(b => b.textContent)), ['Forms']);
 	await page.click('[data-component="radio"]');
+	await choosePosition('하위 맨 뒤');
 	assert.equal((await lastSent('insertComponent')).component.realType, 'radio', 'select1 태그가 같은 Radio·SelectBox 구분');
 	await page.$eval('.palette-search input', input => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, ''); input.dispatchEvent(new Event('input', { bubbles: true })); });
 	await page.waitForFunction(() => document.querySelectorAll('.palette-category').length === 8);
@@ -183,6 +224,7 @@ export default async function ({ clickTab, page, lastSent }) {
 	assert.ok(await page.$('.palette-favorites .codicon-star-full'), '선택한 별은 채워진 아이콘');
 	assert.ok(await page.evaluate(() => document.querySelector('.palette-favorites').compareDocumentPosition(document.querySelector('.palette-category')) & Node.DOCUMENT_POSITION_FOLLOWING), '즐겨찾기가 분류 목록보다 먼저');
 	await page.click('.palette-favorites [data-component="input"]');
+	await choosePosition('하위 맨 뒤');
 	assert.equal((await lastSent('insertComponent')).index, paletteIds.group, '즐겨찾기 항목 클릭도 기존 선택 기준으로 삽입');
 	await page.setDragInterception(true);
 	await (await page.$('.palette-favorites [data-component="input"]')).dragAndDrop(groupElement);

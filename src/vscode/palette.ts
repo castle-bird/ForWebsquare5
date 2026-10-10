@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { ComponentDef } from '../core/protocol';
 import type { InsertPosition } from '../core/paste';
-import { insertComponent, insertPositions, insertTarget, paletteKey } from '../core/palette';
+import { insertComponent, insertPositions, insertTarget, paletteKey, INSERT_POSITION_LABELS } from '../core/palette';
 import { parseXml, pathTo } from '../core/xmlModel';
 import { errorMessage } from '../core/errors';
 import { loadDefaultStyles } from '../project/components';
@@ -27,7 +27,6 @@ export const reorderPaletteFavorites = (globalState: vscode.Memento, order: stri
 	await globalState.update(FAVORITES, [...new Set([...order.filter(key => current.includes(key)), ...current])]);
 });
 
-const LABELS: Record<InsertPosition, string> = { first: '안쪽 맨 앞', inside: '안쪽 맨 뒤', before: '앞에', after: '뒤에' };
 let lastPosition: InsertPosition = 'inside';
 
 export async function insertFromPalette(document: vscode.TextDocument, def: ComponentDef, selected: number | undefined, webRoot?: string, position?: InsertPosition, expectedVersion = document.version): Promise<string | undefined> {
@@ -45,7 +44,7 @@ export async function insertFromPalette(document: vscode.TextDocument, def: Comp
 	const positions = insertPositions(target);
 	const name = def.display ?? def.id;
 	const picked = position === undefined ? await vscode.window.showQuickPick(
-		[...positions].sort((a, b) => Number(b === lastPosition) - Number(a === lastPosition)).map(position => ({ label: LABELS[position], position })),
+		[...positions].sort((a, b) => Number(b === lastPosition) - Number(a === lastPosition)).map(position => ({ label: INSERT_POSITION_LABELS[position], position })),
 		{ title: `${name} 넣기`, placeHolder: `${target.tag}${target.attrs.id ? ` #${target.attrs.id}` : ''} 기준` }) : positions.includes(position) ? { position } : undefined;
 	if (!picked) {
 		return undefined;

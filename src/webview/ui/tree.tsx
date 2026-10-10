@@ -27,7 +27,10 @@ export function useFold() {
 		toggle: (n: XmlNode, open: boolean) => setState(s => ({ ...s, overrides: new Map(s.overrides).set(n.index, open) })),
 		setAll: (all: boolean) => setState({ all, overrides: new Map() }),
 		/** 문서가 바뀌어 번호가 바뀌면(옮기기) 펼침 상태도 같은 노드로 */
-		remap: (map: Map<number, number>) => setState(s => ({ ...s, overrides: new Map([...s.overrides].flatMap(([i, open]) => map.has(i) ? [[map.get(i)!, open]] : [])) })),
+		remap: (to: (index: number) => number | undefined) => setState(s => ({ ...s, overrides: new Map([...s.overrides].flatMap(([i, open]) => {
+			const next = to(i);
+			return next === undefined ? [] : [[next, open] as const];
+		})) })),
 		reveal: (nodes: XmlNode[]) => setState(s => {
 			const closed = nodes.filter(n => !(s.overrides.get(n.index) ?? s.all ?? false));
 			if (!closed.length) { return s; }

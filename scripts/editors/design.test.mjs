@@ -3,6 +3,80 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 
 export default async function ({ page, pickProperty }) {
+		// CSS 클래스의 여백을 실제 픽셀로 표시하고 선택·클릭·스크롤을 방해하지 않는다.
+		await page.evaluate(() => {
+			const text = '<html xmlns:w2="urn:test"><body><w2:group id="spacing" class="spacing"><w2:input id="spacedInput" class="spaced-input"/><w2:input id="plainInput" style="padding:0;margin:0;border:0;"/></w2:group></body></html>';
+			const root = window.parseXml(text);
+			root.children[0].children[0].def = window.testDefs.length;
+			root.children[0].children[0].children.forEach(n => { n.def = 0; });
+			window.send({ type: 'definitions', defs: [...window.testDefs, { id: 'group', ns: 'urn:test', realType: 'group', parents: [], bases: [], properties: [], events: [] }] });
+			window.send({ type: 'styles', css: ['.spacing { box-sizing:border-box;width:300px;height:180px;border:3px solid black;padding:10px 20px 30px 40px;margin:11px 12px 13px 14px; } .spaced-input { box-sizing:border-box;width:120px;height:50px;border:2px solid black;padding:4px 5px 6px 7px;margin:8px 9px 10px 11px; }'] });
+			window.send({ type: 'document', version: 2, text, root, script: { text: '' } });
+		});
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('#spacing'));
+		const spacingHover = async id => {
+			const point = await page.evaluate(id => {
+				const r = document.querySelector('.canvas-host').shadowRoot.querySelector('#' + id).getBoundingClientRect();
+				return { x: r.left + 5, y: r.top + 5 };
+			}, id);
+			await page.mouse.move(point.x, point.y);
+		};
+		const spacingInfo = id => page.evaluate(id => {
+			const s = document.querySelector('.canvas-host').shadowRoot, el = s.querySelector('#' + id), svg = s.querySelector('.wse-spacing');
+			const r = el.getBoundingClientRect(), v = svg.getBoundingClientRect();
+			return {
+				x: r.left - v.left, y: r.top - v.top, width: r.width, height: r.height,
+				padding: svg.querySelector('.padding').getAttribute('d'), margin: svg.querySelector('.margin').getAttribute('d'),
+				colors: ['.padding', '.margin'].map(c => getComputedStyle(svg.querySelector(c)).fill),
+				pointerEvents: getComputedStyle(svg).pointerEvents,
+			};
+		}, id);
+		await spacingHover('spacing');
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-spacing .padding'));
+		const box = (x, y, w, h) => `M${x},${y}h${w}v${h}h${-w}Z`;
+		let info = await spacingInfo('spacing');
+		assert.equal(info.padding, box(info.x + 3, info.y + 3, 294, 174) + box(info.x + 43, info.y + 13, 234, 134), 'padding만 표시하고 border·content는 비움');
+		assert.equal(info.margin, box(info.x - 14, info.y - 11, 326, 204) + box(info.x, info.y, 300, 180), '상하좌우 margin');
+		assert.deepEqual(info.colors, ['rgba(147, 196, 125, 0.55)', 'rgba(246, 178, 107, 0.55)']);
+		assert.equal(info.pointerEvents, 'none');
+		await page.mouse.click(...await page.evaluate(() => {
+			const r = document.querySelector('.canvas-host').shadowRoot.querySelector('#spacing').getBoundingClientRect();
+			return [r.left + 5, r.top + 5];
+		}));
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-frame.selected'));
+		await spacingHover('spacing');
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-spacing'));
+		assert.ok(await page.evaluate(() => !!document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-spacing')), '선택된 컴포넌트도 여백 표시');
+		await spacingHover('spacedInput');
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-spacing .padding')?.getAttribute('d').includes('h116v46'));
+		info = await spacingInfo('spacedInput');
+		assert.equal(info.padding, box(info.x + 2, info.y + 2, 116, 46) + box(info.x + 9, info.y + 6, 104, 36), '일반 입력 컴포넌트에도 padding');
+		assert.equal(info.margin, box(info.x - 11, info.y - 8, 140, 68) + box(info.x, info.y, 120, 50));
+		// 잘린 자리를 새 padding 경계로 삼지 않는다.
+		await page.evaluate(() => {
+			const s = document.querySelector('.canvas-host').shadowRoot, group = s.querySelector('#spacing');
+			group.style.height = '55px'; group.style.overflow = 'hidden'; group.scrollTop = 10;
+		});
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-spacing')?.getBoundingClientRect().height === 49);
+		info = await spacingInfo('spacedInput');
+		assert.equal(info.padding, box(info.x + 2, info.y + 2, 116, 46) + box(info.x + 9, info.y + 6, 104, 36), '스크롤 후에도 원래 여백 경계 유지');
+		await page.evaluate(() => {
+			const s = document.querySelector('.canvas-host').shadowRoot;
+			s.querySelector('#spacing').style.height = '180px';
+			s.querySelector('#spacing').scrollTop = 0;
+		});
+		await spacingHover('plainInput');
+		await page.waitForFunction(() => !document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-spacing'));
+		await spacingHover('spacing');
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-spacing'));
+		await page.mouse.move(1199, 799);
+		await page.waitForFunction(() => !document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-spacing'));
+		await page.evaluate(() => {
+			window.send({ type: 'styles', css: [] });
+			window.send({ type: 'definitions', defs: window.testDefs });
+		});
+		console.log('Design: Group·일반 컴포넌트 hover padding·margin·선택·스크롤·정리 passed');
+
 		// 다단 헤더: 번호 칸(rowSpan 2)에 header 소속, 헤더 row 높이는 가장 높은 row에 맞춤
 		await page.evaluate(() => {
 			const text = '<html xmlns:w2="urn:test"><body><w2:gridView id="grd" rowNumVisible="true" rowStatusVisible="true"><w2:header id="h"><w2:row id="h1"><w2:column id="hc" inputType="checkbox"/></w2:row><w2:row id="h2"><w2:column id="ht" value="zz"/></w2:row></w2:header><w2:gBody id="b"><w2:row id="r"><w2:column id="a"/></w2:row></w2:gBody></w2:gridView></body></html>';

@@ -105,7 +105,7 @@ export default async function ({ clickTab, page, reset, modifiedKey }) {
 	await gear.click();
 	await page.waitForSelector('.context-menu[role="menu"]');
 	assert.deepEqual(await page.$$eval('.context-menu [role="menuitem"]', bs => bs.map(b => b.textContent)),
-		['코드 편집기 테마 변경…', '테마 파일 가져오기…', '테마 색 덮어쓰기…', 'SQL 방언…', '도구 경로 설정…', '확장 설정 모두 보기…']);
+		['패널 글꼴 변경', '코드 편집기 테마 변경…', '테마 파일 가져오기…', '테마 색 덮어쓰기…', 'SQL 방언…', '도구 경로 설정…', '확장 설정 모두 보기…']);
 	assert.ok(await page.evaluate(() => { const m = document.querySelector('.context-menu').getBoundingClientRect(), g = document.querySelector('.canvas-frame .tab-settings').getBoundingClientRect(); return (m.top >= g.bottom || m.bottom <= g.top) && Math.abs(m.right - g.right) < 1; }), '톱니바퀴 아래(공간 없으면 위)에, 버튼을 덮지 않고 오른쪽 끝 맞춤');
 	await page.evaluate(() => { window.sent.length = 0; });
 	await page.evaluate(() => [...document.querySelectorAll('.context-menu [role="menuitem"]')].find(b => b.textContent === 'SQL 방언…').click());
@@ -130,6 +130,18 @@ export default async function ({ clickTab, page, reset, modifiedKey }) {
 		const settle = () => new Promise(r => setTimeout(r, 100));
 		await page.evaluate(() => window.tab('Source').click()); await settle();
 		await page.evaluate(() => window.tab('Script').click()); await settle();
+		// CSS 편집기에서 버튼을 누르면 VS Code가 먼저 돌아온다. 웹뷰에 놓음만 들어와도 다시 이동하면 안 된다.
+		const release = button => page.evaluate(button => {
+			window.sent.length = 0;
+			document.elementFromPoint(200, 200).dispatchEvent(new MouseEvent('mouseup', { button, bubbles: true, cancelable: true }));
+			return window.sent.filter(m => m.type === 'navigate');
+		}, button);
+		for (const button of [3, 4]) {
+			assert.deepEqual(await release(button), [], '웹뷰 밖에서 누른 버튼의 놓음은 VS Code로 재전송하지 않음');
+			await settle();
+			assert.equal(await shown(), 'Script', '놓음만 받은 뒤에는 웹뷰 탭도 이동하지 않음');
+		}
+
 		assert.deepEqual(await press(3), { down: false, up: false, sent: [] }, '뒤로: 편집기 안 탭이라 VS Code로 안 넘김');
 		await settle();
 		assert.equal(await shown(), 'Source', '뒤로 → 직전 탭(Source)');
@@ -142,6 +154,16 @@ export default async function ({ clickTab, page, reset, modifiedKey }) {
 		for (let i = 0; i < 200 && !sent.length; i++) { sent = (await press(3)).sent; await settle(); }
 		assert.deepEqual(sent, [{ type: 'navigate', back: true }], '편집기 안 기록이 끝나면 VS Code 이동 기록으로');
 		assert.deepEqual((await press(1)).sent, [], '가운데 버튼은 그대로');
+		for (const button of [3, 4]) {
+			await page.evaluate(button => {
+				window.dispatchEvent(new MouseEvent('mousedown', { button, cancelable: true }));
+				window.dispatchEvent(new Event('blur'));
+			}, button);
+			assert.deepEqual(await release(button), [], '웹뷰를 벗어난 클릭의 놓음은 이동하지 않음');
+			if (button === 3) { assert.deepEqual((await press(button)).sent, [{ type: 'navigate', back: true }], '새 뒤로 클릭은 한 번만 이동'); }
+			assert.deepEqual(await release(button), [], '같은 클릭의 중복 놓음은 이동하지 않음');
+		}
+
 		console.log('Mouse: 뒤로·앞으로 버튼 → 편집기 안 탭 기록, 끝이면 VS Code 이동 기록 passed');
 	}
 	// 잠깐 뜨는 알림: 확장이 보내면 오른쪽 아래에 떴다가 사라짐

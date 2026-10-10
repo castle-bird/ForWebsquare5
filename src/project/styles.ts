@@ -1,3 +1,4 @@
+import type { CssRuleSource } from '../core/protocol';
 import { DomUtils } from 'htmlparser2';
 import postcss, { CssSyntaxError, type Root } from 'postcss';
 import safeParse from 'postcss-safe-parser';
@@ -22,7 +23,7 @@ export async function stylesheetFiles(webRoot: string, screenFile: string, scree
 	return [...new Set(hrefs.map(h => fromWebPath(webRoot, h, screenUrl)))];
 }
 
-export function scopeCss(css: string, file: string, webRoot: string, toUri: (fsPath: string) => string, imports?: string[], errors?: string[]): string {
+export function scopeCss(css: string, file: string, webRoot: string, toUri: (fsPath: string) => string, imports?: string[], errors?: string[], sources?: CssRuleSource[]): string {
 	const root = parse(css, file, errors);
 	const base = webPath(webRoot, file);
 	root.walkAtRules('import', a => {
@@ -35,13 +36,34 @@ export function scopeCss(css: string, file: string, webRoot: string, toUri: (fsP
 		a.remove();
 	});
 	root.walkRules(rule => {
+		const selector = rule.selector;
+		let match = '';
 		rule.selector = selectorParser(selectors => {
 			selectors.walkPseudos(n => { if (n.value === ':root') { n.value = ':host'; } });
 			selectors.walkTags(n => {
 				if (n.value === 'html') { n.replaceWith(selectorParser.pseudo({ value: ':host' })); }
 				if (n.value === 'body') { n.replaceWith(selectorParser.className({ value: 'wse-page' })); }
 			});
+			if (sources) {
+				const matcher = selectors.clone();
+				matcher.walkPseudos(n => { if (n.value === ':host') { n.replaceWith(selectorParser.className({ value: 'wse-view' })); } });
+				match = matcher.toString();
+			}
 		}).processSync(rule.selector);
+		if (sources && rule.source?.start && rule.nodes.some(n => n.type === 'decl')) {
+			const media: string[] = [], supports: string[] = [];
+			let keyframes = false;
+			for (let parent: typeof rule.parent | Root['parent'] = rule.parent; parent; parent = parent.parent) {
+				if (parent.type !== 'atrule') { continue; }
+				if (parent.name === 'media') { media.push(parent.params); }
+				if (parent.name === 'supports') { supports.push(parent.params); }
+				keyframes ||= parent.name.endsWith('keyframes');
+			}
+			if (!keyframes) {
+				sources.push({ file, line: rule.source.start.line - 1, ch: rule.source.start.column - 1, selector, match, media, supports });
+			}
+		}
+
 	});
 	root.walkDecls(decl => {
 		const value = valueParser(decl.value);

@@ -84,21 +84,27 @@ function homeOf(root: XmlNode, tags: string[]): XmlNode | undefined {
 export function pasteNode(text: string, root: XmlNode, target: XmlNode, xml: string | string[], position?: 'before' | 'after'): TextEdit {
 	const items = typeof xml === 'string' ? [xml] : xml;
 	if (!items.length) { throw new Error('복사한 내용이 없습니다.'); }
-	const tags = items.map(item => parseXml(item.trim())?.tag ?? '');
-	if (items.some(item => { const n = parseXml(item.trim()); return n && isStructure(n); })) {
+	const copies = items.map(item => {
+		const indent = /^[ \t]*/.exec(item)![0], snippet = item.slice(indent.length);
+		const node = parseXml(snippet);
+		if (!node || node.start !== 0 || node.end !== snippet.trimEnd().length) {
+			throw new Error('복사한 내용이 컴포넌트 하나가 아닙니다.');
+		}
+		return { indent, snippet, node };
+	});
+	if (copies.some(({ node }) => isStructure(node))) {
 		throw new Error('화면 구조(html·head·body·xf:model)는 복사해 붙여 넣을 수 없습니다.');
 	}
 	// 데이터는 자기 집(model·dataCollection) 안으로: 고른 곳이 그 안이면 바로 뒤, 아니면(화면 컴포넌트 등) 맨 뒤. 컴포넌트는 데이터 영역에 못 넣는다
-	const home = homeOf(root, tags);
+	const home = homeOf(root, copies.map(({ node }) => node.tag));
 	if (!home && pathTo(root, target.index)?.some(n => n.ns === XFORMS_NS && localName(n.tag) === 'model')) {
 		throw new Error('데이터 영역(xf:model)에는 컴포넌트를 붙여 넣을 수 없습니다. 화면의 컴포넌트를 고른 뒤 붙여 넣어 주세요.');
 	}
 	const used = usedIds(root);
-	const first = /^[ \t]*/.exec(items[0])![0];
-	const joined = items.map(item => {
-		const indent = /^[ \t]*/.exec(item)![0];
-		return reindentLines(rename(item.slice(indent.length), used), indent, first);
-	}).join(eolOf(text) + first);
+	const first = copies[0].indent;
+	const joined = copies.map(({ snippet, node, indent }) =>
+		reindentLines(rename(snippet, node, used), indent, first)
+	).join(eolOf(text) + first);
 	if (position && (isStructure(target) || home && !home.children.some(c => c.index === target.index))) {
 		throw new Error(isStructure(target) ? '화면 구조(html·head·body·xf:model)의 앞뒤에는 붙여 넣을 수 없습니다.' : '데이터는 데이터 영역 안 항목의 앞뒤에만 붙여 넣을 수 있습니다.');
 	}
@@ -111,11 +117,7 @@ export function pasteNode(text: string, root: XmlNode, target: XmlNode, xml: str
 	return insertNode(text, target, isContainer(target) ? 'inside' : 'after', first + joined);
 }
 
-function rename(snippet: string, used: Set<string>): string {
-	const copy = parseXml(snippet);
-	if (!copy || copy.start !== 0 || copy.end !== snippet.trimEnd().length) {
-		throw new Error('복사한 내용이 컴포넌트 하나가 아닙니다.');
-	}
+function rename(snippet: string, copy: XmlNode, used: Set<string>): string {
 	const edits: TextEdit[] = [];
 	const walk = (n: XmlNode) => {
 		for (const name of Object.keys(n.attrs).filter(k => k.startsWith(EV) && k !== EVENT_KIND)) {

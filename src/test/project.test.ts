@@ -1,3 +1,4 @@
+import type { CssRuleSource } from '../core/protocol';
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -10,6 +11,22 @@ import { engineModules, udcNames } from '../project/modules';
 import { attachFrames } from '../project/frames';
 import { loadApiDocs, parseApiEvents, parseApiMethods } from '../project/apiDocs';
 import { SCREEN, DEFS } from './helpers';
+import { fromWebPath } from '../project/paths';
+
+suite('웹 경로 경계', () => {
+	test('인코딩된 상위 경로는 거부하고 정상 상대·루트·유니코드 경로는 유지', () => {
+		const root = path.resolve('web-root');
+		for (const href of ['/%2e%2e%2fsecret.xml', '/%2e%2e%2fweb-root-other/file.xml', '/dir/%2e%2e%2f%2e%2e%2fsecret.xml']) {
+			assert.throws(() => fromWebPath(root, href, '/screens/main.xml'), /웹 루트 밖/);
+		}
+		if (path.sep === '\\') {
+			assert.throws(() => fromWebPath(root, '/%2e%2e%5csecret.xml', '/screens/main.xml'), /웹 루트 밖/);
+		}
+		assert.strictEqual(fromWebPath(root, '../img/a.png', '/screens/main.xml'), path.join(root, 'img', 'a.png'));
+		assert.strictEqual(fromWebPath(root, '/images/한 글.png?x=1#icon', '/screens/main.xml'), path.join(root, 'images', '한 글.png'));
+		assert.strictEqual(fromWebPath(root, '/..assets/a.png', '/screens/main.xml'), path.join(root, '..assets', 'a.png'));
+	});
+});
 
 suite('API documentation', () => {
 	test('공개 HTML에서 메서드와 설명만 읽고 문서 경로 실패를 알림', async () => {
@@ -127,6 +144,21 @@ suite('components', () => {
 });
 
 suite('styles', () => {
+	test('CSS 규칙의 원본 파일·줄과 복합 선택자·조건을 보존하고 keyframes는 제외', () => {
+		const root = path.join(os.tmpdir(), 'webroot'), file = path.join(root, 'base.css');
+		const sources: CssRuleSource[] = [];
+		const css = '/* note */\nbody .same { color: red; }\n@media (min-width: 600px) {\n @supports (display: grid) {\n  .parent > .same, #item { padding: 4px; }\n }\n}\n.same { color: blue; }\n@keyframes fade { from { opacity: 0; } to { opacity: 1; } }';
+		scopeCss(css, file, root, p => p, undefined, undefined, sources);
+		assert.deepStrictEqual(sources, [
+			{ file, line: 1, ch: 0, selector: 'body .same', match: '.wse-page .same', media: [], supports: [] },
+			{ file, line: 4, ch: 2, selector: '.parent > .same, #item', match: '.parent > .same, #item', media: ['(min-width: 600px)'], supports: ['(display: grid)'] },
+			{ file, line: 7, ch: 0, selector: '.same', match: '.same', media: [], supports: [] },
+		]);
+		const html: CssRuleSource[] = [];
+		scopeCss('html body .same { margin: 1px; }', file, root, p => p, undefined, undefined, html);
+		assert.strictEqual(html[0].match, '.wse-view .wse-page .same');
+	});
+
 	test('CSS 범위(html/body) · url 웹 루트 기준 보정', () => {
 		const root = path.join(os.tmpdir(), 'webroot');
 		const css = 'html,body{margin:0} body .a, .tbl-body, .w2window_body{x:1} .i{background:url(../..//cm/img/a.png)} .d{background:url("data:image/png;base64,AA")}';

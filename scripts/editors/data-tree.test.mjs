@@ -13,6 +13,32 @@ export default async function ({ page }) {
 	await page.evaluate(() => window.tab('Data', '.pane').click());
 	await page.evaluate(() => [...document.querySelectorAll('.pane .codicon-expand-all')].at(-1)?.click());
 	await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row .id')].some(e => e.textContent === 's2'));
+	// Data 루트 Delete·잘라내기는 XML 요청도 선택 변경도 하지 않는다. 하위 항목은 계속 삭제 가능하다.
+	const row = index => page.locator('.pane .tree-row[data-index="' + index + '"]');
+	for (const index of [dataIds['w2:dataCollection'], -1]) {
+		await row(index).click();
+		await page.evaluate(() => { window.sent.length = 0; });
+		await page.keyboard.press('Delete');
+		await page.keyboard.down('Control'); await page.keyboard.press('x'); await page.keyboard.up('Control');
+		assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'delete')), false, 'Data 루트 삭제·잘라내기 거부');
+		assert.ok(await page.$eval('.pane .tree-row[data-index="' + index + '"]', el => el.classList.contains('selected')), '루트 선택 유지');
+	}
+	for (const rootIndex of [dataIds['w2:dataCollection'], -1]) {
+		await row(dataIds.dm1).click();
+		await page.keyboard.down('Control');
+		await row(rootIndex).click();
+		await page.keyboard.up('Control');
+		await page.evaluate(() => { window.sent.length = 0; });
+		await page.keyboard.press('Delete');
+		assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'delete')), false, '루트가 섞인 다중 선택 삭제 거부');
+	}
+	for (const index of [dataIds.dm1, dataIds.dl1, dataIds.s1]) {
+		await row(index).click();
+		await page.evaluate(() => { window.sent.length = 0; });
+		await page.keyboard.press('Delete');
+		assert.deepEqual(await page.evaluate(() => window.sent.find(m => m.type === 'delete')), { type: 'delete', version: 950, index }, '하위 항목 삭제 유지');
+	}
+
 	const dragTo = (from, to, where) => page.evaluate((from, to, where) => {
 		const row = id => [...document.querySelectorAll('.pane .tree-row')].find(r => (r.querySelector('.id')?.textContent ?? r.querySelector('.tag')?.textContent) === id);
 		const a = row(from), b = row(to), dt = new DataTransfer(), r = b.getBoundingClientRect();

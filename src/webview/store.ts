@@ -1,14 +1,18 @@
 import { create } from 'zustand';
-import type { CodeTarget, LinkState, TabPosition, ToExtension, ToWebview, XmlElementSpec } from '../core/protocol';
+import type { CodeTarget, LinkState, PanelFont, TabPosition, ToExtension, ToWebview, XmlElementSpec } from '../core/protocol';
 import { DEFAULT_LINK_EXTS, DEFAULT_LINK_TABS, type LinkTab } from '../core/links';
 import type { CodeThemeState } from '../core/codeTheme';
 import type { Blame } from '../core/blame';
 import { DEFAULT_CODE_OPTIONS, type CodeOptions } from '../core/codeOptions';
-import { findNode, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
+import { findNode, nodeAt, pathTo, uniqueId, usedIds, type XmlNode } from '../core/xmlModel';
 import type { DropPosition } from '../core/paste';
+import { selectionIndex } from '../core/selection';
 import { movedIndexes } from '../core/move';
-import { leadOf } from '../core/edit';
-import { isStructure } from '../core/paste';
+import { leadOf, sourceChange, type TextEdit } from '../core/edit';
+import { errorMessage } from '../core/errors';
+import { isStructure, pasteNode } from '../core/paste';
+import { wrapProblem } from '../core/wrap';
+import { isDataRoot } from '../core/data';
 import { isMerged, mergeProblem } from '../core/merge';
 import { setStyle, styleChanges } from '../core/style';
 import type { TextTarget } from './design/renderers';
@@ -35,16 +39,18 @@ interface EditorState {
 	extra: number[];
 	copied?: string[];
 	pendingSelect?: string;
+	pendingPaste?: { version: number; change: TextEdit };
 	/** 보낸 옮기기(version: 보낸 때 문서): 그 결과 문서가 오면 선택·펼침 번호를 옮긴 뒤 번호로 바꾼다(movedIndexes) */
 	pendingMove?: { version: number; map: Map<number, number>; check: [number, string][] };
 	/** 문서가 바뀌며 번호가 바뀌었음(펼침 상태도 따라 바꾸게, key: 매번 새 값) */
-	remap?: { map: Map<number, number>; key: number };
+	remap?: { to(index: number): number | undefined; key: number };
 	links: Record<string, LinkState>;
 	linkTabs: LinkTab[];
 	tabOrder?: string[];
 	tabPosition: TabPosition;
 	/** 코드 편집기 미니맵(모든 화면 공통) */
 	minimap: boolean;
+	panelFont: PanelFont;
 	/** 코드 편집기 커서 줄 끝 Git blame(모든 화면 공통) */
 	codeBlame: boolean;
 	/** 편집기마다 마지막으로 받은 blame(문서 버전과 함께) */
@@ -88,11 +94,13 @@ interface EditorState {
 	unmerge: (cells?: number[]) => boolean;
 	/** 그리드(grid) 칸들의 열 지우기, 또는 첫 칸의 열 옮기기 */
 	gridColumns: (op: 'delete' | 'left' | 'right', grid: number, cells: number[]) => void;
+	wrap: (indexes: number[], version: number) => void;
 	del: () => boolean;
 	move: (dragged: number, target: number, position: DropPosition) => void;
 	setTabOrder: (order: string[]) => void;
 	setTabPosition: (position: TabPosition) => void;
 	setMinimap: (on: boolean) => void;
+	setPanelFont: (font: PanelFont) => void;
 	setCodeBlame: (on: boolean) => void;
 	togglePaletteFavorite: (component: ComponentDef) => void;
 	reorderPaletteFavorites: (keys: string[]) => void;
@@ -110,6 +118,17 @@ const fromClip = (clip: DataTransfer | null | undefined): string[] | undefined =
 	}
 };
 
+/** 태그·자식 수가 모두 같으면 노드 번호가 그대로다(속성·텍스트만 바뀐 편집) */
+const sameShape = (a: XmlNode, b: XmlNode): boolean => a.tag === b.tag && a.children.length === b.children.length
+	&& a.children.every((c, i) => sameShape(c, b.children[i]));
+
+/** 문자 비교로 구한 바뀐 범위를 태그 시작('<')부터로 넓힌다(같은 요소가 이어지면 범위가 태그 중간에서 시작해 엉뚱한 요소로 이어지므로) */
+const tagChange = (before: string, after: string): TextEdit | undefined => {
+	const change = sourceChange(before, after);
+	const start = change && Math.max(0, before.lastIndexOf('<', change.start));
+	return change && { start: start!, end: change.end, replacement: before.slice(start, change.start) + change.replacement };
+};
+
 export const useEditorStore = create<EditorState>((set, get) => ({
 	doc: undefined,
 	defs: undefined,
@@ -125,6 +144,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	gitBases: {},
 	tabPosition: 'top',
 	minimap: true,
+	panelFont: 'editor',
 	codeBlame: true,
 	blames: {},
 	paletteFavorites: [],
@@ -136,13 +156,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
 	handleMessage: (data) => {
 		if (data.type === 'document') {
-			const { pendingSelect, pendingMove, selected } = get();
+			const { doc, pendingSelect, pendingMove, pendingPaste, selected } = get();
 			const added = pendingSelect && data.root && findNode(data.root, n => n.attrs.id === pendingSelect);
 			// 옮긴 결과 문서: 옮긴 노드가 계산한 번호에 그대로 있을 때만(다른 변경이 섞였으면 번호를 믿을 수 없다)
 			const moved = pendingMove && data.version !== pendingMove.version && data.root
 				&& pendingMove.check.every(([old, tag]) => nodeAt(data.root!, pendingMove.map.get(old))?.tag === tag) ? pendingMove.map : undefined;
-			set({ doc: data, extra: [], ...pendingMove && data.version !== pendingMove.version && { pendingMove: undefined },
-				...moved && { selected: selected === undefined ? undefined : moved.get(selected), remap: { map: moved, key: Date.now() } },
+			const change = pendingPaste?.version === doc?.version ? pendingPaste?.change : undefined;
+			// 구조가 바뀌면(붙여넣기·삭제·추가·Undo 등) 펼침 상태도 같은 노드를 따라간다(번호 그대로면 엉뚱한 줄이 접히거나 펼쳐진다).
+			// 붙여넣기 외에는 바뀐 문자 범위로 위치를 추적해 ID 없는 같은 속성 요소(td 등)도 놓치지 않게 한다
+			const reshaped = !moved && doc?.root && data.root && !sameShape(doc.root, data.root);
+			const edit = reshaped ? change ?? tagChange(doc!.text, data.text) : undefined;
+			const to = moved ? (i: number) => moved.get(i) : reshaped ? (i: number) => selectionIndex(doc!, data, i, edit) : undefined;
+			set({ doc: data, selected: doc ? selectionIndex(doc, data, selected, change) : undefined, extra: [],
+				...pendingPaste && data.version !== pendingPaste.version && { pendingPaste: undefined },
+				...pendingMove && data.version !== pendingMove.version && { pendingMove: undefined },
+				...moved && { selected: selected === undefined ? undefined : moved.get(selected) },
+				...to && { remap: { to, key: Date.now() } },
 				...added && { selected: added.index, pendingSelect: undefined } });
 		} else if (data.type === 'select') {
 			set({ pendingSelect: data.id });
@@ -187,6 +216,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 			set({ tabOrder: data.order });
 		} else if (data.type === 'tabPosition') {
 			set({ tabPosition: data.position });
+		} else if (data.type === 'panelFont') {
+			set({ panelFont: data.font });
 		} else if (data.type === 'minimap') {
 			set({ minimap: data.on });
 		} else if (data.type === 'codeBlame') {
@@ -206,6 +237,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	},
 
 	setSelected: (selected, additive) => {
+		set({ pendingSelect: undefined });
 		if (!additive || selected === undefined) {
 			set({ selected, extra: [] });
 			return;
@@ -285,13 +317,35 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 		if (!doc || !copied || !path || path.length < 2 || index === undefined) {
 			return false;
 		}
+		try {
+			set({ pendingPaste: { version: doc.version, change: pasteNode(doc.text, doc.root!, path.at(-1)!, copied, at?.position) } });
+		} catch (error) {
+			post({ type: 'warn', message: errorMessage(error) });
+			return true;
+		}
 		post({ type: 'paste', version: doc.version, index, xml: copied, ...at && { position: at.position } });
 		return true;
 	},
 
+	wrap: (indexes, version) => {
+		const { doc } = get(), root = doc?.root;
+		if (!doc || !root || doc.version !== version) { return; }
+		const nodes = indexes.map(i => nodeAt(root, i));
+		if (nodes.some(n => !n)) { return; }
+		const components = (nodes as XmlNode[]).sort((a, b) => a.start - b.start);
+		const problem = wrapProblem(root, components);
+		if (problem) { post({ type: 'warn', message: problem }); return; }
+		const [first, ...more] = components;
+		post({ type: 'wrap', version: doc.version, index: first.index, ...more.length && { more: more.map(n => n.index) } });
+		set({ selected: first.index, extra: [], pendingSelect: uniqueId(usedIds(root), 'group') });
+	},
+
 	del: () => {
-		const { doc, gridColumns } = get();
+		const { doc, gridColumns, selected, extra } = get();
 		const [node, ...more] = targets(get());
+		if (selected === -1 || extra.includes(-1) || [node, ...more].some(n => n && isDataRoot(n))) {
+			return true;
+		}
 		if (!doc || !node) {
 			return false;
 		}
@@ -384,6 +438,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 		post({ type: 'setTabPosition', position });
 	},
 
+	setPanelFont: (font) => {
+		set({ panelFont: font });
+		post({ type: 'setPanelFont', font });
+	},
 	setMinimap: (on) => {
 		set({ minimap: on });
 		post({ type: 'setMinimap', on });

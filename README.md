@@ -12,6 +12,8 @@ VS Code에서 WebSquare5 화면을 편집할 수 있는 확장 프로그램입�
 
 ![WebSquare5 Editor 시작하기](images/start_page.png)
 
+새 화면은 탐색기에서 폴더를 우클릭하고 **New Websquare5 File...**을 선택해 만듭니다. 저장 위치를 고르면 빈 화면 XML이 열립니다. 디자이너를 사용하려면 프로젝트에 `websquare/config.xml`이 있어야 합니다.
+
 화면 XML 파일을 열고 **Design·Info·Script·Source** 탭에서 편집합니다. 저장·Undo는 VS Code 방식 그대로 사용합니다.
 
 ![WebSquare5 에디터 화면](images/main.png)

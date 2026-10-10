@@ -7,8 +7,12 @@
 | 단위 테스트 전체 (기본) | `npm test` 또는 `npm run test:unit` |
 | 특정 로직만 | `npm test -- outlineDrop` / `npm test -- edit grid` |
 | 단위 테스트 파일 목록 | `npm test -- --list` |
+| Alt 간격 측정 | `npm test -- distance` / `npm run test:editors -- distance` |
 | Design 조작만 | `npm run test:editors -- design` |
-| 캔버스 드래그·팔레트만 | `npm run test:editors -- palette` |
+| 팔레트 옆 삽입 메뉴·캔버스 드래그 | `npm run test:editors -- palette` |
+| 마우스 앞뒤 탐색 | `npm run test:editors -- mouse-history script-navigation themes` |
+| CSS 보기 하위 메뉴·우클릭 대상 | `npm run test:editors -- css-navigation canvas-context` |
+| 우측 패널 글꼴 선택 | `npm run test:editors -- panel-font property` |
 | Outline 이동만 | `npm run test:editors -- outline` |
 | 여러 웹뷰 기능 | `npm run test:editors -- grid-edit property` |
 | 웹뷰 묶음 목록 | `npm run test:editors -- --list` |
@@ -21,7 +25,7 @@
 
 웹뷰: `scripts/editors/*.test.mjs`. 번들·브라우저는 실행당 한 번 준비하고 각 파일은 새 브라우저 context/page에서 시작한다. 파일끼리 문서·선택·접힘·클립보드·코드 버전을 공유하지 않는다. 파일 안의 연속 조작은 하나의 시나리오다. CSP·에러 수집과 실제 마우스/키보드 검증을 유지한다. Chrome/Edge가 필요하며 `CHROME_PATH`로 지정할 수 있다.
 
-웹뷰 묶음: badges, data, data-tree, design, editor-basic, editor-state, erd, git, grid-dialogs, grid-edit, info, links, outline, palette, property, script-navigation, script-tools, themes.
+웹뷰 묶음: badges, canvas-context, css-navigation, data, data-tree, design, distance, editor-basic, editor-state, erd, git, grid-dialogs, grid-edit, info, links, mouse-history, outline, palette, panel-font, property, script-navigation, script-tools, themes.
 
 VS Code 통합: `src/test/vscode/*.test.ts`. 기존 컴파일·번들 빌드 후 테스트 호스트를 실행한다. `npm test`의 의미가 순수 단위 테스트로 바뀌었으므로 배포 전에는 이 명령을 별도로 실행한다.
 

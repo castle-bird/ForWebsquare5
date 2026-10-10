@@ -1,6 +1,10 @@
 import { insertNode } from './paste';
-import { parseXml, prefixOf, uniqueId, usedIds, VALID_ID, WEBSQUARE_NS, type XmlNode } from './xmlModel';
+import { localName, parseXml, prefixOf, uniqueId, usedIds, VALID_ID, WEBSQUARE_NS, XFORMS_NS, type XmlNode } from './xmlModel';
 import { applyEdits, eolOf, escapeText, INVALID_XML_CHAR, leadOf, setAttribute, setText, sourceChange, startTagEnd, type TextEdit } from './edit';
+
+/** Data 트리의 생성 루트: 지우면 하위 항목을 추가할 수 없으므로 보호한다. */
+export const isDataRoot = (n: XmlNode) => n.ns === WEBSQUARE_NS && localName(n.tag) === 'dataCollection'
+	|| n.ns === XFORMS_NS && localName(n.tag) === 'model';
 
 export const DATA_KINDS = ['dataList', 'dataMap', 'linkedDataList', 'aliasDataList', 'aliasDataMap'] as const;
 export type DataKind = typeof DATA_KINDS[number];

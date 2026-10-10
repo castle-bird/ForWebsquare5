@@ -15,6 +15,15 @@ import { setStyle, styleChanges } from '../core/style';
 import { SCREEN } from './helpers';
 
 suite('edit', () => {
+	test('붙여넣기 조각은 한 컴포넌트만 허용하고 여러 조각의 ID를 함께 재매김', () => {
+		const text = '<html><body><group id="g"/></body></html>', root = parseXml(text)!;
+		const target = findNode(root, n => n.attrs.id === 'g')!;
+		for (const xml of ['', '<input/><input/>', '<input/>tail', '<!DOCTYPE html><input/>']) {
+			assert.throws(() => pasteNode(text, root, target, ['<input id="a"/>', xml]));
+		}
+		const after = applyEdits(text, [pasteNode(text, root, target, ['  <input id="a"/>', '\t<input id="a"/>'])]);
+		assert.ok(after.includes('a_copy1') && after.includes('a_copy2'));
+	});
 	test('boundColumnIds: 바인딩된 gridView 본문 컬럼이면 dataList 컬럼 id, 헤더·바인딩 없음은 undefined', () => {
 		const text = '<html><head><w2:dataCollection><w2:dataList id="dl"><w2:columnInfo><w2:column id="a"/><w2:column id="b"/></w2:columnInfo></w2:dataList></w2:dataCollection></head>'
 			+ '<body><w2:gridView id="g" dataList="data:dl"><w2:header><w2:row><w2:column id="h1"/></w2:row></w2:header><w2:gBody><w2:row><w2:column id="a"/></w2:row></w2:gBody></w2:gridView>'
