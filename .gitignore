@@ -1,0 +1,39 @@
+out
+dist
+node_modules
+.vscode-test/
+*.vsix
+
+# 개발용(공개하지 않음)
+.vscode/
+AGENTS.md
+CLAUDE.md
+
+# AI 도구 개인 설정
+GEMINI.md
+.claude/settings.local.json
+
+# 비밀 정보(토큰·키·환경 변수)
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+.npmrc
+
+# 로그·캐시
+*.log
+.eslintcache
+*.tsbuildinfo
+coverage/
+
+# OS·편집기
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+*.swp
+
+# 개발 문서(기능 설명만 공개)
+docs/*
+!docs/FEATURES.md
