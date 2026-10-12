@@ -1,0 +1,522 @@
+{
+  "name": "for-websquare5",
+  "displayName": "ForWebsquare5",
+  "publisher": "castle-bird",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/castle-bird/ForWebsquare5.git"
+  },
+  "bugs": {
+    "url": "https://github.com/castle-bird/ForWebsquare5/issues"
+  },
+  "homepage": "https://github.com/castle-bird/ForWebsquare5#readme",
+  "description": "VS Code에서 WebSquare5 에디터를 사용할 수 있게 해주는 비공식 확장",
+  "version": "1.0.0",
+  "icon": "media/logo.png",
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "화면 XML과 프로젝트 도구를 다루므로 신뢰한 작업 폴더에서만 동작한다."
+    },
+    "virtualWorkspaces": false
+  },
+  "activationEvents": [
+    "workspaceContains:**/websquare/config.xml",
+    "onLanguage:xml"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "for-websquare5.format",
+        "title": "WebSquare5: 코드 탭 포맷 (Source·Script·연결 파일)"
+      },
+      {
+        "command": "for-websquare5.setup",
+        "title": "WebSquare5: 환경 설정"
+      },
+      {
+        "command": "for-websquare5.codeTheme",
+        "title": "WebSquare5: 코드 편집기 테마…"
+      },
+      {
+        "command": "for-websquare5.importCodeTheme",
+        "title": "WebSquare5: 코드 편집기 테마 가져오기 (VS Code 테마 .json)…"
+      },
+      {
+        "command": "for-websquare5.choose",
+        "title": "WebSquare5: 도구 경로 선택"
+      },
+      {
+        "command": "for-websquare5.createFile",
+        "title": "New Websquare5 File...",
+        "enablement": "isWorkspaceTrusted"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "for-websquare5.choose",
+          "when": "false"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "for-websquare5.createFile",
+          "when": "explorerResourceIsFolder && resourceScheme == file && isWorkspaceTrusted",
+          "group": "navigation@20"
+        }
+      ]
+    },
+    "walkthroughs": [
+      {
+        "id": "setup",
+        "title": "ForWebsquare5 시작하기",
+        "description": "Eclipse 설치 폴더 하나만 고르면 나머지는 자동으로 찾습니다.",
+        "steps": [
+          {
+            "id": "eclipse",
+            "title": "Eclipse 설치 폴더",
+            "description": "**폴더:** Eclipse 설치 폴더 (예: `C:\\eclipse_egov{버전}`)\n그 안에서 컴포넌트 정의·wpack 변환기·API 문서를 자동으로 찾습니다. 못 찾은 항목은 저장 시·자동완성 사용 시 알림으로 안내합니다.\n[폴더 선택](command:for-websquare5.choose?%5B%22eclipseInstallPath%22%5D)",
+            "media": {
+              "markdown": "media/setup-eclipse.md"
+            },
+            "completionEvents": [
+              "onContext:for-websquare5.found.eclipseInstallPath"
+            ]
+          },
+          {
+            "id": "newFile",
+            "title": "새 화면 만들기",
+            "description": "탐색기에서 폴더를 우클릭하고 **New Websquare5 File...**을 선택합니다. 저장 위치를 고르면 빈 화면 XML이 열립니다.\n[새 화면 만들기](command:for-websquare5.createFile)",
+            "media": {
+              "markdown": "media/setup-new-file.md"
+            },
+            "completionEvents": [
+              "onCommand:for-websquare5.createFile"
+            ]
+          }
+        ]
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "for-websquare5.format",
+        "key": "ctrl+alt+l",
+        "when": "activeCustomEditorId == for-websquare5.designer"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "for-websquare5.designer",
+        "displayName": "Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.xml"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "configuration": {
+      "title": "ForWebsquare5",
+      "properties": {
+        "for-websquare5.eclipseInstallPath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "**폴더:** Eclipse 설치 폴더 (예: `C:\\eclipse_egov{버전}`)\n\n지정하면 이 폴더 밑을 뒤져서 컴포넌트 정의 파일·wpack 변환기·API 문서 폴더를 자동으로 찾습니다. 플러그인 폴더 이름은 설치본마다 달라도 됩니다.\n\n상대 경로는 작업 폴더 기준."
+        },
+        "for-websquare5.apiDocumentationPath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "**폴더:** `index.html`·`$p`·`WebSquare.*`가 있는 API 문서 폴더\n\n**비워두면:** `eclipseInstallPath` 밑에서 자동 탐색, 없으면 WebSquare 메서드 자동완성만 빠짐\n\n상대 경로는 작업 폴더 기준."
+        },
+        "for-websquare5.componentDefinitionFile": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "**파일:** 프로젝트 엔진 버전의 `WebSquareConfig.xml`\n\n**비워두면:** `eclipseInstallPath` 밑에서 자동 탐색, 없으면 Property·Event 목록이 비어 있음\n\n상대 경로는 작업 폴더 기준."
+        },
+        "for-websquare5.wpackExecutable": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "**파일:** `w-pack/index.js` (또는 `standalone_wpack-win.exe`)\n\n**비워두면:** `eclipseInstallPath` 밑에서 자동 탐색, 없으면 저장 시 JS 변환을 건너뜀\n\n상대 경로는 작업 폴더 기준. 웹 루트 `websquare/config.xml`이 `<wpack use=\"true\">`일 때만 동작."
+        },
+        "for-websquare5.linkFileExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".java",
+            ".xml",
+            ".html",
+            ".htm",
+            ".css",
+            ".js",
+            ".sql"
+          ],
+          "markdownDescription": "**연결 탭(Controller·Service 등)에 연결할 수 있는 파일 확장자** (예: `.jsp` 추가)\n\n모든 연결 탭 공통. 편집기 언어는 확장자로 고르고(Java·XML·HTML·CSS·JS·SQL), 그 밖의 확장자는 일반 텍스트로 편집합니다. 비우면 기본값."
+        },
+        "for-websquare5.sqlDialect": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "oracle",
+            "mysql",
+            "mariadb",
+            "postgresql",
+            "mssql",
+            "sqlite"
+          ],
+          "enumDescriptions": [
+            "표준 SQL",
+            "Oracle (PL/SQL)",
+            "MySQL",
+            "MariaDB",
+            "PostgreSQL",
+            "SQL Server (T-SQL)",
+            "SQLite"
+          ],
+          "default": "standard",
+          "markdownDescription": "**SQL 방언** — MyBatis 매퍼 XML 안의 SQL과 `.sql` 연결 파일의 색·키워드 자동완성에 쓰입니다. VS Code 편집기에서 연 매퍼 XML의 SQL 키워드·함수 자동완성도 이 방언을 따릅니다."
+        },
+        "for-websquare5.codeThemeCustomizations": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "코드 편집기(Script·Source·연결 탭) 테마 덮어쓰기. 지금 고른 테마 위에 적은 색만 바꿉니다. `\"[테마 이름]\": { ... }`로 그 테마에만 적용할 수도 있습니다(예: `\"[Dracula]\"`). VS Code의 `editor.tokenColorCustomizations`와 비슷합니다.",
+          "properties": {
+            "colors": {
+              "type": "object",
+              "description": "편집기 색",
+              "properties": {
+                "background": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "배경"
+                },
+                "foreground": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "기본 글자"
+                },
+                "caret": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "커서"
+                },
+                "selection": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "선택 영역"
+                },
+                "lineHighlight": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "현재 줄"
+                },
+                "gutterBackground": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "줄 번호 칸 배경"
+                },
+                "gutterForeground": {
+                  "type": "string",
+                  "format": "color-hex",
+                  "description": "줄 번호"
+                }
+              },
+              "additionalProperties": false
+            },
+            "tokens": {
+              "type": "object",
+              "description": "문법 색: \"#색\" 또는 { \"color\": \"#색\", \"fontStyle\": \"italic\" }",
+              "properties": {
+                "comment": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "주석"
+                },
+                "string": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "문자열"
+                },
+                "number": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "숫자"
+                },
+                "constant": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "true·false·null"
+                },
+                "keyword": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "키워드(if·return 등)"
+                },
+                "modifier": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "수식어·선언(public·static·class·var 등)"
+                },
+                "type": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "타입·클래스 이름"
+                },
+                "function": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "함수·메서드 이름"
+                },
+                "variable": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "변수"
+                },
+                "property": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "속성·필드"
+                },
+                "operator": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "연산자"
+                },
+                "tag": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "XML·HTML 태그"
+                },
+                "attribute": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "XML·HTML 속성"
+                },
+                "annotation": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "color-hex"
+                    },
+                    {
+                      "type": "object",
+                      "markdownDescription": "`{ \"color\": \"#색\", \"fontStyle\": \"italic bold underline 중, 빈 글자는 기본\" }`"
+                    }
+                  ],
+                  "description": "Java 어노테이션"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "patternProperties": {
+            "^[.+]$": {
+              "type": "object",
+              "markdownDescription": "이 테마에만 적용: 위와 같은 `colors`·`tokens`"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test:editors": "node scripts/test-editors.mjs",
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "package:vsix": "npx @vscode/vsce package --no-dependencies",
+    "compile-tests": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\" && tsc -p . --outDir out",
+    "test:unit": "node scripts/test-unit.mjs",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "check-types": "tsc --noEmit && tsc --noEmit -p src/webview",
+    "lint": "eslint src",
+    "test": "node scripts/test-unit.mjs",
+    "test:vscode": "npm run compile-tests && npm run compile && vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/vscode": "1.125.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.5.0",
+    "npm-run-all": "^4.1.5",
+    "puppeteer-core": "^25.12.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.1"
+  },
+  "overrides": {
+    "diff": "^8.0.4",
+    "serialize-javascript": "^7.0.6"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.12",
+    "@codemirror/lang-java": "^6.0.2",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/lang-sql": "^6.10.0",
+    "@codemirror/lang-xml": "^6.1.0",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/merge": "^6.12.2",
+    "@codemirror/search": "^6.7.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.13",
+    "@dnd-kit/core": "^6.3.1",
+    "@floating-ui/dom": "^1.8.0",
+    "@fsegurai/codemirror-theme-vscode-dark": "^6.2.8",
+    "@fsegurai/codemirror-theme-vscode-light": "^6.2.8",
+    "@lezer/common": "^1.5.3",
+    "@lezer/highlight": "^1.2.5",
+    "@replit/codemirror-indentation-markers": "^6.5.3",
+    "@vscode/codicons": "^0.0.46-24",
+    "@xyflow/react": "^12.12.0",
+    "acorn": "^8.18.0",
+    "clsx": "^2.1.1",
+    "codemirror": "^6.0.2",
+    "entities": "^4.5.0",
+    "fflate": "^0.8.3",
+    "fuzzysort": "^4.0.2",
+    "html-to-image": "^1.11.11",
+    "htmlparser2": "^9.1.0",
+    "postcss": "^8.5.28",
+    "postcss-safe-parser": "^7.1.0",
+    "postcss-selector-parser": "^7.1.6",
+    "postcss-value-parser": "^4.2.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-resizable-panels": "^4.14.1",
+    "saxes": "^6.0.0",
+    "style-to-js": "^2.0.2",
+    "thememirror": "^2.0.1",
+    "zustand": "^5.0.15"
+  }
+}

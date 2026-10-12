@@ -1,0 +1,118 @@
+.wse-view { position: relative; height: 100%; }
+/* 엔진 페이지처럼 높이를 캔버스 크기로 고정(html·body height:100%)해야 flex:1 같은 레이아웃이 실제처럼 늘어난다. 넘치면 페이지 안에서 스크롤.
+   z-index:0으로 쌓임 맥락을 만들어 프로젝트 CSS의 z-index가 겹침 층 위로 못 올라오게 가둔다 */
+.wse-page { position: relative; z-index: 0; box-sizing: border-box; height: 100%; overflow: auto; background: #fff; color: #000; color-scheme: light; }
+/* VS Code 웹뷰가 문서에 건 scrollbar-color(테마색, 상속)가 캔버스까지 내려와 다크 테마에서 검게 보여서, 테마와 무관한 회색으로 고정 */
+.wse-page { scrollbar-color: #b0b0b0 #f0f0f0; }
+
+.wse-page > .w2body { height: 100%; }
+.wse-page [data-wse] { cursor: pointer !important; }
+/* 그리드 본문 inputType 아이콘(renderers.tsx INPUT_ICONS): 칸 오른쪽. 스킨 배경 아이콘(이미지 없어 깨짐)과 겹치지 않게 배경은 끈다 */
+.wse-page td.wse-has-input-icon { background-image: none !important; }
+.wse-page .wse-input-icon { display: inline-block; width: 14px; height: 14px; margin: 0 2px; opacity: .55; vertical-align: middle; }
+.wse-page [data-wse-resize] { position: relative; }
+.wse-page [data-wse-resize]::after { content: ''; position: absolute; top: 0; right: 0; width: 5px; height: 100%; cursor: col-resize; }
+.wse-page .w2group { outline: 1px dashed rgba(0, 0, 0, .12); outline-offset: -1px; }
+
+.wse-page tr.w2group { outline: none; }
+.wse-unknown, .wse-todo { border: 1px dashed #999; min-height: 20px; padding: 2px; box-sizing: border-box; }
+.wse-unknown::before, .wse-todo::before { content: attr(data-tag); font: 11px monospace; color: #888; }
+.wse-overlay { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
+.wse-spacing { position: absolute; overflow: hidden; pointer-events: none; }
+.wse-spacing .padding { fill: rgb(147 196 125 / 55%); }
+.wse-spacing .margin { fill: rgb(246 178 107 / 55%); }
+.wse-measure { position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden; pointer-events: none; color: #c72b78; }
+.wse-measure line, .wse-measure path { stroke: currentColor; stroke-width: 1; fill: none; }
+.wse-measure .guide { stroke-dasharray: 3 3; opacity: .6; }
+.wse-measure rect { fill: currentColor; stroke: currentColor; }
+.wse-measure text { fill: #fff; font: 12px var(--vscode-editor-font-family, monospace); }
+.wse-frame { position: absolute; box-sizing: border-box; }
+.wse-frame.selected { outline: 2px solid var(--vscode-focusBorder); }
+.wse-frame.selected.extra { outline-style: dashed; }
+.wse-frame.hover { background: color-mix(in srgb, var(--vscode-focusBorder) 15%, transparent); }
+.wse-handle { position: absolute; width: 5px; height: 5px; box-sizing: border-box; background: #fff; border: 1px solid var(--vscode-focusBorder); pointer-events: auto; }
+.wse-handle.s { left: calc(50% - 3px); bottom: -4px; cursor: ns-resize; }
+.wse-handle.e { top: calc(50% - 3px); right: -4px; cursor: ew-resize; }
+.wse-handle.se { right: -4px; bottom: -4px; cursor: nwse-resize; }
+/* 그리드 이동 손잡이(GridHandle): 끌면 이동, 누르면 그리드 선택 */
+.wse-grid-handle { position: absolute; display: flex; align-items: center; justify-content: center; box-sizing: border-box; border-radius: 3px; color: var(--vscode-button-foreground, #fff); background: var(--vscode-focusBorder); cursor: move; pointer-events: auto; opacity: .85; }
+.wse-grid-handle:hover { opacity: 1; }
+.wse-grid-handle .wse-grid-move { width: 14px; height: 14px; background: currentColor; mask: center / 14px no-repeat; }
+.wse-error { color: #c00; white-space: pre-wrap; }
+
+.wse-image-empty { display: inline-block; vertical-align: baseline; overflow: hidden; box-sizing: border-box; background: #ebebeb; color: #888; font: 600 13px sans-serif; }
+.wse-image-empty > span { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 100%; }
+.wse-image-empty img { width: 40%; max-width: 48px; opacity: .45; }
+.wse-multiupload { width: 400px; height: 50px; font-size: 12px; }
+.wse-multiupload img { width: 20px; }
+.wse-multiupload > span { flex-direction: row; }
+
+/* 자체 모양 입력 컴포넌트(renderers.tsx). 크기는 화면 style이 있으면 그걸 따른다 */
+.wse-page :is(.wse-spinner, .wse-searchbox) { display: inline-flex; vertical-align: middle; box-sizing: border-box; width: 120px; height: 22px; border: 1px solid #b5b5b5; background: #fff; }
+.wse-page :is(.wse-spinner, .wse-searchbox) input { flex: 1; min-width: 0; height: 100%; box-sizing: border-box; margin: 0; padding: 0 4px; border: 0; outline: none; font: 12px sans-serif; background: transparent; }
+.wse-page :is(.wse-spinner, .wse-searchbox) img { width: 14px; opacity: .55; }
+.wse-page .wse-searchbox img { align-self: center; margin: 0 4px; }
+.wse-page .wse-spinner > span { display: flex; flex-direction: column; justify-content: center; border-left: 1px solid #d0d0d0; }
+.wse-page .wse-spinner > span img { height: 9px; padding: 0 2px; object-fit: cover; }
+.wse-page .wse-listbox { display: inline-block; vertical-align: middle; box-sizing: border-box; width: 120px; height: 80px; overflow: hidden; border: 1px solid #b5b5b5; background: #fff; font: 12px/20px sans-serif; }
+.wse-page .wse-listbox > div { padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wse-page .wse-calendar { display: flex; flex-direction: column; box-sizing: border-box; width: 220px; height: 200px; border: 1px solid #c8c8c8; background: #fff; font: 12px sans-serif; color: #333; }
+.wse-page .wse-calendar-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px; font-weight: 600; }
+.wse-page .wse-calendar-head img { width: 14px; opacity: .55; }
+.wse-page .wse-calendar table { flex: 1; width: 100%; border-collapse: collapse; table-layout: fixed; text-align: center; }
+.wse-page .wse-calendar th { font-weight: 400; color: #888; }
+.wse-page .wse-calendar :is(th, td):first-child { color: #d33; }
+.wse-page .wse-calendar :is(th, td):last-child { color: #2a6bd1; }
+.wse-page .wse-calendar td.out { opacity: .35; }
+.wse-page .wse-calendar td.today { font-weight: 700; outline: 1px solid #7aa7e0; outline-offset: -2px; border-radius: 3px; }
+/* 그리드 칸 편집 상자: 위 칸 종류·id, 글자 칸, 크기·속성 묶음(이름은 입력칸 위), 아래 취소·적용. 캔버스(밝은 화면)에 맞춘 색 */
+.wse-page .edit-wrap { position: absolute; z-index: 2147483647; box-sizing: border-box; display: flex; flex-direction: column; min-width: 190px; overflow: hidden; font: 12px sans-serif; color: #222; background: #fff; border: 1px solid #c8c8c8; border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, .18); }
+.wse-page .edit-wrap > .edit { position: static; width: auto; margin: 10px 12px 8px; border-radius: 4px; font-size: 14px; }
+.wse-page .edit-head { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-bottom: 1px solid #e5e5e5; user-select: none; }
+.wse-page .edit-chip { padding: 1px 7px; border-radius: 4px; font-size: 11px; color: var(--vscode-focusBorder); background: color-mix(in srgb, var(--vscode-focusBorder) 14%, #fff); }
+.wse-page .edit-id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--vscode-editor-font-family, monospace); color: #666; }
+.wse-page .edit-hint { margin-left: auto; flex: none; font-size: 11px; color: #999; }
+.wse-page .edit-footer { user-select: none; }
+.wse-page .edit-fields section { padding: 8px 12px 10px; border-top: 1px solid #e5e5e5; }
+.wse-page .edit-section { margin: 0 0 6px; font-size: 11px; color: #999; }
+.wse-page .edit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+.wse-page .edit-fields label { display: flex; flex-direction: column; gap: 3px; min-width: 0; cursor: default; }
+.wse-page .edit-fields .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: #666; }
+.wse-page .edit-fields label.set .name { color: var(--vscode-focusBorder); }
+.wse-page .edit-control { position: relative; display: block; }
+.wse-page .edit-fields input { box-sizing: border-box; width: 100%; height: 26px; padding: 0 8px; border: 1px solid #c8c8c8; border-radius: 4px; font: 12px sans-serif; color: #000; background: #fff; outline: none; user-select: text; }
+.wse-page .edit-fields input:focus { border-color: var(--vscode-focusBorder); box-shadow: 0 0 0 1px var(--vscode-focusBorder); }
+.wse-page .edit-fields input::placeholder { color: #aaa; }
+.wse-page .edit-fields :is([aria-label="id"], [aria-label="expression"]) { font-family: var(--vscode-editor-font-family, monospace); }
+.wse-page .edit-fields .unit { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #999; pointer-events: none; }
+.wse-page .edit-fields label:has(.unit) input { padding-right: 28px; }
+.wse-page .edit-actions { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid #e5e5e5; user-select: none; }
+.wse-page .edit-status { font-size: 11px; color: #888; }
+.wse-page .edit-actions button { height: 26px; padding: 0 12px; border-radius: 4px; font: 12px sans-serif; cursor: pointer; }
+.wse-page .edit-cancel { margin-left: auto; color: #333; background: #fff; border: 1px solid #c8c8c8; }
+.wse-page .edit-cancel:hover { background: #f3f3f3; }
+.wse-page .edit-apply { color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0e639c); border: 1px solid transparent; }
+.wse-page .edit-apply:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
+.wse-page .edit { resize: none; position: absolute; z-index: 2147483647; box-sizing: border-box; padding: 2px 4px; font: 13px/18px sans-serif; color: #000; background: #fff; border: 2px solid var(--vscode-focusBorder); outline: none; }
+.wse-badges { position: absolute; display: flex; gap: 2px; padding: 1px; }
+.wse-badges > span { width: 5px; height: 5px; border-radius: 50%; box-shadow: 0 0 0 1px #fff; }
+.wse-badges > .bind { background: #8fd19e; }
+.wse-badges > .event { background: #f4a09a; }
+.wse-chip { position: absolute; max-width: 100%; box-sizing: border-box; padding: 0 8px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 14px/22px var(--vscode-editor-font-family, monospace); color: var(--vscode-button-foreground, #fff); background: var(--vscode-focusBorder); transition: opacity .12s; }
+.wse-chip.faded { opacity: .15; }
+
+/* 입력칸 + 고를 값 목록(ui/combo.tsx). 캔버스 편집 상자처럼 늘 밝게(테마를 따르지 않음) */
+.combo-list { position: fixed; z-index: 2147483647; max-height: 220px; overflow-y: auto; margin: 0; padding: 3px; list-style: none; box-sizing: border-box; border-radius: 4px; font: 12px sans-serif;
+	background: #fff; color: #000; border: 1px solid #c8c8c8; box-shadow: 0 3px 10px rgba(0, 0, 0, .15); }
+.combo-list li { padding: 3px 8px; border-radius: 3px; cursor: pointer; white-space: nowrap; }
+.combo-list li.current { font-weight: 600; }
+.combo-list li[aria-selected="true"], .combo-list li:hover { background: #e8f0fb; color: #000; }
+
+/* 팔레트 드롭: 대상 전체(안쪽) 또는 앞·뒤 경계선으로 넣을 위치를 표시한다. */
+.wse-frame.drop { outline: 1px dashed var(--vscode-focusBorder); }
+.wse-frame.drop:not(.inside) { outline: none; }
+.wse-frame.drop:not(.inside)::after { content: ''; position: absolute; background: var(--vscode-focusBorder); box-shadow: 0 0 0 1px #fff; border-radius: 2px; }
+.wse-frame.drop.left::after { left: -2px; top: -3px; bottom: -3px; width: 3px; }
+.wse-frame.drop.right::after { right: -2px; top: -3px; bottom: -3px; width: 3px; }
+.wse-frame.drop.top::after { top: -2px; left: -3px; right: -3px; height: 3px; }
+.wse-frame.drop.bottom::after { bottom: -2px; left: -3px; right: -3px; height: 3px; }

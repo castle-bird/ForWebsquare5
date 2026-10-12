@@ -1,0 +1,17 @@
+// 웹뷰(브라우저) 전용. esbuild가 번들하므로 bundler 해석을 쓴다.
+{
+    "compilerOptions": {
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "target": "ES2022",
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "jsx": "react-jsx",
+        "types": [],
+        "strict": true,
+        "noEmit": true,
+        // @dnd-kit/core(최신 6.3.1)의 .d.ts가 React 19의 바뀐 JSX 네임스페이스(전역 JSX → React.JSX)보다 오래돼 못 찾음.
+        // 우리 소스(.ts/.tsx)는 그대로 엄격 검사되고, node_modules 타입 선언만 검사에서 뺀다.
+        "skipLibCheck": true
+    },
+    "include": ["./**/*", "../protocol.ts"]
+}
