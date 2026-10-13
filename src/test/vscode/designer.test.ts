@@ -48,7 +48,7 @@ suite('designer', () => {
 		await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(screen));
 		await waitFor(() => activeInput() instanceof vscode.TabInputCustom);
 		const input = activeInput();
-		assert.ok(input instanceof vscode.TabInputCustom, '화면 XML이 디자이너로 바뀌지 않음');
+		assert.ok(input instanceof vscode.TabInputCustom, `화면 XML이 디자이너로 바뀌지 않음: ${input?.constructor.name}, trusted=${vscode.workspace.isTrusted}, active=${vscode.window.activeTextEditor?.document.uri.toString()}`);
 		assert.strictEqual(input.viewType, VIEW_TYPE);
 		// 이 화면의 텍스트 탭만 센다(다른 테스트 파일이 연 탭은 상관없음)
 		assert.strictEqual(vscode.window.tabGroups.all.flatMap(g => g.tabs).filter(t => t.input instanceof vscode.TabInputText && t.input.uri.toString() === vscode.Uri.file(screen).toString()).length, 0, '텍스트 탭은 닫힘');
@@ -61,6 +61,25 @@ suite('designer', () => {
 		await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(other));
 		await new Promise(r => setTimeout(r, 1000));
 		assert.ok(activeInput() instanceof vscode.TabInputText, '다른 XML은 텍스트 편집기');
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+	});
+
+	test('파일 검색의 텍스트 열기 경로도 디자이너로 전환하고 수동 텍스트 열기는 유지', async function () {
+		this.timeout(20000);
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws5-text-open-'));
+		fs.mkdirSync(path.join(dir, 'websquare'));
+		fs.writeFileSync(path.join(dir, 'websquare', 'config.xml'), '<WebSquare/>');
+		const uri = vscode.Uri.file(path.join(dir, 'screen.xml'));
+		fs.writeFileSync(uri.fsPath, SCREEN);
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri), { preview: true });
+		const active = () => vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+		await waitFor(() => active() instanceof vscode.TabInputCustom);
+		const input = active();
+		assert.ok(input instanceof vscode.TabInputCustom && input.viewType === VIEW_TYPE);
+		await waitFor(() => !vscode.window.tabGroups.all.flatMap(g => g.tabs).some(t => t.input instanceof vscode.TabInputText && t.input.uri.toString() === uri.toString()));
+		await vscode.commands.executeCommand('workbench.action.reopenTextEditor');
+		await new Promise(resolve => setTimeout(resolve, 500));
+		assert.ok(active() instanceof vscode.TabInputText, '명시적 텍스트 전환은 유지');
 		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 	});
 

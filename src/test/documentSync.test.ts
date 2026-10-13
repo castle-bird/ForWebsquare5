@@ -40,6 +40,7 @@ suite('디자이너 편집 동기화', () => {
 			'./vscode/tables': { UsedTablesStore: class { handle() { return false; } } },
 			'./vscode/gitBase': { onGitChange: event, blameFeed: () => ({ schedule() {}, dispose() {} }) },
 			'./vscode/viewSettings': { onBlameToggled: event },
+		'./vscode/screenOpen': { registerScreenOpen() {}, rememberScreenEditor() {} },
 			'./vscode/documentEdit': { applyNodeEdit: async (_doc: unknown, msg: ToExtension) => {
 				applied.push(msg);
 				if (blockEdit) { await paused; }

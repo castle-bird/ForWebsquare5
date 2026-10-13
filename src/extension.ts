@@ -28,6 +28,7 @@ import { lineOfOffset, sliceBlame } from './core/blame';
 import { insertFromPalette, paletteFavorites, savePaletteFavorite, reorderPaletteFavorites } from './vscode/palette';
 import { createScreen } from './vscode/createScreen';
 import { registerSqlCompletion } from './vscode/sqlCompletion';
+import { registerScreenOpen, rememberScreenEditor } from './vscode/screenOpen';
 
 export const VIEW_TYPE = 'for-websquare5.designer';
 
@@ -49,6 +50,7 @@ export function activate(context: vscode.ExtensionContext) {
 			void panel?.webview.postMessage({ type: 'formatKey' } satisfies ToWebview);
 		}),
 	);
+	registerScreenOpen(context, VIEW_TYPE);
 }
 
 const panels = new Set<vscode.WebviewPanel>();
@@ -151,6 +153,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			return;
 		}
 
+		rememberScreenEditor(document);
 		panels.add(panel);
 		const dist = vscode.Uri.joinPath(this.extensionUri, 'dist');
 		panel.webview.options = { enableScripts: true, localResourceRoots: [dist, vscode.Uri.file(webRoot)] };
