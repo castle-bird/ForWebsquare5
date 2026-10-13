@@ -7,7 +7,7 @@ export type GridBindMode = keyof typeof GRID_BIND_MODES;
 export type GridExtras = { subTotal?: boolean; footer?: boolean };
 export type GridPart = 'header' | 'subTotal' | 'footer';
 const SECTION_ORDER = ['header', 'gBody', 'subTotal', 'footer'] as const;
-const COLUMN_WIDTH = 100;
+const COLUMN_WIDTH = 70;
 export const gridColumnXml = (p: string, attrs: string) => `<${p}column width="${COLUMN_WIDTH}" inputType="text" ${attrs} displayMode="label"></${p}column>`;
 
 export const listColumns = (list: XmlNode) => list.children.find(c => isWs(c, 'columnInfo'))?.children.filter(c => isWs(c, 'column') && c.attrs.id) ?? [];

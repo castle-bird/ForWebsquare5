@@ -65,21 +65,27 @@ export function insertComponent(text: string, root: XmlNode, target: XmlNode, po
 	const choices = () => [`<${x()}choices></${x()}choices>`];
 	const shape: Record<string, () => { attrs?: string; children?: string[] }> = {
 		selectbox: () => ({ attrs: ' appearance="minimal"', children: choices() }),
-		multiselect: () => ({ attrs: ' appearance="minimal"', children: choices() }),
-		radio: () => ({ attrs: ' appearance="full"', children: choices() }),
-		checkbox: () => ({ attrs: ' appearance="full"', children: choices() }),
-		trigger: () => ({ children: [`<${x()}label><![CDATA[${def.display ?? def.realType}]]></${x()}label>`] }),
-		anchor: () => ({ children: [`<${x()}label><![CDATA[${def.display ?? def.realType}]]></${x()}label>`] }),
+		multiselect: () => ({ attrs: ' appearance="minimal"' }),
+		radio: () => ({ attrs: ' selectedIndex="-1" appearance="full"' }),
+		checkbox: () => ({ attrs: ' selectedindex="-1" appearance="full"' }),
+		trigger: () => ({ attrs: ' type="button" class=""', children: [`<${x()}label><![CDATA[]]></${x()}label>`] }),
+		anchor: () => ({ attrs: ' outerDiv="false"', children: [`<${x()}label><![CDATA[Insert Text]]></${x()}label>`] }),
+		checkcombobox: () => ({ attrs: ' chooseOption="false" displayMode="label" submenuSize="auto" allOption="false" disabled="false" direction="auto"' }),
+		image: () => ({ attrs: ' src=""' }),
+		iframe: () => ({ attrs: ' src=""' }),
+		textbox: () => ({ attrs: ' label=""' }),
+		upload: () => ({ attrs: ' imageStyle="position:absolute;vertical-align:middle;word-wrap:break-word" inputStyle="vertical-align:middle;word-wrap:break-word"' }),
 		gridView: () => ({
-			children: [['header', 'header'], ['gBody', 'gBody']].flatMap(([part, base]) => [
+			attrs: ' checkAllType="false" defaultCellHeight="20" dataList=""',
+			children: [`<${p}caption id="${next('caption')}" value="this is a grid caption."/>`, ...[['header', 'header'], ['gBody', 'gBody']].flatMap(([part, base]) => [
 				`<${p}${part} id="${next(base)}">`,
 				`${unit}<${p}row id="${next('row')}">`,
-				`${unit}${unit}${gridColumnXml(p, `id="${next('column')}"`)}`,
+				`${unit}${unit}${gridColumnXml(p, `id="${next('column')}" value=""`)}`,
 				`${unit}</${p}row>`,
 				`</${p}${part}>`,
-			]),
+			])],
 		}),
-		tabControl: () => ({ children: [`<${p}tabs id="${next('tabs')}" label="Tab1"></${p}tabs>`, `<${p}content id="${next('content')}"></${p}content>`] }),
+		tabControl: () => ({ attrs: ' alwaysDraw="false"', children: [`<${p}tabs id="${next('tabs')}" disabled="false"></${p}tabs>`, `<${p}content id="${next('content')}" alwaysDraw="false"></${p}content>`] }),
 	};
 	const { attrs = '', children } = shape[def.realType]?.() ?? {};
 	const open = `<${p}${def.id} id="${id}"${style}${attrs}`;

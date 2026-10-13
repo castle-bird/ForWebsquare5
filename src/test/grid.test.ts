@@ -99,7 +99,7 @@ suite('그리드 열 지우기·옮기기, 병합 풀기', () => {
 		assert.strictEqual(isMerged(root, byId(root, 'a1')), false);
 		const across = applyEdits(GRID, unmergeCells(GRID, root, [byId(root, 'hA')]));
 		assert.deepStrictEqual(rows(across), [['hA', '(새 칸)', 'hC'], ['hA1', 'hA2'], ['a1', 'a2', 'c'], ['f1', 'f2', 'fc']]);
-		assert.ok(across.includes('<w2:column id="hA" value="A"/>') && /<w2:column width="100" inputType="text" id="column1" displayMode="label"><\/w2:column>/.test(across), across);
+		assert.ok(across.includes('<w2:column id="hA" value="A"/>') && /<w2:column width="70" inputType="text" id="column1" displayMode="label"><\/w2:column>/.test(across), across);
 		const down = applyEdits(GRID, unmergeCells(GRID, root, [byId(root, 'hC')]));
 		assert.deepStrictEqual(rows(down), [['hA', 'hC'], ['hA1', 'hA2', '(새 칸)'], ['a1', 'a2', 'c'], ['f1', 'f2', 'fc']]);
 		const both = applyEdits(GRID, unmergeCells(GRID, root, [byId(root, 'hA'), byId(root, 'hC'), byId(root, 'a1')]));

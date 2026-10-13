@@ -54,18 +54,61 @@ suite('palette', () => {
 		assert.strictEqual(first.id, 'input2', '문서에 있는 input1을 피한다');
 		assert.ok(apply(screen, first.edit).includes('<xf:group id="grp">\n\t\t<xf:input id="input2" style="width:144px;height:21px;"/>\n\t\t<xf:input id="input1"/>'));
 		const radio = insertComponent(screen, root, input, 'after', def('select1', 'radio', XF));
-		assert.ok(apply(screen, radio.edit).includes('<xf:input id="input1"/>\n\t\t<xf:select1 id="radio1" appearance="full">\n\t\t\t<xf:choices></xf:choices>\n\t\t</xf:select1>'));
+		assert.ok(apply(screen, radio.edit).includes('<xf:input id="input1"/>\n\t\t<xf:select1 id="radio1" selectedIndex="-1" appearance="full"/>'));
 		const grid = apply(screen, insertComponent(screen, root, grp, 'before', def('gridView', 'gridView')).edit);
 		const added = parseXml(grid)!;
 		const g = find(added, 'gridView1');
-		assert.deepStrictEqual(g.children.map(c => c.tag), ['w2:header', 'w2:gBody']);
-		assert.strictEqual(g.children[1].attrs.id, 'gBody1');
-		assert.strictEqual(g.children[0].children[0].children[0].attrs.id, 'column1', '문서에 있는 c와 별개로 번호');
-		assert.ok(grid.includes('<body>\n\t<w2:gridView id="gridView1">\n\t\t<w2:header id="header1">'), '대상 들여쓰기에 맞춤');
+		assert.deepStrictEqual(g.children.map(c => c.tag), ['w2:caption', 'w2:header', 'w2:gBody']);
+		assert.strictEqual(g.children[2].attrs.id, 'gBody1');
+		assert.strictEqual(g.children[1].children[0].children[0].attrs.id, 'column1', '문서에 있는 c와 별개로 번호');
+		assert.ok(grid.includes('<body>\n\t<w2:gridView id="gridView1" checkAllType="false" defaultCellHeight="20" dataList="">\n\t\t<w2:caption'), '대상 들여쓰기에 맞춤');
 		assert.throws(() => insertComponent('<html><body/></html>', parseXml('<html><body/></html>')!, parseXml('<html><body/></html>')!.children[0], 'inside', def('input', 'input')), /네임스페이스 선언/);
 		const crlf = screen.replaceAll('\n', '\r\n');
 		const trigger = apply(crlf, insertComponent(crlf, parseXml(crlf)!, find(parseXml(crlf)!, 'input1'), 'before', def('trigger', 'trigger', XF, { display: 'Trigger' })).edit);
-		assert.ok(trigger.includes('<xf:trigger id="trigger1">\r\n\t\t\t<xf:label><![CDATA[Trigger]]></xf:label>\r\n\t\t</xf:trigger>\r\n\t\t<xf:input id="input1"/>'), 'CRLF 문서는 CRLF');
+		assert.ok(trigger.includes('<xf:trigger id="trigger1" type="button" class="">\r\n\t\t\t<xf:label><![CDATA[]]></xf:label>\r\n\t\t</xf:trigger>\r\n\t\t<xf:input id="input1"/>'), 'CRLF 문서는 CRLF');
+	});
+
+	test('기본 생성: 컴포넌트 속성·자식 구조와 중복 ID 보존', () => {
+		const root = parseXml(screen)!;
+		const create = (id: string, realType: string, ns = W2) => {
+			const result = insertComponent(screen, root, root.children[1], 'inside', def(id, realType, ns));
+			return find(parseXml(apply(screen, result.edit))!, result.id);
+		};
+		const button = create('trigger', 'trigger', XF);
+		assert.deepStrictEqual(button.attrs, { id: 'trigger1', type: 'button', class: '' });
+		assert.strictEqual(button.children[0].tag, 'xf:label');
+		assert.ok(!button.children[0].text);
+		const anchor = create('anchor', 'anchor');
+		assert.strictEqual(anchor.attrs.outerDiv, 'false');
+		assert.strictEqual(anchor.children[0].text, 'Insert Text');
+		for (const [id, realType, attrs] of [
+			['select', 'checkbox', { selectedindex: '-1', appearance: 'full' }],
+			['select1', 'radio', { selectedIndex: '-1', appearance: 'full' }],
+			['select', 'multiselect', { appearance: 'minimal' }],
+			['checkcombobox', 'checkcombobox', { chooseOption: 'false', displayMode: 'label', submenuSize: 'auto', allOption: 'false', disabled: 'false', direction: 'auto' }],
+		] as const) {
+			const node = create(id, realType, XF);
+			assert.deepStrictEqual(node.attrs, { id: realType + '1', ...attrs });
+			assert.strictEqual(node.children.length, 0);
+		}
+		assert.strictEqual(create('image', 'image', XF).attrs.src, '');
+		assert.strictEqual(create('iframe', 'iframe').attrs.src, '');
+		assert.strictEqual(create('textbox', 'textbox').attrs.label, '');
+		const upload = create('upload', 'upload');
+		assert.strictEqual(upload.attrs.imageStyle, 'position:absolute;vertical-align:middle;word-wrap:break-word');
+		assert.strictEqual(upload.attrs.inputStyle, 'vertical-align:middle;word-wrap:break-word');
+		const grid = create('gridView', 'gridView');
+		assert.deepStrictEqual(grid.attrs, { id: 'gridView1', checkAllType: 'false', defaultCellHeight: '20', dataList: '' });
+		assert.deepStrictEqual(grid.children[0].attrs, { id: 'caption1', value: 'this is a grid caption.' });
+		assert.deepStrictEqual(grid.children.slice(1).map(part => part.children[0].children[0].attrs), [
+			{ width: '70', inputType: 'text', id: 'column1', value: '', displayMode: 'label' },
+			{ width: '70', inputType: 'text', id: 'column2', value: '', displayMode: 'label' },
+		]);
+		const tab = create('tabControl', 'tabControl');
+		assert.strictEqual(tab.attrs.alwaysDraw, 'false');
+		assert.deepStrictEqual(tab.children.map(n => [n.tag, n.attrs]), [
+			['w2:tabs', { id: 'tabs1', disabled: 'false' }], ['w2:content', { id: 'content1', alwaysDraw: 'false' }],
+		]);
 	});
 
 	test('기본 크기: extends로 물려받고 자기 값이 덮는다, 틀은 결과에서 뺀다', () => {
