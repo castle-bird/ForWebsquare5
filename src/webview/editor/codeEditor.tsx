@@ -139,7 +139,7 @@ function restoreOnReturn(editor: EditorView): () => void {
 				window.focus();
 				editor.focus();
 			}
-		}), { once: true, capture: true });
+		}), { once: true, capture: true, signal });
 	};
 	const onKey = () => {
 		const s = saved;

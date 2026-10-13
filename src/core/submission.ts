@@ -1,6 +1,6 @@
 import { eolOf, startTagEnd, withAttrs, type TextEdit } from './edit';
 import { insertNode } from './paste';
-import { isXf, pathTo, uniqueId, usedIds, VALID_ID, type XmlNode } from './xmlModel';
+import { assertFreeId, isXf, pathTo, uniqueId, usedIds, type XmlNode } from './xmlModel';
 
 export const SUBMISSION_EVENTS = ['submit', 'submitdone', 'submiterror'] as const;
 const EVENT_ATTRS = SUBMISSION_EVENTS.map(e => `ev:${e}` as const);
@@ -61,8 +61,7 @@ const dataAttr = (text: string, name: string, value: string) => DATA_ATTRS.inclu
 
 export function editSubmissionNode(text: string, root: XmlNode, node: XmlNode, fields: SubmissionFields): TextEdit | undefined {
 	if (!isXf(node, 'submission')) { throw new Error('xf:submission만 수정할 수 있습니다.'); }
-	if (!VALID_ID.test(fields.id)) { throw new Error('올바른 Submission ID를 입력해 주세요.'); }
-	if (usedIds(root, node).has(fields.id)) { throw new Error(`이미 사용 중인 ID야: ${fields.id}`); }
+	assertFreeId(root, fields.id, '올바른 Submission ID를 입력해 주세요.', node);
 	const end = startTagEnd(text, node.start) + 1;
 	const tag = text.slice(node.start, end);
 	const selfClosing = tag.endsWith('/>');
@@ -75,8 +74,7 @@ export function editSubmissionNode(text: string, root: XmlNode, node: XmlNode, f
 
 export function addSubmissionNode(text: string, root: XmlNode, model: XmlNode, fields: SubmissionFields): TextEdit {
 	if (!isXf(model, 'model')) { throw new Error('xf:model에만 Submission을 추가할 수 있습니다.'); }
-	if (!VALID_ID.test(fields.id)) { throw new Error('올바른 Submission ID를 입력해 주세요.'); }
-	if (usedIds(root).has(fields.id)) { throw new Error(`이미 사용 중인 ID야: ${fields.id}`); }
+	assertFreeId(root, fields.id, '올바른 Submission ID를 입력해 주세요.');
 	if (!SUBMISSION_METHODS.includes(fields.method) || !SUBMISSION_MODES.includes(fields.mode) || !SUBMISSION_MEDIA_TYPES.includes(fields.mediatype)) { throw new Error('지원하지 않는 Submission 옵션입니다.'); }
 	// WebSquare5 기본 생성과 같은 속성·순서
 	const values: Record<string, string> = { encoding: 'UTF-8', ...fields };

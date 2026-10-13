@@ -168,7 +168,7 @@ async function importTheme(send: (id: string) => void): Promise<void> {
 		send(id);
 		void vscode.window.showInformationMessage(`'${label}' 테마를 가져와 적용했습니다. 문법 색은 비슷하게 맞춘 것이라, 다르면 설정 codeThemeCustomizations로 고칠 수 있습니다.`);
 	} catch (e) {
-		void vscode.window.showErrorMessage(`테마를 못 가져왔어: ${e instanceof Error ? e.message : String(e)}`);
+		void vscode.window.showErrorMessage(`테마를 가져오지 못했습니다: ${e instanceof Error ? e.message : String(e)}`);
 	}
 }
 

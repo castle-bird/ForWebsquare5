@@ -50,6 +50,9 @@ export function parseXml(text: string): XmlNode | undefined {
 }
 
 export function pathTo(node: XmlNode, index?: number): XmlNode[] | undefined {
+	if (index === undefined) {
+		return undefined;
+	}
 	if (node.index === index) {
 		return [node];
 	}
@@ -105,6 +108,12 @@ export function usedIds(root: XmlNode, except?: XmlNode): Set<string> {
 	const visit = (n: XmlNode) => { if (n.attrs.id && n.index !== except?.index) { used.add(n.attrs.id); } n.children.forEach(visit); };
 	visit(root);
 	return used;
+}
+
+/** 새 id 검증: XML 이름으로 쓸 수 있고 except 말고는 아무도 안 쓰는지 */
+export function assertFreeId(root: XmlNode, id: string, invalid: string, except?: XmlNode): void {
+	if (!VALID_ID.test(id)) { throw new Error(invalid); }
+	if (usedIds(root, except).has(id)) { throw new Error(`이미 사용 중인 ID입니다: ${id}`); }
 }
 
 export function uniqueId(used: Set<string>, base: string): string {

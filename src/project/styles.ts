@@ -73,7 +73,12 @@ export function scopeCss(css: string, file: string, webRoot: string, toUri: (fsP
 			if (parts.length !== 1) { return; }
 			const url = parts[0];
 			if ((url.type !== 'word' && url.type !== 'string') || /^(data:|[a-z]+:\/\/|#)/i.test(url.value)) { return; }
-			n.nodes = valueParser(JSON.stringify(toUri(fromWebPath(webRoot, url.value, base)))).nodes;
+			// 웹 루트 밖·잘못된 경로는 그 url만 그대로 둔다(CSS 전체가 빠지지 않게)
+			try {
+				n.nodes = valueParser(JSON.stringify(toUri(fromWebPath(webRoot, url.value, base)))).nodes;
+			} catch {
+				return;
+			}
 		});
 		decl.value = valueParser.stringify(value.nodes);
 	});

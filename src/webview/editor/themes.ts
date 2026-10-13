@@ -110,7 +110,7 @@ export function readThemeColors(s: CodeThemeState): ThemeColors {
 			gutterBackground: toHex(gutter.backgroundColor) ?? toHex(root.backgroundColor), gutterForeground: toHex(gutter.color),
 		};
 		const tokens = Object.fromEntries(TOKEN_KINDS.map(kind => {
-			const st = probe(highlightingFor(view.state, TAGS[kind]) ?? '');
+			const st = probe(highlightingFor(view.state, [TAGS[kind][0]]) ?? '');
 			return [kind, { color: toHex(st.color), fontStyle: fontOf(st) }];
 		}));
 		return { colors, tokens };

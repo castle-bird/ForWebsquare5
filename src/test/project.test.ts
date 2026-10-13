@@ -168,6 +168,8 @@ suite('styles', () => {
 		assert.ok(out.includes('.tbl-body') && out.includes('.w2window_body'), 'body가 들어간 클래스명은 그대로');
 		assert.ok(out.includes('url("U:cm/img/a.png")'), '../.. 가 웹 루트 밖으로 나가지 않음');
 		assert.ok(out.includes('url("data:image/png;base64,AA")'), 'data: 는 그대로');
+		const bad = scopeCss('.x{background:url(%zz.png)} .y{background:url(b.png)}', path.join(root, 'base.css'), root, p => 'U:' + path.relative(root, p));
+		assert.ok(bad.includes('url(%zz.png)') && bad.includes('url("U:b.png")'), '잘못된 url 하나는 그대로 두고 나머지는 보정 ' + bad);
 		const vars = scopeCss(':root{--a:1} :root.dark{--a:2}', path.join(root, 'base.css'), root, p => p);
 		assert.ok(vars.includes(':host{--a:1}') && vars.includes(':host.dark{'), ':root 변수는 :host로 ' + vars);
 	});

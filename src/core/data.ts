@@ -1,5 +1,5 @@
 import { insertNode } from './paste';
-import { findNode, isWs, isXf, parseXml, prefixOf, uniqueId, usedIds, VALID_ID, type XmlNode } from './xmlModel';
+import { assertFreeId, findNode, isWs, isXf, parseXml, prefixOf, uniqueId, usedIds, VALID_ID, type XmlNode } from './xmlModel';
 import { applyEdits, eolOf, escapeText, INVALID_XML_CHAR, leadOf, setAttribute, setText, sourceChange, startTagEnd, type TextEdit } from './edit';
 
 /** Data 트리의 생성 루트: 지우면 하위 항목을 추가할 수 없으므로 보호한다. */
@@ -54,8 +54,7 @@ export function editDataFields(text: string, root: XmlNode, node: XmlNode, field
 	}
 	let idEdit: TextEdit | undefined;
 	if (id !== undefined && id !== node.attrs.id) {
-		if (!VALID_ID.test(id)) { throw new Error(`올바른 ID를 입력해 주세요: ${id}`); }
-		if (usedIds(root, node).has(id)) { throw new Error(`이미 사용 중인 ID입니다: ${id}`); }
+		assertFreeId(root, id, `올바른 ID를 입력해 주세요: ${id}`, node);
 		idEdit = setAttribute(text, node, 'id', id);
 	}
 	const openEnd = startTagEnd(text, info.start);
