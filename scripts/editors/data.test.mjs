@@ -147,6 +147,36 @@ export default async function ({ page }) {
 		await page.$eval('.context-menu button', button => button.click());
 		await page.waitForSelector('.submission-editor[open]');
 		assert.equal(await page.$$eval('.popup[open]', popups => popups.length), 2, 'DataEditor와 SubmissionEditor가 동시에 2개 이상 띄워짐');
+		// ref 데이터 선택: 체크리스트로 여러 개를 고르고(기존 값 유지·고른 순서), DataList는 action도 정한다
+		await page.type('#submission-ref', 'data:json,dma_old');
+		await page.$eval('.submission-editor .field-action', b => b.click());
+		await page.waitForSelector('.data-ref-picker');
+		assert.deepEqual(await page.$$eval('.data-ref-id', ls => ls.map(l => [l.querySelector('span').textContent, l.querySelector('input').checked])),
+			[['dataList1', false], ['dma_old', true]], '화면의 데이터 + 기존 값에만 있는 id');
+		assert.ok(await page.$eval('.data-ref-picker select[aria-label="dataList1 Action"]', s => s.disabled), '체크하기 전 Action 비활성');
+		await page.$eval('.data-ref-id input', c => c.click());
+		await page.select('.data-ref-picker select[aria-label="dataList1 Action"]', 'modified');
+		assert.equal(await page.$eval('.data-ref-preview', o => o.textContent), 'data:json,[\n  {"id":"dma_old"},\n  {"action":"modified","id":"dataList1"}\n]');
+		// 창 높이는 처음 뜰 때 고정: 내용이 넘쳐도 미리 보기는 안 눌리고(글자 안 삐져나옴) 본문이 스크롤
+		assert.deepEqual(await page.evaluate(async () => {
+			const popup = document.querySelector('.data-ref-popup'), height = popup.style.height;
+			const preview = document.querySelector('.data-ref-preview'), body = document.querySelector('.data-ref-picker'), text = preview.textContent;
+			preview.textContent = Array.from({ length: 8 }, (_, i) => `line${i}`).join('\n');
+			popup.style.height = '260px';
+			await new Promise(requestAnimationFrame);
+			const result = [preview.scrollHeight <= preview.clientHeight, body.scrollHeight > body.clientHeight];
+			popup.style.height = height; preview.textContent = text;
+			return result;
+		}), [true, true], '미리 보기 안 넘침');
+		await page.$eval('.data-ref-picker .segmented button:last-child', b => b.click());
+		assert.ok(await page.$eval('.data-ref-preview', o => o.textContent.startsWith('data:array,[')), 'array 형식');
+		await page.$eval('.data-ref-picker .segmented button:first-child', b => b.click());
+		await page.$$eval('.data-ref-id input', cs => cs[1].click());
+		assert.equal(await page.$eval('.submission-editor .form-sections', e => e.scrollHeight > e.clientHeight), false, '서브미션 본문은 스크롤 안 생김');
+		await page.screenshot({path:path.join(tmpdir(), 'ws5-submission-data-ref.png')});
+		await page.$eval('.data-ref-popup .btn-primary', b => b.click());
+		assert.deepEqual(await page.evaluate(() => [!!document.querySelector('.data-ref-picker'), document.querySelector('#submission-ref').value]),
+			[false, 'data:json,{"action":"modified","id":"dataList1"}'], '적용하면 ref에 채우고 패널 닫힘');
 		// 팝업이 떠 있는 상태에서도 배경의 Outline 탭 전환 및 상호작용 가능 (non-modal)
 		await page.evaluate(() => window.tab('Outline', '.pane').click());
 		assert.equal(await page.$$eval('.pane .tree-row', rows => rows.length), 3, '팝업 뒤 배경과 상호작용 가능(Body + 자식 2)');

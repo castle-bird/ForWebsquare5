@@ -26,9 +26,9 @@ export function addDataNode(text: string, root: XmlNode, collection: XmlNode, ki
 	}
 	const prefix = collection.tag.slice(0, -'dataCollection'.length);
 	const attrs = `id="${uniqueId(usedIds(root), kind)}"`;
-	const xml = kind === 'dataMap' ? `<${prefix}${kind} ${attrs} baseNode="map"><${prefix}keyInfo/></${prefix}${kind}>`
-		: kind === 'dataList' ? `<${prefix}${kind} ${attrs} baseNode="vector" repeatNode="map" valueAttribute=""><${prefix}columnInfo/></${prefix}${kind}>`
-			: kind === 'linkedDataList' ? `<${prefix}${kind} ${attrs} baseNode="vector" repeatNode="map" valueAttribute="" bind=""/>`
+	const xml = kind === 'dataMap' ? `<${prefix}${kind} ${attrs} baseNode="map"><${prefix}keyInfo><${prefix}key id="key1" name="name1" dataType="text"/></${prefix}keyInfo></${prefix}${kind}>`
+		: kind === 'dataList' ? `<${prefix}${kind} ${attrs} baseNode="list" repeatNode="map" saveRemovedData="true"><${prefix}columnInfo><${prefix}column id="col1" name="name1" dataType="text"/></${prefix}columnInfo></${prefix}${kind}>`
+			: kind === 'linkedDataList' ? `<${prefix}${kind} ${attrs} bind=""><${prefix}condition type="filter"><![CDATA[]]></${prefix}condition><${prefix}condition type="sort"><![CDATA[]]></${prefix}condition></${prefix}${kind}>`
 				: `<${prefix}${kind} ${attrs} scope=""/>`;
 	return insertNode(text, collection, 'inside', xml);
 }

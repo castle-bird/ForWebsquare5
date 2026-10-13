@@ -4,7 +4,7 @@ import { pasteNode } from '../core/paste';
 import { moveNode } from '../core/move';
 import { addDataNode, DATA_KINDS, editDataFields, renameDataRefs } from '../core/data';
 import { applyEdits } from '../core/edit';
-import { addSubmissionNode, editSubmissionNode, newSubmissionFields, nextSubmissionId, submissionFields, type SubmissionFields } from '../core/submission';
+import { addSubmissionNode, editSubmissionNode, formatDataRef, parseDataRef, newSubmissionFields, nextSubmissionId, submissionFields, type SubmissionFields } from '../core/submission';
 import { addGridColumn, addGridPart, addGridRow, bindGridView } from '../core/grid';
 import { resizeBox, resizeEdges } from '../webview/ui/resizeBox';
 import { editChoices, readChoices } from '../core/choices';
@@ -23,6 +23,15 @@ suite('DataCollection creation', () => {
 			['w2:dataMap', 'dataMap1'], ['w2:dataList', 'dataList1'], ['w2:dataMap', 'dataMap2'],
 			['w2:linkedDataList', 'linkedDataList1'], ['w2:aliasDataList', 'aliasDataList1'], ['w2:aliasDataMap', 'aliasDataMap1'],
 		]);
+		assert.strictEqual(collection.children[1].attrs.baseNode, 'list');
+		assert.strictEqual(collection.children[1].attrs.repeatNode, 'map');
+		assert.strictEqual(collection.children[1].attrs.saveRemovedData, 'true');
+		assert.strictEqual(collection.children[1].attrs.valueAttribute, undefined);
+		assert.deepStrictEqual(collection.children[1].children[0].children[0].attrs, { id: 'col1', name: 'name1', dataType: 'text' });
+		assert.deepStrictEqual(collection.children[2].children[0].children[0].attrs, { id: 'key1', name: 'name1', dataType: 'text' });
+		assert.deepStrictEqual(collection.children[3].attrs, { id: 'linkedDataList1', bind: '' });
+		assert.deepStrictEqual(collection.children[3].children.map(n => [n.tag, n.attrs.type]), [['w2:condition', 'filter'], ['w2:condition', 'sort']]);
+		assert.ok(text.includes('<![CDATA[]]>'));
 		assert.strictEqual(collection.children[1].children[0].tag, 'w2:columnInfo');
 		assert.strictEqual(collection.children[2].children[0].tag, 'w2:keyInfo');
 		assert.ok(!/(?<!\r)\n/.test(text), 'CRLF 문서에 LF를 섞지 않음');
@@ -119,32 +128,49 @@ suite('Submission creation', () => {
 		const root = parseXml(text)!;
 		const model = root.children[0].children[0];
 		assert.strictEqual(nextSubmissionId(root), 'submission2');
-		const attrs = { id: 'submission2', ref: 'data:json,request&more\ndata:json,other', target: 'data:json,response', action: '/api/search?q=1&x=2', method: 'post', mode: 'asynchronous', mediatype: 'application/json' };
-		// 빈 이벤트 칸은 속성을 만들지 않는다
+		const attrs = { id: 'submission2', ref: 'data:json,[\n  {"id":"a&b"},\n  {"id":"c"}\n]', target: 'data:json,response', action: '/api/search?q=1&x=2', method: 'post', mode: 'asynchronous', mediatype: 'application/json' };
+		// 생성 시 빈 이벤트와 기본 옵션을 명시한다
 		const fields: SubmissionFields = { ...attrs, 'ev:submit': '', 'ev:submitdone': '', 'ev:submiterror': '' };
 		const edit = addSubmissionNode(text, root, model, fields);
 		const updated = text.slice(0, edit.start) + edit.replacement + text.slice(edit.end);
 		const created = parseXml(updated)!.children[0].children[0].children[1];
 		assert.strictEqual(created.tag, 'xf:submission');
-		assert.deepStrictEqual(created.attrs, attrs);
-		assert.ok(updated.includes('request&amp;more'));
-		assert.ok(updated.includes('&#10;'));
+		assert.deepStrictEqual(created.attrs, { ...fields, ref: attrs.ref.replaceAll('\n', '\r\n'), encoding: 'UTF-8', instance: '', replace: '', errorHandler: '', customHandler: '', processMsg: '', abortTrigger: '', 'xmlns:ev': 'http://www.w3.org/2001/xml-events' });
+		assert.deepStrictEqual(Object.keys(created.attrs).filter(k => k !== 'xmlns:ev'), ['id', 'ref', 'target', 'action', 'method', 'mediatype', 'encoding', 'instance', 'replace',
+			'errorHandler', 'customHandler', 'mode', 'processMsg', 'ev:submit', 'ev:submitdone', 'ev:submiterror', 'abortTrigger'], 'WebSquare5 기본 생성 순서');
+		// ref·target(JSON)은 Eclipse처럼 '로 감싸고 줄바꿈을 그대로(들여쓰기도 안 붙임), 다른 속성은 이스케이프 그대로
+		assert.ok(updated.includes(`ref='data:json,[\r\n  {"id":"a&amp;b"},\r\n  {"id":"c"}\r\n]'`), updated);
+		assert.ok(updated.includes('action="/api/search?q=1&amp;x=2"'));
 		assert.ok(!/(?<!\r)\n/.test(updated), '기존 CRLF 유지');
 		assert.throws(() => addSubmissionNode(text, root, model, { ...fields, id: 'submission1' }), /이미 사용 중/);
 		assert.throws(() => addSubmissionNode(text, root, model, { ...fields, method: 'patch' }), /지원하지 않는/);
 	});
 
 	test('기존 Submission 수정: 시작 태그만 교체, 다른 속성·자식 유지, 빈 값은 삭제, id 고유', () => {
-		const text = '<html xmlns:xf="http://www.w3.org/2002/xforms" xmlns:ev="http://www.w3.org/2001/xml-events"><head><xf:model><xf:submission id="sbm_a" method="post" custom="keep" ev:submitdone="scwin.done"><xf:x/></xf:submission><xf:submission id="sbm_b"/></xf:model></head></html>';
+		const text = '<html xmlns:xf="http://www.w3.org/2002/xforms" xmlns:ev="http://www.w3.org/2001/xml-events"><head><xf:model><xf:submission id="sbm_a" method="post" encoding="EUC-KR" custom="keep" ev:submitdone="scwin.done"><xf:x/></xf:submission><xf:submission id="sbm_b"/></xf:model></head></html>';
 		const root = parseXml(text)!;
 		const node = root.children[0].children[0].children[0];
 		const fields = { ...submissionFields(node), id: 'sbm_c', action: '/api?a=1&b=2', method: 'PATCH_CUSTOM', mode: '' };
 		const edit = editSubmissionNode(text, root, node, fields)!;
 		const updated = parseXml(text.slice(0, edit.start) + edit.replacement + text.slice(edit.end))!.children[0].children[0].children[0];
-		assert.deepStrictEqual(updated.attrs, { id: 'sbm_c', method: 'PATCH_CUSTOM', custom: 'keep', 'ev:submitdone': 'scwin.done', action: '/api?a=1&b=2' });
+		assert.deepStrictEqual(updated.attrs, { id: 'sbm_c', method: 'PATCH_CUSTOM', encoding: 'EUC-KR', custom: 'keep', 'ev:submitdone': 'scwin.done', action: '/api?a=1&b=2' });
 		assert.strictEqual(updated.children[0].tag, 'xf:x');
 		assert.strictEqual(editSubmissionNode(text, root, node, submissionFields(node)), undefined, '바뀐 게 없으면 편집 없음');
 		assert.throws(() => editSubmissionNode(text, root, node, { ...fields, id: 'sbm_b' }), /이미 사용 중/);
+	});
+
+	test('ref·target 수정: "로 감싼 기존 값도 JSON이면 \'로 바꾸고 줄바꿈 그대로, 옮겨도 값 안 줄은 들여쓰기 안 함', () => {
+		const text = '<html xmlns:xf="http://www.w3.org/2002/xforms"><head><xf:model>\n\t<xf:submission id="s" ref="data:json,a" target=""/>\n\t<xf:submission id="t"/>\n</xf:model></head></html>';
+		const root = parseXml(text)!;
+		const node = root.children[0].children[0].children[0];
+		const ref = 'data:json,[\n  {"action":"modified","id":"dlt"},\n  {"id":"it\'s"}\n]';
+		const updated = applyEdits(text, [editSubmissionNode(text, root, node, { ...submissionFields(node), ref, target: 'data:json,{"id":"dlt"}' })!]);
+		assert.ok(updated.includes(`ref="data:json,[\n  {&quot;action&quot;`), '값에 \'도 있으면 "로 감싸고 &quot;');
+		assert.ok(updated.includes(`target='data:json,{"id":"dlt"}'`), updated);
+		const moved = parseXml(updated)!;
+		const [s, t] = moved.children[0].children[0].children;
+		const after = applyEdits(updated, moveNode(updated, s, t, 'after'));
+		assert.strictEqual(parseXml(after)!.children[0].children[0].children[1].attrs.ref, ref, '이동해도 ref 값 그대로');
 	});
 
 	test('이벤트 칸: 바꾼 칸만 적용(손대지 않은 빈 속성 유지), 조상에 xmlns:ev가 있으면 다시 선언하지 않음', () => {
@@ -303,5 +329,25 @@ suite('Data popup geometry', () => {
 		resizeEdges.forEach((edge, i) => assert.deepStrictEqual(resizeBox(start, edge, 20, 30, 1000, 800), expected[i]));
 		assert.deepStrictEqual(resizeBox(start, 'nw', 999, 999, 1000, 800), { x: 200, y: 240, width: 400, height: 260 });
 		assert.deepStrictEqual(resizeBox(start, 'se', 999, 999, 700, 600), { x: 100, y: 100, width: 600, height: 500 });
+	});
+});
+
+suite('Submission ref·target 데이터 선택', () => {
+	test('항목 목록을 data:형식 값으로 만든다', () => {
+		const item = (id: string, action = '', key = '') => ({ id, action, key });
+		assert.strictEqual(formatDataRef('json', [item('dma_search')]), 'data:json,dma_search');
+		assert.strictEqual(formatDataRef('json', [item('dlt_a', 'modified')]), 'data:json,{"action":"modified","id":"dlt_a"}');
+		assert.strictEqual(formatDataRef('xml', [item('dlt_a', 'modified'), item('dma_b', '', 'k'), item('')]),
+			'data:xml,[\n  {"action":"modified","id":"dlt_a"},\n  {"id":"dma_b","key":"k"}\n]');
+		assert.strictEqual(formatDataRef('json', [item('')]), '');
+	});
+	test('기존 값을 항목으로 읽고, 모르는 형식은 undefined', () => {
+		const value = 'data:json,[\n  {"action":"modified","id":"dataList1"},\n  {"action":"modified","id":"dataList2"}\n]';
+		assert.strictEqual(formatDataRef(parseDataRef(value)!.type, parseDataRef(value)!.items), value);
+		assert.deepStrictEqual(parseDataRef('data:xml,dma_a'), { type: 'xml', items: [{ id: 'dma_a', action: '', key: '' }] });
+		assert.deepStrictEqual(parseDataRef('data:array,dlt_a'), { type: 'array', items: [{ id: 'dlt_a', action: '', key: '' }] });
+		assert.deepStrictEqual(parseDataRef(''), { type: 'json', items: [] });
+		assert.strictEqual(parseDataRef('data:json,{broken'), undefined);
+		assert.strictEqual(parseDataRef('/some/path'), undefined);
 	});
 });

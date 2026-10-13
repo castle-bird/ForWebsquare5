@@ -17,8 +17,24 @@ export const isContainer = (n: XmlNode) => CONTAINERS.has(localName(n.tag));
 export type DropPosition = 'before' | 'after' | 'inside';
 export type InsertPosition = DropPosition | 'first';
 
-export const reindentLines = (s: string, from: string, to: string) =>
-	s.replace(/(\r?\n)([ \t]*)/g, (_, nl: string, ws: string) => nl + (ws.startsWith(from) ? to + ws.slice(from.length) : ws));
+/** 줄마다 들여쓰기 from → to. 속성값 안의 줄(Eclipse가 쓴 여러 줄 ref 등)은 값이라 건드리지 않는다. s는 태그 바깥에서 시작 */
+export function reindentLines(s: string, from: string, to: string): string {
+	const inValue = new Set<number>();
+	for (let i = 0, tag = false, quote = ''; i < s.length; i++) {
+		const c = s[i];
+		if (quote) {
+			if (c === quote) { quote = ''; } else if (c === '\n') { inValue.add(i); }
+		} else if (tag) {
+			if (c === '"' || c === "'") { quote = c; } else if (c === '>') { tag = false; }
+		} else if (c === '<') {
+			// 주석·CDATA·처리 명령 안의 따옴표·<는 태그가 아니다
+			const close = s.startsWith('<!--', i) ? '-->' : s.startsWith('<![CDATA[', i) ? ']]>' : s.startsWith('<?', i) ? '?>' : '';
+			if (close) { const end = s.indexOf(close, i); i = end < 0 ? s.length : end + close.length - 1; } else { tag = true; }
+		}
+	}
+	return s.replace(/(\r?\n)([ \t]*)/g, (line: string, nl: string, ws: string, at: number) =>
+		inValue.has(at + nl.length - 1) ? line : nl + (ws.startsWith(from) ? to + ws.slice(from.length) : ws));
+}
 
 export function insertNode(text: string, target: XmlNode, position: InsertPosition, xml: string): TextEdit {
 	if (position === 'first') {

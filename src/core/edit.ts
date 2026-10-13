@@ -75,7 +75,11 @@ export function applyLineChanges(text: string, changes: { fromLine: number; from
 
 const splitCdata = (value: string) => value.replaceAll(']]>', ']]]]><![CDATA[>');
 
-export function setAttribute(text: string, node: XmlNode, name: string, value: string | undefined, ancestors: XmlNode[] = []): TextEdit | undefined {
+/**
+ * literal: 줄바꿈을 문자 참조 대신 그대로 쓰고, 값에 "가 있으면 '로 감싼다(Eclipse와 같은 모양).
+ * 다시 읽으면 줄바꿈은 공백이 되므로 공백이 의미 없는 값(submission ref·target의 JSON)에만 쓴다
+ */
+export function setAttribute(text: string, node: XmlNode, name: string, value: string | undefined, ancestors: XmlNode[] = [], literal = false): TextEdit | undefined {
 	// 이름은 원문에 그대로 들어가므로 XML 이름 형식(접두사 하나)만 허용 (태그 구조를 깨는 입력 차단)
 	if (!/^[A-Za-z_][\w.-]*(:[A-Za-z_][\w.-]*)?$/.test(name) || name === 'xmlns' || name.startsWith('xmlns:')) {
 		throw new Error(`편집할 수 없는 속성 이름: ${name}`);
@@ -94,7 +98,12 @@ export function setAttribute(text: string, node: XmlNode, name: string, value: s
 		if (value === undefined) {
 			return { start: found.start, end: found.end, replacement: '' };
 		}
-		const replacement = escape(value, found.quote);
+		const quote = literal ? quoteFor(value) : found.quote;
+		if (quote !== found.quote) {
+			// 따옴표를 바꾸려면 속성 전체(앞 공백·이름·= 모양은 원문 유지)를 다시 쓴다
+			return { start: found.start, end: found.end, replacement: `${text.slice(found.start, found.valueStart - 1)}${quote}${escape(value, quote, true)}${quote}` };
+		}
+		const replacement = escape(value, found.quote, literal);
 		return text.slice(found.valueStart, found.valueEnd) === replacement ? undefined : { start: found.valueStart, end: found.valueEnd, replacement };
 	}
 	if (value === undefined) {
@@ -105,12 +114,16 @@ export function setAttribute(text: string, node: XmlNode, name: string, value: s
 		at--;
 	}
 	const declare = declared ? '' : ' xmlns:ev="http://www.w3.org/2001/xml-events"';
-	return { start: at, end: at, replacement: ` ${name}="${escape(value, '"')}"${declare}` };
+	const quote = literal ? quoteFor(value) : '"';
+	return { start: at, end: at, replacement: ` ${name}=${quote}${escape(value, quote, literal)}${quote}${declare}` };
 }
 
-export function withAttrs(xml: string, attrs: [string, string | undefined][], ancestors: XmlNode[] = []): string {
+const quoteFor = (value: string) => value.includes('"') && !value.includes("'") ? "'" : '"';
+
+/** literal: 줄바꿈 그대로 쓸 속성 이름(setAttribute 참고) */
+export function withAttrs(xml: string, attrs: [string, string | undefined][], ancestors: XmlNode[] = [], literal: string[] = []): string {
 	for (const [name, value] of attrs) {
-		xml = applyEdits(xml, [setAttribute(xml, parseXml(xml)!, name, value, ancestors)]);
+		xml = applyEdits(xml, [setAttribute(xml, parseXml(xml)!, name, value, ancestors, literal.includes(name))]);
 	}
 	return xml;
 }
@@ -159,8 +172,8 @@ function findAttribute(text: string, tagStart: number, tagEnd: number, name: str
 }
 
 /** 속성값 이스케이프. 줄바꿈·탭은 파서가 공백으로 바꾸므로 문자 참조로 보존 */
-export function escape(value: string, quote: string): string {
-	const s = value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('\r', '&#13;').replaceAll('\n', '&#10;').replaceAll('\t', '&#9;');
+export function escape(value: string, quote: string, literalNewline = false): string {
+	const s = value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('\r', literalNewline ? '\r' : '&#13;').replaceAll('\n', literalNewline ? '\n' : '&#10;').replaceAll('\t', '&#9;');
 	return quote === '"' ? s.replaceAll('"', '&quot;') : s.replaceAll("'", '&apos;');
 }
 

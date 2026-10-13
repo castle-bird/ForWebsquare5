@@ -105,6 +105,7 @@ export function useEditorPopups(openEventHandler: ReturnType<typeof useEventHand
 			if (p.kind === 'submission') {
 				const { source } = p;
 				return <SubmissionEditor key={p.key} {...common} initial={p.initial} editing={!!source} busy={!!p.busy}
+					dataIds={dataCollection?.children.filter(c => isDataNode(c) && c.attrs.id).map(c => ({ id: c.attrs.id, list: c.tag.endsWith(':dataList') })) ?? []}
 					onScript={source && ((eventName, current) => { const target = findSubmission(source); return target && openEventHandler(target, eventName, current); })}
 					onConfirm={fields => applySubmission(p.key, source, fields)} />;
 			}

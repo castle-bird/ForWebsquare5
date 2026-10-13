@@ -9,7 +9,7 @@
 - **Design 탭**: 프로젝트 CSS를 적용한 화면 미리보기, 컴포넌트 선택·크기 조절, 복사·붙여넣기·삭제, 그리드 열 너비 조절. fusionchart는 바인딩한 dataList 값으로 차트(선·막대·원·영역)를 그립니다(엔진 모양과 다른 미리보기)
 - **Property / Event 패널**: 속성·이벤트 검색과 편집, 여러 컴포넌트 동시 편집. 정해진 값이 있는 속성도 입력칸 + 목록이라 직접 입력할 수 있습니다
 - **Outline / Data 패널**: 컴포넌트 트리, DataCollection·Submission 트리, 드래그 앤 드롭 이동·바인딩, F2로 id 바꾸기
-- **더블클릭 편집**(캔버스·Outline): 글자 바로 고치기(버튼·textbox·output 등), 그리드 칸 속성, 선택 항목(selectbox·checkcombobox·multiselect·radio·checkbox), DataList·DataMap·Submission, multiupload 파라미터. 팝업 안의 입력칸은 Enter로 나오고, 확인은 버튼으로 합니다
+- **더블클릭 편집**(캔버스·Outline): 글자 바로 고치기(버튼·textbox·output 등), 그리드 칸 속성, 선택 항목(selectbox·checkcombobox·multiselect·radio·checkbox), DataList·DataMap·Submission(ref·target은 `데이터 선택`으로 DataMap·DataList와 동작을 골라 채움), multiupload 파라미터. 팝업 안의 입력칸은 Enter로 나오고, 확인은 버튼으로 합니다
 - **Design 이동**: 이미 배치된 컴포넌트를 끌어 순서·부모 그룹을 바꿉니다. 그룹 중앙은 안쪽 맨 뒤, 가장자리는 앞·뒤로 이동하며 놓을 위치를 표시합니다. 그리드는 칸에 마우스를 올리면 왼쪽 위에 나오는 이동 손잡이나, 칸이 아닌 빈 곳을 끌어 옮깁니다. Outline과 같은 XML 이동·Undo를 사용합니다
 - **팔레트**: 탭 줄 왼쪽 버튼으로 Design 왼쪽 팔레트를 열고 닫습니다. 설치본 정의의 묶음별 목록·아이콘·검색, 즐겨찾기(별, ⠿ 손잡이로 순서 변경)를 지원합니다. 클릭하면 삽입 위치를 고르고, 캔버스로 끌어다 놓으면 그룹 중앙은 안쪽, 위·아래 가장자리는 앞·뒤에 삽입합니다
 - **Event → Script**: 이벤트 값을 더블클릭하면 `scwin.{id}_{이벤트}` 함수 뼈대를 만들거나 해당 함수로 이동합니다

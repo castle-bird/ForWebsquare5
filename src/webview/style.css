@@ -551,7 +551,7 @@ input[type="checkbox"].switch:focus-visible { outline: 1px solid var(--vscode-fo
 .choices-inline input:not([type="checkbox"]) { flex: 1; min-width: 0; }
 .form-sections :is(input, select):disabled { opacity: .5; }
 
-.submission-editor { width: min(800px, calc(100vw - 24px)); height: fit-content; min-height: 0; }
+.submission-editor { width: min(900px, calc(100vw - 24px)); height: fit-content; min-height: 0; }
 /* 섹션(기본·데이터·이벤트)으로 묶은 입력: 라벨은 입력칸 위, 두 칸(이벤트는 세 칸)씩 */
 .form-sections { overflow: auto; }
 .form-sections section { padding: 12px 18px 14px; border-bottom: 1px solid var(--vscode-panel-border); }
@@ -602,6 +602,26 @@ input[type="checkbox"].switch:focus-visible { outline: 1px solid var(--vscode-fo
 .form-sections .submission-handler input { padding-right: 28px; }
 .form-sections .submission-handler button { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); font-size: 14px; }
 .form-sections .submission-handler button:disabled { opacity: .4; cursor: default; }
+/* ref·target: 라벨 오른쪽 데이터 선택 버튼, 아래로 펼쳐지는 선택 패널 */
+.field-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 22px; }
+.field-head label { font-size: 12px; color: var(--vscode-descriptionForeground); }
+.field-action { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 0; border-radius: 4px; background: none; font-size: 11px; color: var(--vscode-textLink-foreground); cursor: pointer; }
+.field-action:hover, .field-action[aria-expanded="true"] { background: var(--vscode-toolbar-hoverBackground); }
+.data-ref-popup { width: min(560px, calc(100vw - 24px)); height: fit-content; min-height: 0; }
+.data-ref-picker { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; }
+/* 창 높이는 처음 뜰 때 고정돼서, 내용이 늘면 줄어들지 말고 본문이 스크롤되게 */
+.data-ref-picker > * { flex: none; }
+.data-ref-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--vscode-descriptionForeground); }
+.data-ref-picker .hint { margin: 0; font-size: 11px; color: var(--vscode-editorWarning-foreground); }
+.data-ref-rows { display: grid; grid-template-columns: 2fr 1.2fr 1fr 32px; gap: 4px 6px; align-items: center; }
+.data-ref-rows > span { font-size: 11px; color: var(--vscode-descriptionForeground); }
+.data-ref-rows :is(select, input):disabled { opacity: .5; }
+.data-ref-id { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; cursor: pointer; }
+.data-ref-id span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--vscode-editor-font-family); }
+.data-ref-id .missing { color: var(--vscode-editorWarning-foreground); }
+.data-ref-id small { font-size: 10px; color: var(--vscode-descriptionForeground); }
+.data-ref-rows > .data-ref-order { text-align: center; font-size: 11px; color: var(--vscode-textLink-foreground); }
+.data-ref-preview { box-sizing: border-box; min-height: calc(7.5em + 12px); line-height: 1.5; padding: 6px 8px; border-radius: 4px; font-family: var(--vscode-editor-font-family); font-size: 12px; white-space: pre-wrap; word-break: break-all; background: var(--vscode-textCodeBlock-background); }
 .submission-editor form { display: flex; flex: 1; min-height: 0; flex-direction: column; }
 .grid-bind { width: min(340px, calc(100vw - 24px)); }
 .grid-bind-count { height: 28px; line-height: 28px; font-weight: 600; }
