@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { parseXml, type XmlNode } from '../core/xmlModel';
 import { annotate, parseComponents } from '../project/components';
-import { convert, eclipseDeployRoots, findWpack, publish, readWpackConfig } from '../project/wpack';
+import { convert, eclipseDeployRoots, findWpack, publish, readWpackConfig, wpackArgs } from '../project/wpack';
 import { scopeCss } from '../project/styles';
 import { engineModules, udcNames } from '../project/modules';
 import { attachFrames } from '../project/frames';
@@ -298,6 +298,34 @@ suite('wpack', () => {
 		const files = await publish(webRoot, { destRoot: '_out_' }, rel, '<html/>', 'js');
 		assert.deepStrictEqual(files, [path.join(webRoot, '_out_', 'ui', 'A.js'), path.join(deploy, '_out_', 'ui', 'A.js'), path.join(deploy, rel)]);
 		assert.strictEqual(fs.readFileSync(path.join(deploy, rel), 'utf8'), '<html/>');
+	});
+
+	test('변환기 탐색: 실행할 node.exe가 있는 w-pack/index.js 우선, 없으면 standalone exe, index.js만 있으면 그것', async () => {
+		// 개발팩 구성: bin/w-pack(단독 exe, index.js 없음) + plugins/node(node.exe)/node_modules/w-pack(index.js)
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ws5-find-wpack-'));
+		const exe = path.join(root, 'bin', 'w-pack', 'standalone_wpack-win.exe');
+		const nodeDir = path.join(root, 'plugins', 'node');
+		const script = path.join(nodeDir, 'node_modules', 'w-pack', 'index.js');
+		const touch = (file: string) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, ''); };
+		touch(exe); touch(script);
+		assert.strictEqual(await findWpack(root), exe, 'node.exe 없으면 exe');
+		touch(path.join(nodeDir, 'node.exe'));
+		assert.strictEqual(await findWpack(root), script, 'node.exe 있으면 exe가 있어도 index.js 먼저');
+		fs.rmSync(path.dirname(exe), { recursive: true });
+		assert.strictEqual(await findWpack(root), script, 'index.js만 있어도 그것');
+		fs.rmSync(path.join(nodeDir, 'node.exe'));
+		assert.strictEqual(await findWpack(root), script, 'node.exe가 없어도 index.js는 반환(변환할 때 이유를 알림)');
+		fs.rmSync(path.dirname(script), { recursive: true });
+		assert.strictEqual(await findWpack(root), undefined);
+	});
+
+	test('변환기 인자: 공통 함수 치환은 exe·index.js 모두 -sc', () => {
+		const dirs = ['/p/src', '/p/dest'] as const;
+		const exeArgs = wpackArgs('/w/standalone_wpack-win.exe', { destRoot: 'd', scopeCommon: 'com' }, ...dirs);
+		const scriptArgs = wpackArgs('/w/index.js', { destRoot: 'd', scopeCommon: 'com' }, ...dirs);
+		assert.deepStrictEqual(exeArgs.slice(-2), ['-sc', 'com']);
+		assert.deepStrictEqual(scriptArgs, ['/w/index.js', ...exeArgs]);
+		assert.ok(!wpackArgs('/w/index.js', { destRoot: 'd' }, ...dirs).includes('-sc'), '공통 설정이 없으면 옵션 없음');
 	});
 
 	test('실제 변환 (개발팩 변환기가 있을 때만)', async function () {

@@ -1,5 +1,10 @@
 # 변경 내역
 
+## 1.1.1 (2026-10-13)
+
+- wpack 변환기 자동 탐색 순서 변경: Eclipse 플러그인이 쓰는 `w-pack/index.js`(실행용 `node.exe`가 있을 때)를 먼저 사용하고, 없으면 `standalone_wpack-win.exe`를 사용합니다. 오래되었거나 손상된 단독 exe가 있어 저장 시 XML → JS 변환이 실패하던 문제를 막습니다
+- `w-pack/index.js`로 변환할 때 config.xml의 공통 함수 설정(`<common>`)이 적용되지 않던 문제 수정(`-cm` → `-sc`). exe와 같은 결과로 변환됩니다
+
 ## 1.1.0 (2026-10-13)
 
 - **Submission 데이터 선택**: submission 팝업의 ref·target 옆 `데이터 선택`으로 DataMap·DataList를 여러 개 체크해 고르고, DataList 동작(ref는 all·modified·inserted·deleted·updated, target은 append)·key·형식(json·xml·array)을 정해 값을 만듭니다. 여러 개는 항목마다 한 줄로 정렬하고, 기존 값은 읽어 미리 채웁니다

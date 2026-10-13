@@ -25,16 +25,34 @@ export async function readWpackConfig(webRoot: string): Promise<WpackConfig | un
 
 const WPACK_NAME = 'standalone_wpack-win.exe';
 
+/** w-pack/index.js를 실행할 플러그인 Node(…/node/node.exe). index.js는 …/node/node_modules/w-pack 안에 있다 */
+const nodeFor = (script: string) => path.resolve(path.dirname(script), '..', '..', 'node.exe');
+
+/**
+ * 변환기 자동 탐색. Eclipse 플러그인이 쓰는 최신 w-pack/index.js를 먼저 고른다(오래되거나 손상된 단독 exe보다 낫다).
+ * 실행할 node.exe가 없으면 standalone exe로, 그것도 없으면 index.js를 그대로 돌려줘 변환할 때 이유를 알린다
+ */
 export async function findWpack(eclipseRoot: string): Promise<string | undefined> {
 	const dirs = await findDirs(eclipseRoot, (dir, names) =>
 		(path.basename(dir) === 'w-pack' && names.includes('index.js')) || names.includes(WPACK_NAME));
+	const scripts: string[] = [];
+	for (const dir of dirs) {
+		// 폴더 이름이 w-pack이어도 exe만 있는 곳(index.js 없음)이 있다
+		if (path.basename(dir) === 'w-pack' && await exists(path.join(dir, 'index.js'))) {
+			scripts.push(path.join(dir, 'index.js'));
+		}
+	}
+	for (const script of scripts) {
+		if (await exists(nodeFor(script))) {
+			return script;
+		}
+	}
 	for (const dir of dirs) {
 		if (await exists(path.join(dir, WPACK_NAME))) {
 			return path.join(dir, WPACK_NAME);
 		}
 	}
-	const wpack = dirs.find(dir => path.basename(dir) === 'w-pack');
-	return wpack && path.join(wpack, 'index.js');
+	return scripts[0];
 }
 
 export async function eclipseDeployRoots(webRoot: string): Promise<string[]> {
@@ -55,6 +73,16 @@ export async function eclipseDeployRoots(webRoot: string): Promise<string[]> {
 	return [];
 }
 
+/** 변환기 실행 인자. 공통 함수 치환(scopeCommon)은 exe·index.js 모두 -sc다(-cm은 다른 옵션이라 $p가 안 붙는다) */
+export function wpackArgs(exe: string, config: WpackConfig, src: string, dest: string): string[] {
+	const script = path.basename(exe).toLowerCase() === 'index.js';
+	const args = [...(script ? [exe] : []), '--baseDir', src, '--src', src, '--dest', dest, '--js', '0', '--css', '0', '-nb', 'true'];
+	if (config.scopeCommon) {
+		args.push('-sc', config.scopeCommon);
+	}
+	return args;
+}
+
 export async function convert(exe: string, config: WpackConfig, relPath: string, xml: string): Promise<string> {
 	const tmp = await mkdtemp(path.join(os.tmpdir(), 'ws5-wpack-'));
 	try {
@@ -62,14 +90,11 @@ export async function convert(exe: string, config: WpackConfig, relPath: string,
 		await mkdir(path.dirname(path.join(src, relPath)), { recursive: true });
 		await writeFile(path.join(src, relPath), xml);
 		const script = path.basename(exe).toLowerCase() === 'index.js';
-		const node = path.resolve(path.dirname(exe), '..', '..', 'node.exe');
+		const node = nodeFor(exe);
 		if (script && !await exists(node)) {
 			throw new Error(`w-pack/index.js 실행용 Node를 찾지 못했습니다: ${node}`);
 		}
-		const args = [...(script ? [exe] : []), '--baseDir', src, '--src', src, '--dest', dest, '--js', '0', '--css', '0', '-nb', 'true'];
-		if (config.scopeCommon) {
-			args.push(script ? '-cm' : '-sc', config.scopeCommon);
-		}
+		const args = wpackArgs(exe, config, src, dest);
 		const output = await new Promise<string>((resolve, reject) => {
 			execFile(script ? node : exe, args, { cwd: path.dirname(exe), timeout: 60_000, windowsHide: true }, (err, stdout, stderr) =>
 				err ? reject(new Error(`${err.message}\n${stdout}${stderr}`)) : resolve(stdout + stderr));
