@@ -1,5 +1,16 @@
 # 변경 내역
 
+## 1.1.0 (2026-10-13)
+
+- **Submission 데이터 선택**: submission 팝업의 ref·target 옆 `데이터 선택`으로 DataMap·DataList를 여러 개 체크해 고르고, DataList 동작(ref는 all·modified·inserted·deleted·updated, target은 append)·key·형식(json·xml·array)을 정해 값을 만듭니다. 여러 개는 항목마다 한 줄로 정렬하고, 기존 값은 읽어 미리 채웁니다
+- submission ref·target을 Eclipse처럼 저장: 줄바꿈을 `&#10;` 대신 그대로, `"`가 있으면 `'`로 감싸 `&quot;` 없이
+- submission 팝업 너비를 900px로, ref·target 입력칸 기본 높이를 5줄로 확대
+- 파일 검색(Ctrl+E) 등으로 텍스트 편집기에 열린 WebSquare 화면 XML을 자동으로 디자이너로 전환. 수동으로 연 텍스트 편집기는 유지
+- 데이터 생성 구조를 WebSquare5 기본값에 맞춤: dataList의 `baseNode="list"`·`saveRemovedData="true"`, 기본 컬럼·키, linkedDataList의 filter·sort 조건
+- submission 생성 시 `encoding="UTF-8"`과 빈 기본 옵션·이벤트 속성을 WebSquare5 기본 순서로 추가
+- 팔레트 컴포넌트의 기본 속성·라벨·그리드 caption·탭 구조를 WebSquare5 기본값에 맞추고 새 그리드 컬럼 너비를 70으로 수정
+- 붙여넣기·이동·병합 시 여러 줄 속성값 안의 줄에 들여쓰기가 붙던 문제 수정
+
 ## 1.0.0 (2026-10-12)
 
 첫 정식 버전입니다. 자세한 기능은 [기능 설명](docs/FEATURES.md)을 참고하세요.
