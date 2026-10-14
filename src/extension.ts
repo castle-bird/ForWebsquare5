@@ -12,7 +12,7 @@ import { attachFrames, resolveSrc } from './project/frames';
 import { loadApiDocs } from './project/apiDocs';
 import { engineModules, udcNames } from './project/modules';
 import { annotate, loadComponents, type ComponentDef } from './project/components';
-import { convert, publish, readWpackConfig } from './project/wpack';
+import { convert, disposeWpack, publish, readWpackConfig, warmWpack } from './project/wpack';
 import { offerSetup, registerSetup, resolvePath, type SetupKey } from './vscode/setup';
 import { applyCodeEdit, applyNodeEdit, formatCode } from './vscode/documentEdit';
 import { LinkedFiles, registerLinks } from './vscode/links';
@@ -43,7 +43,10 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.registerCustomEditorProvider(VIEW_TYPE, new DesignerProvider(context.extensionUri, context.globalState, context.workspaceState, context.storageUri ?? context.globalStorageUri), {
 			webviewOptions: { retainContextWhenHidden: true },
 		}),
+		// 화면 XML → JS 변환: 저장할 때, 그리고 AI·다른 프로그램이 디스크의 XML을 바꿀 때(편집기에 열려 있는지와 상관없이)
 		vscode.workspace.onDidSaveTextDocument(doc => void wpackConvert(doc.uri, doc.getText())),
+		watchScreenFiles(),
+		{ dispose: disposeWpack },
 		// 포맷 단축키(Ctrl+Alt+L): 웹뷰는 VS Code 키 바인딩으로 받아 보이는 편집기에 전달. Alt+글자 조합은 웹뷰에서 VS Code 메뉴가 열려서 피한다.
 		vscode.commands.registerCommand('for-websquare5.format', () => {
 			const panel = [...panels].find(p => p.active);
@@ -70,7 +73,49 @@ const wpackQueues = new Map<string, Promise<unknown>>();
 const wpackDone = new Map<string, string>();
 let warnedNoWpack = false, warnedNoDefs = false;
 
-/** fromDisk: 파일 감시로 읽은 내용. 방금 저장해서 이미 변환한 내용이면 건너뛴다(저장은 매번 변환) */
+/** 변환 대상이 아닌 곳: 의존성·Git·Eclipse 배포본(.metadata, 우리가 XML을 복사해 넣는다) */
+const NOT_SCREEN_DIR = /[\\/](node_modules|\.git|\.metadata)[\\/]/;
+
+/**
+ * 작업 폴더의 XML이 디스크에서 바뀌면(AI·다른 프로그램·Git) 저장 이벤트가 없으므로 디스크 내용으로 변환한다.
+ * 문서를 읽고 쓰는 것(다시 읽기·저장·충돌 알림)은 VS Code가 평소처럼 하고, 저장 안 한 편집이 있는 파일은 건드리지 않는다(저장할 때 변환된다)
+ */
+function watchScreenFiles(): vscode.Disposable {
+	const watcher = vscode.workspace.createFileSystemWatcher('**/*.xml');
+	const timers = new Map<string, NodeJS.Timeout>();
+	const onDisk = (uri: vscode.Uri) => {
+		if (uri.scheme !== 'file' || NOT_SCREEN_DIR.test(uri.fsPath)) {
+			return;
+		}
+		const key = uri.toString();
+		clearTimeout(timers.get(key));
+		// 한 번 쓰기에 이벤트가 여러 번 올 수 있어 잠깐 모은다
+		timers.set(key, setTimeout(async () => {
+			timers.delete(key);
+			if (vscode.workspace.textDocuments.some(d => d.isDirty && d.uri.toString() === key)) {
+				return;
+			}
+			try {
+				const disk = (await readFile(uri.fsPath, 'utf8')).replace(/^\uFEFF/, '');
+				await wpackConvert(uri, disk, true);
+			} catch {
+				// 지워졌거나 아직 쓰는 중: 다음 변경 때 다시
+			}
+		}, 30));
+	};
+	watcher.onDidChange(onDisk);
+	watcher.onDidCreate(onDisk);
+	// 첫 변환도 바로 되게, 시작이 끝난 뒤 작업 폴더의 웹 루트 변환기를 미리 띄운다
+	const warm = setTimeout(() => void Promise.resolve(vscode.workspace.findFiles('**/websquare/config.xml', '**/{node_modules,.metadata,WEB-INF}/**', 1)).then(async ([config]) => {
+		const webRoot = config && path.dirname(path.dirname(config.fsPath));
+		if (webRoot && await readWpackConfig(webRoot).catch(() => undefined)) {
+			await warmWpack(await resolvePath('wpackExecutable', config, webRoot));
+		}
+	}).catch(() => undefined), 3000);
+	return { dispose: () => { watcher.dispose(); timers.forEach(clearTimeout); clearTimeout(warm); } };
+}
+
+/** fromDisk: 파일 감시로 읽은 내용. 방금 저장해서 이미 변환한 내용이면 건너뛰고, 읽을 수 없는 XML은 알리지 않는다(쓰는 중일 수 있다). 저장은 매번 변환 */
 async function wpackConvert(uri: vscode.Uri, xml: string, fromDisk = false): Promise<void> {
 	const file = uri.fsPath;
 	if (uri.scheme !== 'file' || !/\.xml$/i.test(file)) {
@@ -91,7 +136,9 @@ async function wpackConvert(uri: vscode.Uri, xml: string, fromDisk = false): Pro
 			return;
 		}
 	} catch (e) {
-		void vscode.window.showWarningMessage(`wpack 변환 건너뜀 (${path.basename(file)}): ${errorMessage(e)}`);
+		if (!fromDisk) {
+			void vscode.window.showWarningMessage(`wpack 변환 건너뜀 (${path.basename(file)}): ${errorMessage(e)}`);
+		}
 		return;
 	}
 	const exe = await resolvePath('wpackExecutable', uri, webRoot);
@@ -164,6 +211,8 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		}
 
 		rememberScreenEditor(document);
+		// 저장하자마자 변환되게 wpack 상주 변환을 미리 띄운다
+		void resolvePath('wpackExecutable', document.uri, webRoot).then(warmWpack).catch(() => undefined);
 		panels.add(panel);
 		const dist = vscode.Uri.joinPath(this.extensionUri, 'dist');
 		panel.webview.options = { enableScripts: true, localResourceRoots: [dist, vscode.Uri.file(webRoot)] };
@@ -207,23 +256,6 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		};
 
 		let timer: NodeJS.Timeout | undefined;
-		// AI·다른 프로그램이 디스크의 XML을 바꾸면 VS Code 저장 이벤트가 없어 변환이 안 돈다 → 감시해서 디스크 내용으로 변환한다.
-		// 문서를 읽고 쓰는 것(다시 읽기·저장·충돌 알림)은 VS Code가 평소처럼 하고, 저장 안 한 편집이 있으면 건드리지 않는다(저장할 때 변환된다)
-		let diskTimer: NodeJS.Timeout | undefined;
-		const xmlWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(path.dirname(document.uri.fsPath)), path.basename(document.uri.fsPath)));
-		const onDisk = () => {
-			clearTimeout(diskTimer);
-			diskTimer = setTimeout(async () => {
-				if (document.isDirty) { return; }
-				try {
-					const disk = (await readFile(document.uri.fsPath, 'utf8')).replace(/^\uFEFF/, '');
-					if (!document.isDirty) { await wpackConvert(document.uri, disk, true); }
-				} catch {
-				}
-			}, 100);
-		};
-		xmlWatcher.onDidChange(onDisk);
-		xmlWatcher.onDidCreate(onDisk);
 		const refresh = () => {
 			clearTimeout(timer);
 			return sendDocument();
@@ -269,7 +301,6 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		const queue = (target: CodeTarget, job: () => Promise<void>) => serial(codeQueues, linkIdOf(target) === undefined ? 'xml' : target, job);
 		const subs = [
 			moduleWatcher,
-			xmlWatcher,
 			vscode.workspace.onDidChangeConfiguration(e => {
 				const changed = (key: SetupKey) => e.affectsConfiguration(`for-websquare5.${key}`, document.uri);
 				if (affectsCodeOptions(e)) {
@@ -434,7 +465,6 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			disposed = true;
 			panels.delete(panel);
 			clearTimeout(timer);
-			clearTimeout(diskTimer);
 			clearTimeout(gitTimer);
 			clearTimeout(moduleTimer);
 			xmlBlame.dispose();
@@ -522,4 +552,6 @@ function html(webview: vscode.Webview, dist: vscode.Uri): string {
 </html>`;
 }
 
-export function deactivate() {}
+export function deactivate() {
+	disposeWpack();
+}

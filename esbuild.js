@@ -76,6 +76,15 @@ async function main() {
 			outfile: 'dist/extension.js',
 			external: ['vscode'],
 		}),
+		// wpack 상주 변환: 사용자 설치본의 node.exe(16)로 따로 실행된다
+		esbuild.context({
+			...common,
+			entryPoints: ['src/wpackServer.ts'],
+			format: 'cjs',
+			platform: 'node',
+			target: 'node16',
+			outfile: 'dist/wpackServer.js',
+		}),
 		esbuild.context({
 			...common,
 			plugins: [...common.plugins, inlineCssPlugin, pureDepsPlugin, cspPatchesPlugin],
