@@ -43,7 +43,7 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.registerCustomEditorProvider(VIEW_TYPE, new DesignerProvider(context.extensionUri, context.globalState, context.workspaceState, context.storageUri ?? context.globalStorageUri), {
 			webviewOptions: { retainContextWhenHidden: true },
 		}),
-		vscode.workspace.onDidSaveTextDocument(doc => void wpackOnSave(doc)),
+		vscode.workspace.onDidSaveTextDocument(doc => void wpackConvert(doc.uri, doc.getText())),
 		// 포맷 단축키(Ctrl+Alt+L): 웹뷰는 VS Code 키 바인딩으로 받아 보이는 편집기에 전달. Alt+글자 조합은 웹뷰에서 VS Code 메뉴가 열려서 피한다.
 		vscode.commands.registerCommand('for-websquare5.format', () => {
 			const panel = [...panels].find(p => p.active);
@@ -66,20 +66,23 @@ const SETTINGS_MENU: Record<SettingsMenuItem, [string, ...unknown[]]> = {
 };
 
 const wpackQueues = new Map<string, Promise<unknown>>();
+/** 파일마다 마지막으로 변환한 XML: 저장과 디스크 변경 감시가 같은 내용을 두 번 변환하지 않게 */
+const wpackDone = new Map<string, string>();
 let warnedNoWpack = false, warnedNoDefs = false;
 
-async function wpackOnSave(doc: vscode.TextDocument): Promise<void> {
-	if (doc.uri.scheme !== 'file' || !/\.xml$/i.test(doc.fileName)) {
+/** fromDisk: 파일 감시로 읽은 내용. 방금 저장해서 이미 변환한 내용이면 건너뛴다(저장은 매번 변환) */
+async function wpackConvert(uri: vscode.Uri, xml: string, fromDisk = false): Promise<void> {
+	const file = uri.fsPath;
+	if (uri.scheme !== 'file' || !/\.xml$/i.test(file)) {
 		return;
 	}
-	const webRoot = await findWebRoot(doc.fileName);
+	const webRoot = await findWebRoot(file);
 	const config = webRoot && await readWpackConfig(webRoot).catch(() => undefined);
 	if (!webRoot || !config) {
 		return;
 	}
-	const rel = path.relative(webRoot, doc.fileName);
+	const rel = path.relative(webRoot, file);
 	const top = rel.split(path.sep)[0];
-	const xml = doc.getText();
 	if (rel.startsWith('..') || ['WEB-INF', 'META-INF', config.destRoot, '_wpackbabel_'].includes(top)) {
 		return;
 	}
@@ -88,10 +91,10 @@ async function wpackOnSave(doc: vscode.TextDocument): Promise<void> {
 			return;
 		}
 	} catch (e) {
-		void vscode.window.showWarningMessage(`wpack 변환 건너뜀 (${path.basename(doc.fileName)}): ${errorMessage(e)}`);
+		void vscode.window.showWarningMessage(`wpack 변환 건너뜀 (${path.basename(file)}): ${errorMessage(e)}`);
 		return;
 	}
-	const exe = await resolvePath('wpackExecutable', doc.uri, webRoot);
+	const exe = await resolvePath('wpackExecutable', uri, webRoot);
 	if (!exe) {
 		if (!warnedNoWpack) {
 			warnedNoWpack = true;
@@ -99,11 +102,18 @@ async function wpackOnSave(doc: vscode.TextDocument): Promise<void> {
 		}
 		return;
 	}
-	const name = path.basename(doc.fileName);
-	await serial(wpackQueues, doc.fileName, async () => {
+	if (fromDisk && wpackDone.get(file) === xml) {
+		return;
+	}
+	wpackDone.set(file, xml);
+	const name = path.basename(file);
+	await serial(wpackQueues, file, async () => {
 		await publish(webRoot, config, rel, xml, await convert(exe, config, rel, xml));
 		vscode.window.setStatusBarMessage(`$(check) wpack: ${name}`, 3000);
-	}).catch(e => void vscode.window.showErrorMessage(`wpack 변환 실패 (${name}): ${errorMessage(e)}`));
+	}).catch(e => {
+		wpackDone.delete(file);
+		void vscode.window.showErrorMessage(`wpack 변환 실패 (${name}): ${errorMessage(e)}`);
+	});
 }
 
 /** 모든 화면 공통 설정(탭 순서·위치)을 바꾼 화면 말고 다른 화면에 */
@@ -197,6 +207,23 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		};
 
 		let timer: NodeJS.Timeout | undefined;
+		// AI·다른 프로그램이 디스크의 XML을 바꾸면 VS Code 저장 이벤트가 없어 변환이 안 돈다 → 감시해서 디스크 내용으로 변환한다.
+		// 문서를 읽고 쓰는 것(다시 읽기·저장·충돌 알림)은 VS Code가 평소처럼 하고, 저장 안 한 편집이 있으면 건드리지 않는다(저장할 때 변환된다)
+		let diskTimer: NodeJS.Timeout | undefined;
+		const xmlWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(path.dirname(document.uri.fsPath)), path.basename(document.uri.fsPath)));
+		const onDisk = () => {
+			clearTimeout(diskTimer);
+			diskTimer = setTimeout(async () => {
+				if (document.isDirty) { return; }
+				try {
+					const disk = (await readFile(document.uri.fsPath, 'utf8')).replace(/^\uFEFF/, '');
+					if (!document.isDirty) { await wpackConvert(document.uri, disk, true); }
+				} catch {
+				}
+			}, 100);
+		};
+		xmlWatcher.onDidChange(onDisk);
+		xmlWatcher.onDidCreate(onDisk);
 		const refresh = () => {
 			clearTimeout(timer);
 			return sendDocument();
@@ -242,6 +269,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		const queue = (target: CodeTarget, job: () => Promise<void>) => serial(codeQueues, linkIdOf(target) === undefined ? 'xml' : target, job);
 		const subs = [
 			moduleWatcher,
+			xmlWatcher,
 			vscode.workspace.onDidChangeConfiguration(e => {
 				const changed = (key: SetupKey) => e.affectsConfiguration(`for-websquare5.${key}`, document.uri);
 				if (affectsCodeOptions(e)) {
@@ -406,6 +434,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			disposed = true;
 			panels.delete(panel);
 			clearTimeout(timer);
+			clearTimeout(diskTimer);
 			clearTimeout(gitTimer);
 			clearTimeout(moduleTimer);
 			xmlBlame.dispose();

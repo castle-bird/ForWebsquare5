@@ -9,7 +9,7 @@ import { convert, eclipseDeployRoots, findWpack, publish, readWpackConfig, wpack
 import { scopeCss } from '../project/styles';
 import { engineModules, udcNames } from '../project/modules';
 import { attachFrames } from '../project/frames';
-import { loadApiDocs, parseApiEvents, parseApiMethods } from '../project/apiDocs';
+import { cleanSample, loadApiDocs, parseApiEvents, parseApiMethods } from '../project/apiDocs';
 import { SCREEN, DEFS } from './helpers';
 import { fromWebPath } from '../project/paths';
 
@@ -54,6 +54,34 @@ suite('API documentation', () => {
 		assert.deepStrictEqual(methods[0].params, [{ name: 'eventType', type: 'String', required: 'Y', description: '이벤트명' }]);
 		assert.deepStrictEqual(methods[0].returns, [{ type: 'Boolean', description: '성공 여부' }]);
 		assert.strictEqual(methods[0].sample, 'obj.bind("click", fn);');
+	});
+
+	test('xmp 예제는 XML 태그·엔티티를 원문 그대로, 앞뒤 빈 줄·공통 들여쓰기·연속 빈 줄만 정리', () => {
+		const html = `<dl>
+			<dt class="apiname">getAllXML()</dt>
+			<dd>
+				<div class="pdesc">설명
+<xmp class='js sample'>(관련 함수)
+ getAllFilteredXML (필터를 무시하고 모든 데이터를 반환)</xmp></div>
+				<div class="caption_sample">Sample</div>
+				<div class="pdesc"><xmp class='js sample'>
+
+		// 반환 값 예시
+
+
+		<list id="dlt">
+		    <map index="0"><name>손예진</name><rowStatus>R</rowStatus></map>
+		    <note>a &lt; b &amp; c</note>
+		</list>
+</xmp></div>
+			</dd>
+			<dt class="apiname">getAllFilteredXML()</dt>
+			<dd><div class="pdesc">설명<xmp class='js sample'>(관련 함수) getAllXML</xmp></div></dd>
+		</dl>`;
+		const [xml, filtered] = parseApiMethods(html);
+		assert.strictEqual(xml.sample, '// 반환 값 예시\n\n<list id="dlt">\n    <map index="0"><name>손예진</name><rowStatus>R</rowStatus></map>\n    <note>a &lt; b &amp; c</note>\n</list>', 'Sample 제목 뒤의 xmp를 쓰고 태그는 보존');
+		assert.strictEqual(filtered.sample, '(관련 함수) getAllXML', 'Sample 제목이 없으면 첫 xmp(이전 동작)');
+		assert.strictEqual(cleanSample('\r\n\r\n  a\r\n    b\r\n\r\n\r\n\r\n  c  \r\n\r\n'), 'a\n  b\n\nc');
 	});
 
 	test('이벤트 상세(ename/edesc)는 메서드와 클래스만 다르고 같은 모양 — 이벤트 핸들러 생성의 파라미터 이름 출처', () => {

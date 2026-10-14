@@ -121,10 +121,27 @@ async function formatDocument(document: vscode.TextDocument, builtIn = false): P
 	// Java 등 언어 서버 확장은 서버가 다 뜬 뒤에야 포매터를 등록한다 → 설치돼 있으면 준비될 때까지 기다린다
 	// 한 번 기다려도 없었던 언어(포매터 없는 확장)는 다시 기다리지 않는다
 	const lang = document.languageId;
+	// 사용자가 이 언어에 지정한 포매터(Prettier 등)는 처음 쓸 때 켜지는 확장이라, 켜기 전에 물으면 "없음"으로 보인다 → 먼저 켜고, 등록될 때까지 잠깐 다시 묻는다
+	const chosen = vscode.workspace.getConfiguration('editor', { uri: document.uri, languageId: lang }).get<string>('defaultFormatter');
+	const chosenExt = chosen ? vscode.extensions.getExtension(chosen) : undefined;
+	const activating = !!chosenExt && !chosenExt.isActive;
+	if (chosenExt && activating) {
+		await Promise.resolve(chosenExt.activate()).catch(() => undefined);
+	}
 	let edits = await run();
-	for (let i = 0; builtIn && !edits && i < 10; i++) {
+	for (let i = 0; (builtIn || activating) && !edits && i < 10; i++) {
 		await new Promise(r => setTimeout(r, 300));
 		edits = await run();
+	}
+	// 기본 포매터를 따로 지정하지 않았어도 설치된 포매터 확장(Prettier 등)은 처음 쓸 때 켜진다 → 아직 안 켜진 것을 켜고 다시 묻는다
+	const idle = !edits && noFormatter.get(lang) !== vscode.extensions.all.length
+		? vscode.extensions.all.filter(ext => !ext.isActive && (ext.packageJSON as { categories?: string[] } | undefined)?.categories?.includes('Formatters')) : [];
+	if (idle.length) {
+		await Promise.all(idle.map(ext => Promise.resolve(ext.activate()).catch(() => undefined)));
+		for (let i = 0; !edits && i < 10; i++) {
+			await new Promise(r => setTimeout(r, 300));
+			edits = await run();
+		}
 	}
 	const extensions = !edits && noFormatter.get(lang) !== vscode.extensions.all.length ? languageExtensions(lang) : [];
 	if (extensions.length) {

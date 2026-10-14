@@ -46,6 +46,27 @@ export default async function ({ page, pickProperty }) {
 	await page.keyboard.press('Escape');
 	await page.waitForFunction(() => !document.querySelector('.help'));
 	console.log('Property: Key 도움말 자리 passed');
+	// 도움말 설명 속 예제 코드: 코드 상자(가로 스크롤·고정폭)로 나뉘고, 코드가 있으면 넓어지며, `|`만 있는 줄은 안 보인다
+	await page.evaluate(() => {
+		const description = '설명 글\n |(옵션 설명)\n | "a" : 첫째\n |\n |(예제)\n | scwin.fn = function(){\n |    return 1; // 아주 긴 줄을 만들어 가로 스크롤이 생기게 한다 아주 긴 줄을 만들어 가로 스크롤이 생기게 한다 아주 긴 줄을 만들어 가로 스크롤이 생기게 한다\n |\n | }';
+		window.send({ type: 'definitions', defs: [{ ...window.testDefs[0], properties: [...window.testDefs[0].properties, { name: 'sample', category: '', order: 0, description }] }, ...window.testDefs.slice(1)] });
+	});
+	await page.waitForFunction(() => [...document.querySelectorAll('.kv td.key')].some(td => td.textContent === 'sample'));
+	await page.evaluate(() => [...document.querySelectorAll('.kv td.key')].find(td => td.textContent === 'sample').click());
+	await page.waitForSelector('.help .help-code');
+	const code = await page.evaluate(() => {
+		const h = document.querySelector('.help'), pre = h.querySelector('.help-code');
+		return { text: pre.textContent, white: getComputedStyle(pre).whiteSpace, overflowX: getComputedStyle(pre).overflowX, scrolls: pre.scrollWidth > pre.clientWidth, width: h.getBoundingClientRect().width, inside: h.getBoundingClientRect().right <= innerWidth,
+			headings: [...h.querySelectorAll('.help-heading')].map(e => e.textContent), all: h.textContent };
+	});
+	assert.equal(code.text.split('\n')[0], 'scwin.fn = function(){', '`|` 접두 없이 코드만');
+	assert.deepEqual([code.white, code.overflowX, code.scrolls], ['pre', 'auto', true], '줄바꿈 없이 가로 스크롤');
+	assert.deepEqual(code.headings, ['(옵션 설명)', '(예제)']);
+	assert.ok(code.width > 440 && code.width <= 600 && code.inside, `코드가 있으면 넓고 화면 안: ${code.width}`);
+	assert.ok(!code.all.includes('|'), '`|` 기호는 남지 않음');
+	await page.keyboard.press('Escape');
+	await page.waitForFunction(() => !document.querySelector('.help'));
+	console.log('Property: 도움말 코드 상자 passed');
 	// Style 칸: Shift+Enter는 줄바꿈(반영 안 함), Enter로 반영하고 입력칸에서 나옴
 	await page.click('.style-area .style-value');
 	await page.keyboard.type('width:1px;');

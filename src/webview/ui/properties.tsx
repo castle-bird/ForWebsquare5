@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as Rea
 import { clsx } from 'clsx';
 import type { ComponentDef } from '../../core/protocol';
 import { EV, type XmlNode } from '../../core/xmlModel';
+import { helpBlocks } from '../../core/helpText';
 import { EditBox } from './editBox';
 import { Tabs } from './tabs';
 import { useFloating } from './floating';
@@ -53,7 +54,7 @@ const sortGroups = (groups: Map<string, RowGroup>) => [...groups.values()]
 	.sort((a, b) => a.order - b.order)
 	.map(g => ({ ...g, rows: g.rows.sort((a, b) => a.name.localeCompare(b.name)) }));
 
-interface Help { title: string; text: string; anchor: HTMLElement }
+interface Help { title: string; blocks: ReturnType<typeof helpBlocks>; anchor: HTMLElement }
 
 interface Search { field: 'name' | 'value'; text: string }
 
@@ -106,7 +107,7 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 		}
 		window.clearTimeout(fadeTimer.current);
 		setFading(false);
-		setHelp({ title: row.name, text: row.description, anchor: e.currentTarget });
+		setHelp({ title: row.name, blocks: helpBlocks(row.description), anchor: e.currentTarget });
 	};
 
 	useEffect(hide, [node?.index]); // 노드 객체는 문서가 바뀔 때마다 새로 오므로 번호로 비교
@@ -151,9 +152,10 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 				<Editable className="style-value" disabled={!node} value={node?.attrs.style} onCommit={v => onEdit('style', v)} />
 			</div>
 			{help && (
-				<div ref={popup} className={clsx('help', { fading })} style={popupStyle}>
+				<div ref={popup} className={clsx('help', { fading, wide: help.blocks.some(b => b.kind === 'code') })} style={popupStyle}>
 					<strong>{help.title}</strong>
-					<div>{help.text}</div>
+					{help.blocks.map((b, i) => b.kind === 'code' ? <pre key={i} className="help-code"><code>{b.text}</code></pre>
+						: b.kind === 'heading' ? <div key={i} className="help-heading">{b.text}</div> : <div key={i}>{b.text}</div>)}
 				</div>
 			)}
 		</div>

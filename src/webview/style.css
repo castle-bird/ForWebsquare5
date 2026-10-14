@@ -35,7 +35,7 @@ body {
 	:where(select)::picker(select) {
 		appearance: base-select; margin-top: 2px; padding: 4px; border-radius: 8px;
 		color: var(--vscode-dropdown-foreground, var(--vscode-foreground)); background: var(--vscode-dropdown-background, var(--vscode-input-background));
-		border: 1px solid var(--vscode-dropdown-border, var(--ctl-border)); box-shadow: 0 4px 14px var(--vscode-widget-shadow, rgba(0, 0, 0, .3));
+		border: 1px solid var(--vscode-dropdown-border, var(--ctl-border)); box-shadow: 0 6px 20px var(--vscode-widget-shadow, rgba(0, 0, 0, .45));
 	}
 	:where(select) option { min-height: 24px; padding: 2px 8px; border-radius: 5px; gap: 8px; cursor: pointer; }
 	:where(select) option:is(:hover, :focus-visible) { outline: none; background: var(--vscode-list-hoverBackground); }
@@ -647,16 +647,21 @@ input[type="checkbox"].switch:focus-visible { outline: 1px solid var(--vscode-fo
 
 .help {
 	font-family: var(--panel-font-family, var(--vscode-editor-font-family, monospace));
-	position: fixed; z-index: 10; width: 300px; max-height: 260px; overflow: auto;
+	position: fixed; z-index: 10; box-sizing: border-box; width: 440px; max-width: calc(100vw - 16px); max-height: min(380px, calc(100vh - 16px)); overflow: auto;
 	padding: 6px 8px; line-height: 18px; white-space: pre-wrap;
 	color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground));
 	background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background));
 	border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-panel-border));
+	border-left: 3px solid var(--vscode-focusBorder, var(--vscode-textLink-foreground));
 	border-radius: 4px; box-shadow: 0 4px 14px var(--vscode-widget-shadow, rgba(0, 0, 0, .3));
 	transition: opacity .3s ease;
 }
+.help.wide { width: 600px; }
 .help.fading { opacity: 0; }
-.help strong { display: block; margin-bottom: 4px; }
+.help-heading { margin-top: 6px; font-weight: 600; }
+/* 코드 덩어리: 줄바꿈 없이 가로 스크롤, 고정폭 글꼴, 배경색(자동완성 설명 예제 ws-doc-sample과 같은 모양) */
+.help-code { margin: 4px 0; padding: 6px 8px; border-radius: 4px; overflow-x: auto; white-space: pre; font-family: var(--vscode-editor-font-family, monospace); font-size: .9em; background: var(--vscode-textCodeBlock-background); }
+.help strong { display: block; margin-bottom: 4px; color: var(--vscode-textLink-foreground, inherit); }
 
 .kv .value { min-height: 18px; cursor: text; overflow: hidden; text-overflow: ellipsis; }
 /* 고를 값 목록이 있는 입력칸(직접 입력도 됨): 오른쪽에 ▾ */
@@ -940,7 +945,7 @@ textarea.edit.style-value {
 	background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); }
 
 /* 커서 줄 끝 Git blame(editor/blame.ts): VS Code 줄 끝 blame 색 */
-.code-editor .cm-blame { margin-left: 3em; white-space: pre; pointer-events: none; user-select: none;
+.code-editor .cm-blame { padding-left: 3em; white-space: pre; pointer-events: none; user-select: none;
 	color: var(--vscode-git-blame-editorDecorationForeground, var(--vscode-editorCodeLens-foreground, var(--vscode-descriptionForeground))); }
 /* 코드 편집기 미니맵(막대형, editor/minimap.ts): 스크롤바 왼쪽, 지금 보이는 곳은 슬라이더 */
 .code-editor .cm-minimap { position: absolute; top: 0; bottom: 0; width: 72px; z-index: 2; cursor: default; }

@@ -465,6 +465,35 @@ export default async function ({ page, pickProperty }) {
 		await page.keyboard.press('Escape');
 		await page.waitForFunction(() => !document.querySelector('.canvas-host').shadowRoot.querySelector('.edit'), {timeout: 3000});
 		assert.equal(await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-overlay').hidden), false, '편집을 닫으면 다시 보임');
+		// label 속 <br/>: 캔버스에서 줄바꿈으로 보이고, 편집 상자에선 줄바꿈 ↔ <br/>로 오간다(안 고치고 닫으면 저장 안 함)
+		await page.evaluate(() => {
+			const text = '<html xmlns:w2="urn:test"><body><w2:textbox id="brLabel" label="특수함&lt;br/&gt;(특허)"/><w2:textbox id="brUpper" label="가&lt;BR /&gt;나&lt;br&gt;다"/><w2:group id="brGroup" tagname="span">사원코드&lt;br/&gt;안녕하세요</w2:group></body></html>';
+			const root = window.parseXml(text);
+			window.send({ type: 'definitions', defs: [...window.testDefs, { id: 'textbox', ns: 'urn:test', realType: 'textbox', parents: [], bases: [], properties: [], events: [] }, { id: 'group', ns: 'urn:test', realType: 'group', parents: [], bases: [], properties: [], events: [] }] });
+			root.children[0].children.forEach(c => { c.def = window.testDefs.length + (c.tag === 'w2:group' ? 1 : 0); });
+			window.send({ type: 'document', version: 98, text, root, script: { text: '' } });
+		});
+		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('#brLabel'));
+		assert.deepEqual(await page.evaluate(() => { const r = document.querySelector('.canvas-host').shadowRoot; return ['brLabel', 'brUpper', 'brGroup'].map(id => ({ br: r.querySelector('#' + id).querySelectorAll('br').length, text: r.querySelector('#' + id).textContent })); }),
+			[{ br: 1, text: '특수함(특허)' }, { br: 2, text: '가나다' }, { br: 1, text: '사원코드안녕하세요' }], '<br/>은 글자가 아니라 줄바꿈 요소');
+		const dblBr = () => page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('#brLabel').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true })));
+		await dblBr();
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('textarea.edit'), { timeout: 3000 });
+		assert.equal(await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('textarea.edit').value), '특수함\n(특허)', '편집 상자엔 줄바꿈');
+		await page.evaluate(() => { window.sent.length = 0; });
+		await page.keyboard.press('Escape');
+		await dblBr();
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('textarea.edit'), { timeout: 3000 });
+		await page.keyboard.press('Enter');
+		assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'setAttr')), false, '안 고치고 닫으면 저장 안 함');
+		await dblBr();
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('textarea.edit'), { timeout: 3000 });
+		await page.keyboard.down('Shift'); await page.keyboard.press('Enter'); await page.keyboard.up('Shift');
+		await page.keyboard.type('끝');
+		await page.keyboard.press('Enter');
+		assert.deepEqual(await page.evaluate(() => { const m = window.sent.find(m => m.type === 'setAttr'); return m && { name: m.name, value: m.value }; }),
+			{ name: 'label', value: '특수함<br/>(특허)<br/>끝' }, 'Shift+Enter 줄바꿈은 <br/>로 저장');
+		console.log('Design: label <br/> 렌더·편집 passed');
 		// 그리드 헤더 칸 더블클릭: 문구 상자 아래 너비(W)·높이(H). 칸으로 옮겨도 안 닫히고, Enter면 문구·width·style height를 한 편집으로
 		await page.evaluate(() => {
 			const text = '<html xmlns:w2="urn:test"><body><w2:gridView id="grdSize"><w2:header id="hd"><w2:row id="hr"><w2:column id="h1" value="이름" width="70" style="height:26px;"/></w2:row></w2:header><w2:gBody id="gb"><w2:row id="br"><w2:column id="b1"/></w2:row></w2:gBody></w2:gridView></body></html>';

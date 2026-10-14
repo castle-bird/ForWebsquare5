@@ -9,7 +9,25 @@ const API_DIR = /^(\$p(?:\.|$)|WebSquare(?:\.|$))/;
 
 const hasClass = (name: string) => (e: { attribs?: Record<string, string> }) => (e.attribs?.class ?? '').split(/\s+/).includes(name);
 
-function parseDetailList(doc: ReturnType<typeof parseDocument>, tagClass: string, descClass: string): ScriptApi[string] {
+/**
+ * 예제 글자: 앞뒤 빈 줄과 공통 들여쓰기를 걷고, 빈 줄이 이어지면 한 줄로
+ * (브라우저의 xmp처럼 엔티티는 풀지 않고 원문 그대로 쓴다)
+ */
+export function cleanSample(raw: string): string {
+	const lines = raw.replace(/\r\n?/g, '\n').split('\n').map(l => l.trimEnd());
+	while (lines.length && !lines[0]) { lines.shift(); }
+	while (lines.length && !lines[lines.length - 1]) { lines.pop(); }
+	const indent = Math.min(...lines.filter(Boolean).map(l => /^[ \t]*/.exec(l)![0].length));
+	return lines.map(l => l.slice(Number.isFinite(indent) ? indent : 0)).join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/** xmp 안의 원문. htmlparser2는 xmp 안 XML을 요소로 파싱해 textContent가 태그를 버리므로, 원본 문자열에서 시작 태그와 닫는 태그 사이를 자른다 */
+function xmpSource(html: string, xmp: { startIndex: number | null }): string {
+	const open = html.indexOf('>', xmp.startIndex ?? 0) + 1, close = html.toLowerCase().indexOf('</xmp', open);
+	return html.slice(open, close < 0 ? undefined : close);
+}
+
+function parseDetailList(doc: ReturnType<typeof parseDocument>, html: string, tagClass: string, descClass: string): ScriptApi[string] {
 	const dts = DomUtils.findAll(hasClass(tagClass), doc.children);
 	return dts.flatMap(dt => {
 		const rawSig = DomUtils.textContent(dt).replace(/\s+/g, ' ').trim();
@@ -42,8 +60,11 @@ function parseDetailList(doc: ReturnType<typeof parseDocument>, tagClass: string
 				}
 			}
 
-			const xmp = DomUtils.findOne(e => e.name === 'xmp', dd.children);
-			if (xmp) { sample = DomUtils.textContent(xmp).trim(); }
+			// 설명 안의 "(관련 함수)" 안내 xmp가 앞에 올 수 있으니 Sample 제목 뒤의 xmp를 먼저 쓴다
+			const caption = DomUtils.findOne(hasClass('caption_sample'), dd.children);
+			const xmps = DomUtils.findAll(e => e.name === 'xmp', dd.children);
+			const xmp = caption ? xmps.find(x => (x.startIndex ?? 0) > (caption.startIndex ?? 0)) ?? xmps[0] : xmps[0];
+			if (xmp) { sample = cleanSample(xmpSource(html, xmp)); }
 		}
 
 		return [{
@@ -58,8 +79,8 @@ function parseDetailList(doc: ReturnType<typeof parseDocument>, tagClass: string
 }
 
 export function parseApiMethods(html: string): ScriptApi[string] {
-	const doc = parseDocument(html);
-	const methods = parseDetailList(doc, 'apiname', 'pdesc');
+	const doc = parseDocument(html, { withStartIndices: true });
+	const methods = parseDetailList(doc, html, 'apiname', 'pdesc');
 	if (methods.length > 0) {
 		return methods;
 	}
@@ -73,7 +94,7 @@ export function parseApiMethods(html: string): ScriptApi[string] {
 }
 
 export function parseApiEvents(html: string): ScriptApi[string] {
-	return parseDetailList(parseDocument(html), 'ename', 'edesc');
+	return parseDetailList(parseDocument(html, { withStartIndices: true }), html, 'ename', 'edesc');
 }
 
 export async function findApiDocs(eclipseRoot: string): Promise<string | undefined> {

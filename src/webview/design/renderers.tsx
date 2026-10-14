@@ -30,7 +30,19 @@ const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input'
 
 type Renderer = (node: XmlNode, className: string, defs: ComponentDef[]) => ReactNode;
 
-const text = (tag: string): Renderer => (n, c) => el(n, tag, c, labelOf(n));
+/** 글자 속 <br>·<br/>·<br /> 를 실제 줄바꿈 요소로(엔진은 label을 HTML로 넣는다). React가 이스케이프하지 않게 innerHTML 대신 요소로 나눈다 */
+const BREAK = /<br\s*\/?>/i;
+const BREAKS = new RegExp(BREAK, 'gi');
+export function withBreaks(value: string | undefined): ReactNode {
+	if (value === undefined || !BREAK.test(value)) { return value; }
+	return value.split(BREAKS).flatMap((part, i) => i ? [<br key={`b${i}`} />, part] : [part]);
+}
+
+/** 편집 상자용: <br/> ↔ 줄바꿈(Shift+Enter) */
+export const breaksToNewlines = (value: string) => value.replace(BREAKS, '\n');
+export const newlinesToBreaks = (value: string) => value.replace(/\r\n|\r|\n/g, '<br/>');
+
+const text = (tag: string): Renderer => (n, c) => el(n, tag, c, withBreaks(labelOf(n)));
 
 const RENDERERS: Record<string, Renderer> = {
 	body: (n, c, d) => el(n, 'div', c, children(n, d)),
@@ -41,7 +53,7 @@ const RENDERERS: Record<string, Renderer> = {
 	span: text('span'),
 	label: text('span'),
 	anchor: text('a'),
-	textbox: (n, c) => el(n, tagname(n), c, labelOf(n), attributes(n)),
+	textbox: (n, c) => el(n, tagname(n), c, withBreaks(labelOf(n)), attributes(n)),
 	selectbox: (n, c) => combo(n, c, 'w2selectbox'),
 	autoComplete: (n, c) => combo(n, c, 'w2autoComplete'),
 	checkcombobox: (n, c) => combo(n, c, 'w2checkcombobox'),
@@ -90,7 +102,7 @@ export function render(node: XmlNode, defs: ComponentDef[]): ReactNode {
 	}
 	if (CONTAINERS.has(type)) {
 		const kids = children(node, defs);
-		return el(node, tagname(node), className, node.text ? [node.text, ...kids ?? []] : kids, attributes(node));
+		return el(node, tagname(node), className, node.text ? [withBreaks(node.text), ...kids ?? []] : kids, attributes(node));
 	}
 	return el(node, 'div', clsx(className, 'wse-todo'), undefined, { 'data-tag': node.tag + (node.attrs.src ? ' ' + node.attrs.src : '') });
 }

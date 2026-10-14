@@ -9,7 +9,7 @@ import { EditBox } from '../ui/editBox';
 import { cellForm, FORM_HEIGHT, FORM_WIDTH, formAttrs, FormFields, FormHeader, type Form } from './cellForm';
 import { matchingCssRules } from './cssRules';
 import { distanceLines, type DistanceLine } from './distance';
-import { render, textTarget, outlineIcon, type TextTarget } from './renderers';
+import { render, textTarget, outlineIcon, breaksToNewlines, newlinesToBreaks, type TextTarget } from './renderers';
 import { classLabel, REF_MIME, setDragGhost } from '../ui/tree';
 import { PALETTE_MIME, readPaletteDrag, type PaletteDrag } from '../ui/palette';
 import { componentDropPosition, findPaletteDef, insertPositions } from '../../core/palette';
@@ -20,6 +20,9 @@ import moveIcon from '@vscode/codicons/src/icons/move.svg';
 
 const MOVE_MIME = 'application/x-websquare5-canvas-move';
 let renders = 0;
+
+/** 편집 상자에 보일 글자: <br/>은 줄바꿈으로(그리드 칸 편집은 그대로) */
+const editValue = (editing: { target: TextTarget; form?: unknown }) => editing.form ? editing.target.value ?? '' : breaksToNewlines(editing.target.value ?? '');
 
 export function Canvas({ body, dataCollection, defs, sheets, styleRules, selected, extra = [], onSelect, onSelectCells, onEditText, onEditAttr, onOpenFrame, onOpenEditor, onBindRef, onContextMenu, onInsertComponent, onMove, idChoices }: {
 	body: XmlNode; dataCollection?: XmlNode; defs: ComponentDef[]; sheets?: string[]; styleRules?: CssRuleSource[]; selected?: number;
@@ -267,12 +270,12 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 					onMouseLeave={() => { setHover(undefined); keepHoverGrid(undefined); }}>
 					<Boundary generation={generation}><DataCollection.Provider value={dataCollection}>{tree}</DataCollection.Provider></Boundary>
 					{editing && (
-						<EditBox key={editing.target.index} style={editing.rect} value={editing.target.value ?? ''}
+						<EditBox key={editing.target.index} style={editing.rect} value={editValue(editing)}
 							header={editing.form && <FormHeader form={editing.form} />}
 							footer={editing.form && <FormFields form={editing.form} values={draft} onChange={setDraft} />}
 							status={changes.length > 0 && `바꾼 속성 ${changes.length}`}
 							changed={changes.length > 0}
-							onCommit={v => onEditText(editing.target, v, editing.form && formAttrs(editing.form, draft))} onClose={() => setEditing(undefined)} />
+							onCommit={v => onEditText(editing.target, editing.form ? v : newlinesToBreaks(v), editing.form && formAttrs(editing.form, draft))} onClose={() => setEditing(undefined)} />
 					)}
 				</div>
 				{/* 글자 편집 중에는 선택 테두리·손잡이·표시 점이 편집 상자를 덮지 않게 숨긴다(겹침 층이 페이지 위라 z-index로는 못 내림) */}
