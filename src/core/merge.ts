@@ -1,6 +1,7 @@
 // 셀 병합: gridView 컬럼, 또는 group(tagname th·td)으로 만든 표의 셀. 고른 셀이 직사각형으로 빈틈없이 붙어 있을 때만.
 // 왼쪽 위 셀에 합친 칸 수(colSpan·rowSpan)를 넣고 나머지 셀은 지운다. 지워지는 group 셀 안의 컴포넌트는 왼쪽 위 셀로 옮겨 잃지 않는다
 import { applyEdits, deleteNode, eolOf, escape, leadOf, lineIndent, setAttribute, setText, sourceChange, startTagEnd, type TextEdit } from './edit';
+import { errorMessage } from './errors';
 import { columnLayout, gridColumnXml } from './grid';
 import { insertNode, reindentLines } from './paste';
 import { EV, isWs, kid, kids, localName, nodeAt, parseXml, pathTo, prefixOf, uniqueId, usedIds, WEBSQUARE_NS, type XmlNode } from './xmlModel';
@@ -81,7 +82,7 @@ export function mergeProblem(root: XmlNode, cells: XmlNode[]): string | undefine
 		placeSelection(root, cells);
 		return undefined;
 	} catch (e) {
-		return e instanceof Error ? e.message : String(e);
+		return errorMessage(e);
 	}
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
 import type { SettingsMenuItem, ToWebview } from '../core/protocol';
-import { defOf, isWs, localName, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
+import { defOf, isWs, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
 import { DATA_KINDS, modelParts, type DataKind } from '../core/data';
 
 import { Canvas } from './design/canvas';
@@ -34,7 +34,7 @@ import { lastPressedIn } from './keys';
 import { canMerge, canUnmerge, gridOfCells, post, targets, useEditorStore } from './store';
 import { wrapProblem } from '../core/wrap';
 import { isMergeCell } from '../core/merge';
-import { isStructure } from '../core/paste';
+import { inScreenBody } from '../core/paste';
 import '@vscode/codicons/dist/codicon.css';
 import './style.css';
 
@@ -313,16 +313,15 @@ function App() {
 	};
 	// 고른 셀들이 여럿(Ctrl+클릭)이면 그 안에서 연 메뉴는 선택을 그대로 둬야 병합할 수 있다
 	const keepsSelection = (index: number) => extra.length > 0 && (selected === index || extra.includes(index));
-	/** 붙여 넣기 > 앞·뒤를 넣을 수 있는 컴포넌트: 복사·잘라 둔 것이 있고, body 안(구조·그리드 안 칸 말고) */
-	const pasteTarget = (index: number) => {
-		const path = root && useEditorStore.getState().copied?.length ? pathTo(root, index) : undefined, n = path?.at(-1);
-		const inBody = path?.some(p => localName(p.tag) === 'body'), inGrid = path?.slice(0, -1).some(p => isWs(p, 'gridView'));
-		return n && inBody && !inGrid && !isStructure(n) ? n.index : undefined;
+	/** body 안 일반 컴포넌트(구조·그리드 안 칸 말고)의 경로 */
+	const componentPath = (index: number) => {
+		const path = root && pathTo(root, index);
+		return path && inScreenBody(path) && !path.slice(0, -1).some(p => isWs(p, 'gridView')) ? path : undefined;
 	};
+	/** 붙여 넣기 > 앞·뒤를 넣을 수 있는 컴포넌트: 복사·잘라 둔 것이 있고, body 안 일반 컴포넌트 */
+	const pasteTarget = (index: number) => useEditorStore.getState().copied?.length ? componentPath(index)?.at(-1)?.index : undefined;
 	const wrapTarget = (index: number) => {
-		const path = root && pathTo(root, index), n = path?.at(-1);
-		if (!n || isStructure(n) || !path!.slice(0, -1).some(p => localName(p.tag) === 'body')
-			|| path!.slice(0, -1).some(p => isWs(p, 'gridView'))) { return undefined; }
+		if (!componentPath(index)) { return undefined; }
 		const { selected, extra } = useEditorStore.getState();
 		const nodes = [...new Set([...extra, ...selected === undefined ? [] : [selected]])].map(i => nodeAt(root!, i));
 		return { indexes: nodes.map(n => n?.index ?? -1), version: doc!.version,

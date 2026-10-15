@@ -8,6 +8,7 @@ import type { ComponentDef } from '../../core/protocol';
 import { ComboInput } from './combo';
 import { PopupActions, PopupTitle, usePopupWindow } from './popupWindow';
 import { Segmented } from './segmented';
+import { edgeSpeed } from './edgeScroll';
 import { capturePointer } from './pointerCapture';
 
 const PART_LABELS: Record<GridCellPart, string> = { header: 'Header', gBody: 'Body', subTotal: 'SubTotal', footer: 'Footer' };
@@ -78,8 +79,7 @@ export function GridCellsEditor({ grid, defs, externalError, offsetIndex = 0, on
 		if (!d) { return; }
 		d.frame = undefined;
 		const { left, top, right, bottom } = bodyBox(d.wrap);
-		const speed = (before: number, after: number) => before > 0 ? -Math.min(16, Math.ceil(before / 5)) : after > 0 ? Math.min(16, Math.ceil(after / 5)) : 0;
-		const dx = speed(left + EDGE - d.x, d.x - (right - EDGE)), dy = speed(top + EDGE - d.y, d.y - (bottom - EDGE));
+		const dx = edgeSpeed(left + EDGE - d.x, d.x - (right - EDGE)), dy = edgeSpeed(top + EDGE - d.y, d.y - (bottom - EDGE));
 		const { scrollLeft, scrollTop } = d.wrap;
 		d.wrap.scrollBy(dx, dy);
 		if (d.wrap.scrollLeft === scrollLeft && d.wrap.scrollTop === scrollTop) { return; }

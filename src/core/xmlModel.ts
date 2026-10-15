@@ -82,8 +82,6 @@ export function findNode(node: XmlNode, test: (n: XmlNode) => boolean): XmlNode 
 	return undefined;
 }
 
-export const findTag = (node: XmlNode, tag: string) => findNode(node, n => n.tag === tag);
-
 export const localName = (tag: string) => tag.slice(tag.indexOf(':') + 1);
 export const prefixOf = (tag: string) => tag.slice(0, tag.indexOf(':') + 1);
 export const kid = (n: XmlNode | undefined, name: string) => n?.children.find(c => localName(c.tag) === name);

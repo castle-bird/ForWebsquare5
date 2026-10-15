@@ -9,7 +9,7 @@ import { capturePointer } from '../ui/pointerCapture';
 import { changedRanges, changesVersion } from './changes';
 
 /** 미니맵 폭(CSS px). 글자 하나 1px, 줄 하나 LINE px */
-export const MINIMAP_WIDTH = 72;
+const MINIMAP_WIDTH = 72;
 const LINE = 2;
 const PAD = 4;
 /** 입력이 이만큼 멈추면 다시 그림 */

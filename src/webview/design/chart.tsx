@@ -10,7 +10,7 @@ const SAMPLE = { labels: ['A', 'B', 'C', 'D', 'E'], series: [{ name: 'Series', v
 interface Series { name: string; values: number[] }
 
 /** ref="data:dataList1" → 첫 text 컬럼은 x축 이름, number 컬럼은 계열. 없으면 샘플 */
-export function chartData(collection: XmlNode | undefined, ref: string | undefined) {
+function chartData(collection: XmlNode | undefined, ref: string | undefined) {
 	const id = ref?.replace(/^data:/, '');
 	const list = id && collection?.children.find(c => c.attrs.id === id);
 	if (!list) { return SAMPLE; }

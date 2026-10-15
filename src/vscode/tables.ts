@@ -3,6 +3,7 @@
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
+import { errorMessage } from '../core/errors';
 import { emptyTables, readUsedTables } from '../core/tables';
 import type { ToExtension, ToWebview } from '../core/protocol';
 
@@ -13,7 +14,8 @@ export class UsedTablesStore {
 	/** 저장은 차례로(빠르게 연달아 고쳐도 옛 내용이 새 내용을 덮지 않게) */
 	private saving: Promise<unknown> = Promise.resolve();
 	/** 지금 보는 JSON 파일 감시 */
-	private watcher?: { file: string; watcher: vscode.FileSystemWatcher; timer?: NodeJS.Timeout };
+	private watcher?: { file: string; watcher?: vscode.FileSystemWatcher; timer?: NodeJS.Timeout };
+	private disposed = false;
 	/** 이 저장소가 마지막으로 읽거나 쓴 JSON 글자. 감시에 걸린 내용이 이것과 같으면 우리가 쓴 것이라 다시 읽지 않는다 */
 	private known?: string;
 
@@ -26,10 +28,10 @@ export class UsedTablesStore {
 			case 'loadUsedTables': void this.load(); return true;
 			case 'chooseTablesFolder': void this.choose(msg.pick); return true;
 			case 'saveUsedTables': {
-				this.saving = this.saving.then(() => this.save(msg.data)).catch(e => this.post({ type: 'usedTables', ...this.where(), error: `저장 실패: ${message(e)}` }));
+				this.saving = this.saving.then(() => this.save(msg.data)).catch(e => this.post({ type: 'usedTables', ...this.where(), error: `저장 실패: ${errorMessage(e)}` }));
 				return true;
 			}
-			case 'saveTablesImage': void this.saveImage(msg.dataUrl).catch(e => vscode.window.showErrorMessage(`이미지 저장 실패: ${message(e)}`)); return true;
+			case 'saveTablesImage': void this.saveImage(msg.dataUrl).catch(e => vscode.window.showErrorMessage(`이미지 저장 실패: ${errorMessage(e)}`)); return true;
 			default: return false;
 		}
 	}
@@ -43,7 +45,7 @@ export class UsedTablesStore {
 
 	private async load(): Promise<void> {
 		const { folder, file } = this.where();
-		this.watch(file);
+		await this.watch(file);
 		if (!folder || !file) { await this.post({ type: 'usedTables' }); return; }
 		try {
 			const text = await fs.readFile(file, 'utf8');
@@ -52,7 +54,7 @@ export class UsedTablesStore {
 			await this.post({ type: 'usedTables', folder, file, data });
 		} catch (e) {
 			const missing = (e as NodeJS.ErrnoException).code === 'ENOENT';
-			await this.post({ type: 'usedTables', folder, file, data: emptyTables(), ...!missing && { error: `읽기 실패(빈 목록으로 시작하며, 저장하면 덮어씁니다): ${message(e)}` } });
+			await this.post({ type: 'usedTables', folder, file, data: emptyTables(), ...!missing && { error: `읽기 실패(빈 목록으로 시작하며, 저장하면 덮어씁니다): ${errorMessage(e)}` } });
 		}
 	}
 
@@ -89,26 +91,29 @@ export class UsedTablesStore {
 	}
 
 	/** file을 감시한다(저장 폴더를 바꾸면 새 파일로). 아직 없는 파일도 생기면 알린다 */
-	private watch(file: string | undefined): void {
+	private async watch(file: string | undefined): Promise<void> {
 		if (this.watcher?.file === file) { return; }
 		this.unwatch();
 		this.known = undefined;
 		if (!file) { return; }
-		const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(path.dirname(file)), path.basename(file)), false, false, true);
-		const w: { file: string; watcher: vscode.FileSystemWatcher; timer?: NodeJS.Timeout } = { file, watcher };
+		const w: NonNullable<UsedTablesStore['watcher']> = { file };
+		this.watcher = w;
+		// 폴더가 없으면(기본 위치는 처음 저장할 때 생김) VS Code 감시가 바로 시작되지 않아 생긴 직후의 바깥 수정을 놓칠 수 있다 → 미리 만든다
+		await fs.mkdir(path.dirname(file), { recursive: true }).catch(() => undefined);
+		if (this.watcher !== w || this.disposed) { return; }
+		w.watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(path.dirname(file)), path.basename(file)), false, false, true);
 		// 나눠 쓰는 도구도 있어 잠깐 모았다가 읽는다. 저장과 겹치지 않게 저장 차례에 끼운다
 		const changed = () => {
 			clearTimeout(w.timer);
 			w.timer = setTimeout(() => { this.saving = this.saving.then(() => this.reload(file)).catch(() => undefined); }, RELOAD_DELAY);
 		};
-		watcher.onDidChange(changed);
-		watcher.onDidCreate(changed);
-		this.watcher = w;
+		w.watcher.onDidChange(changed);
+		w.watcher.onDidCreate(changed);
 	}
 
 	private unwatch(): void {
 		clearTimeout(this.watcher?.timer);
-		this.watcher?.watcher.dispose();
+		this.watcher?.watcher?.dispose();
 		this.watcher = undefined;
 	}
 
@@ -128,13 +133,14 @@ export class UsedTablesStore {
 		try {
 			data = readUsedTables(JSON.parse(text));
 		} catch (e) {
-			await this.post({ type: 'usedTables', ...where, error: `바뀐 JSON을 읽지 못해 그림에 반영하지 않았습니다(JSON을 고치면 다시 반영하고, 그림을 고치면 JSON을 덮어씁니다): ${message(e)}` });
+			await this.post({ type: 'usedTables', ...where, error: `바뀐 JSON을 읽지 못해 그림에 반영하지 않았습니다(JSON을 고치면 다시 반영하고, 그림을 고치면 JSON을 덮어씁니다): ${errorMessage(e)}` });
 			return;
 		}
 		await this.post({ type: 'usedTables', ...where, data, external: true });
 	}
 
 	dispose(): void {
+		this.disposed = true;
 		this.unwatch();
 	}
 }
@@ -143,5 +149,3 @@ export class UsedTablesStore {
 const RELOAD_DELAY = 150;
 
 const PNG_DATA = 'data:image/png;base64,';
-
-const message = (e: unknown) => e instanceof Error ? e.message : String(e);

@@ -20,7 +20,7 @@ const blameField = StateField.define<Blame | null>({
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]];
 const relative = new Intl.RelativeTimeFormat('ko', { numeric: 'always' });
 /** "3일 전" 같은 지난 시간(1분 안이면 방금) */
-export function ago(seconds: number, now = Date.now() / 1000) {
+function ago(seconds: number, now = Date.now() / 1000) {
 	const passed = Math.max(0, now - seconds);
 	const [unit, size] = UNITS.find(([, s]) => passed >= s) ?? [];
 	return unit ? relative.format(-Math.floor(passed / size!), unit) : '방금';

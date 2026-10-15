@@ -7,6 +7,8 @@ const EVENT_KIND = 'ev:event';
 /** 화면 구조(복사·붙여넣기 대상이 아님): 하나뿐이라 복사하면 중복된다 */
 const STRUCTURE = new Set(['html', 'head', 'body', 'model']);
 export const isStructure = (n: XmlNode) => STRUCTURE.has(localName(n.tag));
+/** 화면 안 컴포넌트: body 아래에 있고 화면 구조가 아님. path는 루트부터 그 노드까지(pathTo) */
+export const inScreenBody = (path: XmlNode[]) => !isStructure(path.at(-1)!) && path.slice(0, -1).some(n => localName(n.tag) === 'body');
 /** 데이터 필드 이름(dataMap key·dataList/그리드 column): 컴포넌트 id가 아니라 복사해도 바꾸지 않는다(바인딩이 깨진다) */
 // (붙여 넣을 조각만 따로 읽어 네임스페이스를 모르므로 태그 이름으로)
 const isField = (n: XmlNode) => /:(key|column)$/.test(n.tag);

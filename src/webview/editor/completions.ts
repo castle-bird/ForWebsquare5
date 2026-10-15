@@ -208,7 +208,7 @@ const docText = (text: string) => text
 const HIDDEN_TAGS = new Set(['memberOf', 'memberof', 'function', 'method', 'name']);
 
 /** JSDoc 본문 → 설명·Parameters·Returns·Example·나머지 태그(흐리게) */
-export function jsDocDom(doc: string): HTMLElement {
+function jsDocDom(doc: string): HTMLElement {
 	const dom = document.createElement('div');
 	const blocks = doc.split(/\n(?=\s*@\w)/);
 	const description = blocks[0].trimStart().startsWith('@') ? '' : blocks.shift()!.trim();
@@ -433,7 +433,7 @@ export type ScriptDefinition = { from: number; to: number } | { path: string; li
  * Script 정의로 이동: 같은 Script의 맨 위 정의(`scwin.f = function`, `function f`) 먼저, 없으면 공통 JS.
  * WebSquare API(`$p.*` 등)는 소스가 없어 undefined
  */
-export function scriptDefinition(state: EditorState, pos: number, modules: { path: string; text: string }[]): ScriptDefinition | undefined {
+function scriptDefinition(state: EditorState, pos: number, modules: { path: string; text: string }[]): ScriptDefinition | undefined {
 	const target = memberAt(state, pos) ?? memberAt(state, pos, -1);
 	if (!target) { return undefined; }
 	const here = definitionIn(localMembers(state).definitions, target.owner, target.label);

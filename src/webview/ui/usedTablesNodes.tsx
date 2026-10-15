@@ -15,7 +15,7 @@ export type MenuItem = { label: string; run(): void; kbd?: string; checked?: boo
 
 /** 박스 네 면의 연결점 */
 const SIDES = [['t', Position.Top], ['r', Position.Right], ['b', Position.Bottom], ['l', Position.Left]] as const;
-const newId = () => crypto.randomUUID();
+export const newId = () => crypto.randomUUID();
 /** 그림 박스에 보이는 컬럼: PK 먼저. PK만 보기면 PK만(PK가 없으면 다) */
 const shownColumns = (t: UsedTable) => [...t.columns.filter(c => c.pk), ...t.keysOnly && t.columns.some(c => c.pk) ? [] : t.columns.filter(c => !c.pk)];
 /** PK와 일반 컬럼이 다 있음(그때만 PK만 보기 ↔ 전체) */

@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { cleanPath, linkIdOf, linkProblem, linkTarget, type LinkTab } from '../core/links';
 import { errorMessage } from '../core/errors';
 import { serial } from '../project/paths';
-import type { CodeChange, RemoteCompletions, ToExtension, ToWebview } from '../core/protocol';
+import type { CodeChange, CodeTarget, ToExtension, ToWebview } from '../core/protocol';
 import { closeAutoTabs, isOpenByUser, registerAutoTabs } from './autoTabs';
 import { RESOLVE, remoteCompletions, remoteDefinition, remoteHover, remoteSignature } from './completion';
 import { applyCodeEdit, formatCode } from './documentEdit';
@@ -165,23 +165,19 @@ export class LinkedFiles {
 			case 'complete': {
 				// 읽기만 하므로 편집 대기열에 넣지 않는다(느린 언어 서버가 입력 반영을 막지 않게). 버전이 다르면 결과 없음.
 				// 목록은 풀지 않고 바로(빠름). 앞쪽 항목을 푼 결과(자동 import·설명, Java는 1초쯤)는 같은 때 물어 따로 보낸다
-				const id = linkIdOf(msg.target);
-				const ask = (resolve?: number) => id === undefined ? Promise.resolve(undefined) : this.complete(id, msg.version, msg.line, msg.ch, msg.trigger, resolve).catch(() => undefined);
+				const ask = (resolve?: number) => this.query(msg.target, msg.version, doc => remoteCompletions(doc, msg.line, msg.ch, msg.trigger, resolve));
 				const list = ask(0), full = ask();
 				void list.then(r => this.post({ type: 'completions', id: msg.id, ...r }));
 				void full.then(r => this.post({ type: 'completionDetails', id: msg.id, items: r?.items.slice(0, RESOLVE).map(({ label, info, edits }) => ({ label, info, edits })) ?? [] }));
 				return true;
 			}
 			case 'hover': {
-				const id = linkIdOf(msg.target);
-				const text = id === undefined ? Promise.resolve(undefined) : this.docAt(id, msg.version).then(doc => doc && remoteHover(doc, msg.line, msg.ch)).catch(() => undefined);
+				const text = this.query(msg.target, msg.version, doc => remoteHover(doc, msg.line, msg.ch));
 				void text.then(t => this.post({ type: 'hoverResult', id: msg.id, text: t }));
 				return true;
 			}
 			case 'signature': {
-				const id = linkIdOf(msg.target);
-				const signature = id === undefined ? Promise.resolve(undefined)
-					: this.docAt(id, msg.version).then(doc => doc && remoteSignature(doc, msg.line, msg.ch, msg.trigger)).catch(() => undefined);
+				const signature = this.query(msg.target, msg.version, doc => remoteSignature(doc, msg.line, msg.ch, msg.trigger));
 				void signature.then(s => this.post({ type: 'signatureResult', id: msg.id, signature: s }));
 				return true;
 			}
@@ -455,9 +451,10 @@ export class LinkedFiles {
 	}
 
 	/** VS Code 언어 확장의 자동완성 */
-	async complete(kind: string, version: number, line: number, ch: number, trigger?: string, resolve?: number): Promise<RemoteCompletions | undefined> {
-		const doc = await this.docAt(kind, version);
-		return doc && remoteCompletions(doc, line, ch, trigger, resolve);
+	/** 읽기만 하는 언어 서비스 조회(편집 대기열 밖): 연결 탭(target)이 웹뷰가 본 버전일 때만 ask. 다른 버전·실패면 undefined */
+	private query<T>(target: CodeTarget, version: number, ask: (doc: vscode.TextDocument) => Thenable<T> | T): Promise<T | undefined> {
+		const kind = linkIdOf(target);
+		return kind === undefined ? Promise.resolve(undefined) : this.docAt(kind, version).then(doc => doc && ask(doc)).catch(() => undefined);
 	}
 
 	/**

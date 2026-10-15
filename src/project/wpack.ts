@@ -2,6 +2,7 @@ import { execFile, fork, type ChildProcess } from 'node:child_process';
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { errorMessage } from '../core/errors';
 import { childTags, readWebConfig } from './config';
 import { exists, findDirs } from './paths';
 
@@ -167,7 +168,7 @@ export async function convert(exe: string, config: WpackConfig, relPath: string,
 				// 상주 변환이 안 되는 설치본(w-pack 내부 구조가 다름 등): 이번 것부터 CLI로
 				broken.add(exe);
 				servers.get(exe)?.child.kill();
-				output = `상주 변환 실패, CLI로 변환: ${e instanceof Error ? e.message : String(e)}\n`;
+				output = `상주 변환 실패, CLI로 변환: ${errorMessage(e)}\n`;
 			}
 		}
 		const js = path.join(dest, relPath.replace(/\.xml$/i, '.js'));

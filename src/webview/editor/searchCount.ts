@@ -8,7 +8,7 @@ import type { EditorState, Text } from '@codemirror/state';
 const LIMIT = 9999;
 
 /** 찾은 개수(LIMIT에서 멈춤)와 선택이 찾은 곳이면 그 순번(아니면 0). 찾을 말이 없으면 undefined */
-export function countMatches(state: EditorState, query: SearchQuery): { current: number; total: number } | undefined {
+function countMatches(state: EditorState, query: SearchQuery): { current: number; total: number } | undefined {
 	if (!query.valid) {
 		return undefined;
 	}

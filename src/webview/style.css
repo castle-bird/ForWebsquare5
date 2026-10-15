@@ -816,7 +816,7 @@ textarea.edit.style-value {
 .used-tables-flow .react-flow__edge.hot .react-flow__edge-path { stroke: var(--vscode-focusBorder); stroke-width: 2; }
 /* 연결점은 마우스를 올리거나 고르거나 잇는 중에만 */
 .used-tables-flow .react-flow__handle { width: 8px; height: 8px; opacity: 0; transition: opacity .12s; }
-.used-tables-flow .react-flow__node:hover .react-flow__handle, .used-tables-flow .react-flow__node.selected .react-flow__handle, .used-tables-flow .connecting .react-flow__handle { opacity: 1; }
+.used-tables-flow .react-flow__node:hover .react-flow__handle, .used-tables-flow .react-flow__node.selected .react-flow__handle { opacity: 1; }
 .used-tables-flow .react-flow__minimap { --xy-minimap-background-color: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
 	--xy-minimap-mask-background-color: color-mix(in srgb, var(--vscode-editor-background) 60%, transparent); --xy-minimap-node-background-color: var(--vscode-descriptionForeground);
 	border: 1px solid var(--vscode-panel-border); border-radius: 6px; overflow: hidden; }

@@ -25,7 +25,7 @@ import { FusionChart } from './chart';
 const CLASS: Record<string, string> = { gridView: 'grid', tabControl: 'tabcontrol', anchor: 'anchor2' };
 const CONTAINERS = new Set(['group', 'section', 'article', 'nav', 'aside']);
 const ATTR: Record<string, string> = { colspan: 'colSpan', rowspan: 'rowSpan', for: 'htmlFor', value: 'defaultValue', readonly: 'readOnly', maxlength: 'maxLength' };
-export const XHTML = 'http://www.w3.org/1999/xhtml';
+const XHTML = 'http://www.w3.org/1999/xhtml';
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
 
 type Renderer = (node: XmlNode, className: string, defs: ComponentDef[]) => ReactNode;
@@ -33,7 +33,7 @@ type Renderer = (node: XmlNode, className: string, defs: ComponentDef[]) => Reac
 /** 글자 속 <br>·<br/>·<br /> 를 실제 줄바꿈 요소로(엔진은 label을 HTML로 넣는다). React가 이스케이프하지 않게 innerHTML 대신 요소로 나눈다 */
 const BREAK = /<br\s*\/?>/i;
 const BREAKS = new RegExp(BREAK, 'gi');
-export function withBreaks(value: string | undefined): ReactNode {
+function withBreaks(value: string | undefined): ReactNode {
 	if (value === undefined || !BREAK.test(value)) { return value; }
 	return value.split(BREAKS).flatMap((part, i) => i ? [<br key={`b${i}`} />, part] : [part]);
 }
@@ -396,12 +396,30 @@ const tagname = (n: XmlNode) => n.attrs.tagname?.toLowerCase() || 'div';
 const visible = (col: XmlNode) => col.attrs.hidden !== 'true';
 const num = (v: string | undefined, fallback: number) => Number(v) || fallback;
 
+/**
+ * 같은 style 글자는 읽은 객체를 다시 쓴다: 문서가 바뀔 때마다 화면 전체를 다시 그리므로 매번 파싱하지 않고,
+ * 같은 객체라 React가 그 style 비교도 건너뛴다. 받는 쪽은 펼쳐 쓰거나 그대로 넘길 뿐 고치지 않는다
+ */
+const styles = new Map<string, CSSProperties | undefined>();
+const STYLE_CACHE = 5000;
+
 function style(text?: string): CSSProperties | undefined {
-	try {
-		return text ? styleToJs(text) as CSSProperties : undefined;
-	} catch {
+	if (!text) {
 		return undefined;
 	}
+	if (styles.has(text)) {
+		return styles.get(text);
+	}
+	let parsed: CSSProperties | undefined;
+	try {
+		parsed = styleToJs(text) as CSSProperties;
+	} catch {
+	}
+	if (styles.size >= STYLE_CACHE) {
+		styles.clear();
+	}
+	styles.set(text, parsed);
+	return parsed;
 }
 
 export interface TextTarget { index: number; attr?: string; value?: string }

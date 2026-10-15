@@ -12,6 +12,7 @@ import { distanceLines, type DistanceLine } from './distance';
 import { render, textTarget, outlineIcon, breaksToNewlines, newlinesToBreaks, type TextTarget } from './renderers';
 import { classLabel, REF_MIME, setDragGhost } from '../ui/tree';
 import { PALETTE_MIME, readPaletteDrag, type PaletteDrag } from '../ui/palette';
+import { edgeSpeed } from '../ui/edgeScroll';
 import { componentDropPosition, findPaletteDef, insertPositions } from '../../core/palette';
 import type { InsertPosition } from '../../core/paste';
 import canvasCss from './canvas.css';
@@ -145,9 +146,10 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 		moving.current = undefined;
 		setDragging([]);
 		setDrop(undefined);
+		// 바뀐 요소만 쓴다: 같은 값도 쓰면 문서가 바뀔 때마다 모든 요소의 속성을 다시 써서 큰 화면에서 느리다
 		page.current?.querySelectorAll<HTMLElement>('[data-wse]').forEach(el => {
-			const index = wseIndex(el);
-			el.draggable = !!onMove && index !== body.index && unitAt(index)?.index === index;
+			const index = wseIndex(el), draggable = !!onMove && index !== body.index && unitAt(index)?.index === index;
+			if (el.draggable !== draggable) { el.draggable = draggable; }
 		});
 	}, [body, tree, shadow, onMove]);
 	const moveDrop = (e: { target: EventTarget; clientX: number; clientY: number }) => {
@@ -377,9 +379,8 @@ function useCellRange(body: XmlNode, page: RefObject<HTMLDivElement | null>, onS
 		const d = drag.current, s = d?.scroller;
 		if (!d || !s) { return; }
 		const r = s.getBoundingClientRect();
-		const speed = (before: number, after: number) => before > 0 ? -Math.min(16, Math.ceil(before / 5)) : after > 0 ? Math.min(16, Math.ceil(after / 5)) : 0;
-		const dx = speed(r.left + EDGE - d.x, d.x - (r.left + s.clientLeft + s.clientWidth - EDGE));
-		const dy = speed(r.top + EDGE - d.y, d.y - (r.top + s.clientTop + s.clientHeight - EDGE));
+		const dx = edgeSpeed(r.left + EDGE - d.x, d.x - (r.left + s.clientLeft + s.clientWidth - EDGE));
+		const dy = edgeSpeed(r.top + EDGE - d.y, d.y - (r.top + s.clientTop + s.clientHeight - EDGE));
 		const { scrollLeft, scrollTop } = s;
 		s.scrollBy(dx, dy);
 		if (s.scrollLeft === scrollLeft && s.scrollTop === scrollTop) { d.frame = undefined; return; }
@@ -534,7 +535,10 @@ function watchLayout<T>(elements: Element[], page: HTMLElement, measure: () => T
 	};
 	const schedule = () => { pending ||= requestAnimationFrame(() => { pending = 0; update(); }); };
 	// 같은 page와 스크롤 조상에 요소 수만큼 observer/listener를 붙이지 않는다.
-	const ancestors = new Set([...elements, page].flatMap(el => getOverflowAncestors(el)));
+	// 스크롤 조상은 부모부터 찾으므로 부모가 같은 형제는 한 번만 찾는다(배지는 문서가 바뀔 때마다 요소 수백~수천 개를 다시 감시한다)
+	const byParent = new Map<Node | null, Element>();
+	[...elements, page].forEach(el => { if (!byParent.has(el.parentNode)) { byParent.set(el.parentNode, el); } });
+	const ancestors = new Set([...byParent.values()].flatMap(el => getOverflowAncestors(el)));
 	ancestors.forEach(el => { el.addEventListener('scroll', schedule, { passive: true }); el.addEventListener('resize', schedule); });
 	const observer = new ResizeObserver(schedule);
 	new Set([...elements, page]).forEach(el => observer.observe(el));

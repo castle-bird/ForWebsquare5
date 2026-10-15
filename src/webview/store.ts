@@ -20,7 +20,7 @@ import { paletteKey } from '../core/palette';
 import type { ComponentDef } from '../core/protocol';
 
 declare function acquireVsCodeApi(): { postMessage(msg: ToExtension): void };
-export const vscode = acquireVsCodeApi();
+const vscode = acquireVsCodeApi();
 export const post = (msg: ToExtension) => vscode.postMessage(msg);
 
 export type Doc = Extract<ToWebview, { type: 'document' }>;
@@ -366,9 +366,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	},
 
 	unmerge: (cells) => {
-		const { doc } = get(), root = doc?.root;
-		const merged = root && (cells?.map(i => nodeAt(root, i)).filter((n): n is XmlNode => !!n) ?? targets(get())).filter(n => isMerged(root, n));
-		if (!doc || !merged?.length) {
+		const { doc } = get();
+		const merged = mergedCells(get(), cells);
+		if (!doc || !merged.length) {
 			if (doc) { post({ type: 'warn', message: '병합된 셀을 골라 주세요.' }); }
 			return false;
 		}
@@ -465,11 +465,14 @@ export function gridOfCells(root: XmlNode, cells: XmlNode[]): XmlNode | undefine
 	return grids[0] && grids.every(g => g === grids[0]) ? grids[0] : undefined;
 }
 
-/** 병합을 풀 수 있는 셀이 있는지(메뉴 켜짐). cells가 없으면 고른 노드 */
-export function canUnmerge(cells?: number[]): boolean {
-	const state = useEditorStore.getState(), root = state.doc?.root;
-	return !!root && (cells?.map(i => nodeAt(root, i)).filter((n): n is XmlNode => !!n) ?? targets(state)).some(n => isMerged(root, n));
+/** cells(없으면 고른 노드) 중 병합된 셀 */
+function mergedCells(state: EditorState, cells?: number[]): XmlNode[] {
+	const root = state.doc?.root;
+	return root ? (cells?.map(i => nodeAt(root, i)).filter((n): n is XmlNode => !!n) ?? targets(state)).filter(n => isMerged(root, n)) : [];
 }
+
+/** 병합을 풀 수 있는 셀이 있는지(메뉴 켜짐). cells가 없으면 고른 노드 */
+export const canUnmerge = (cells?: number[]) => mergedCells(useEditorStore.getState(), cells).length > 0;
 
 /** 지금 고른 노드들(문서 순서, 안에 든 것은 제외) */
 export function targets({ doc, selected, extra }: EditorState): XmlNode[] {

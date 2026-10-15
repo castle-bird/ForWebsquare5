@@ -1,12 +1,12 @@
 import { deleteNode, eolOf, leadOf, type TextEdit } from './edit';
-import { isContainer, isStructure } from './paste';
+import { inScreenBody, isContainer } from './paste';
 import { localName, pathTo, uniqueId, usedIds, XFORMS_NS, type XmlNode } from './xmlModel';
 
 /** 원문을 다른 부모로 옮기지 않고 같은 부모 아래 컴포넌트만 감싼다. */
 export function wrapProblem(root: XmlNode, nodes: XmlNode[]): string | undefined {
 	if (!nodes.length) { return '감쌀 컴포넌트를 선택해 주세요.'; }
 	const paths = nodes.map(n => pathTo(root, n.index));
-	if (paths.some(path => !path || !path.slice(0, -1).some(n => localName(n.tag) === 'body') || isStructure(path.at(-1)!))) {
+	if (paths.some(path => !path || !inScreenBody(path))) {
 		return '화면 안의 컴포넌트만 그룹으로 감쌀 수 있습니다.';
 	}
 	const parent = paths[0]!.at(-2)!;

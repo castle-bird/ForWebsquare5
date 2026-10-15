@@ -10,7 +10,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
 /** 날짜 → yyyy-MM-dd(이 PC 시간대). sep로 구분자를 바꾼다 */
 export const formatDate = (d: Date, sep = '-') => [d.getFullYear(), pad(d.getMonth() + 1), pad(d.getDate())].join(sep);
 /** yyyy-MM-dd·yyyyMMdd·yyyy.MM.dd·yyyy/MM/dd → 날짜(없는 날이면 undefined) */
-export function parseDate(text: string): Date | undefined {
+function parseDate(text: string): Date | undefined {
 	const m = /^(\d{4})([./-]?)(\d{2})\2(\d{2})$/.exec(text.trim());
 	if (!m) { return undefined; }
 	const d = new Date(+m[1], +m[3] - 1, +m[4]);

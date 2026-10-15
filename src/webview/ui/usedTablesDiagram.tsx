@@ -6,9 +6,10 @@ import '@xyflow/react/dist/style.css';
 import { clsx } from 'clsx';
 import { ARROWS, GROUP_SIZE, MEMO_SIZE, NOTE_COLORS, SHAPE_SIZE, SHAPES, type Arrow, type NoteColor, type ShapeKind, type TableColor, type TableLink, type UsedShape, type UsedTables } from '../../core/tables';
 import { toPng } from 'html-to-image';
+import { errorMessage } from '../../core/errors';
 import { isModKey } from '../keys';
 import { post } from '../store';
-import { DiagramContext, Field, NODE_TYPES, editItem, editTable, fieldKey, insertColumn, mixedKeys, shapeIcon, useDiagram,
+import { DiagramContext, Field, NODE_TYPES, editItem, newId, editTable, fieldKey, insertColumn, mixedKeys, shapeIcon, useDiagram,
 	type FlowNode, type GroupNode, type MemoNode, type MenuItem, type ShapeNode, type TableNode } from './usedTablesNodes';
 import { Menu } from './menu';
 import type { Edit } from './usedTablesPane';
@@ -24,7 +25,6 @@ const PASTE_OFFSET = GRID * 2;
 
 const linkId = (l: TableLink) => `${l.from}>${l.to}`;
 const editLink = (edit: Edit, id: string, patch: Partial<TableLink>) => edit(d => ({ ...d, links: d.links.map(l => linkId(l) === id ? { ...l, ...patch } : l) }));
-const newId = () => crypto.randomUUID();
 const sizeOf = (n: FlowNode) => ({ w: n.measured?.width ?? n.width ?? 0, h: n.measured?.height ?? n.height ?? 0 });
 const centerOf = (n: FlowNode) => { const { w, h } = sizeOf(n); return { x: n.position.x + w / 2, y: n.position.y + h / 2 }; };
 /** 선이 붙을 점: 두 박스가 마주 보는 면(가로로 더 떨어져 있으면 좌우, 아니면 위아래). 박스를 옮기면 따라 바뀐다 */
@@ -265,7 +265,7 @@ function Diagram({ data, onChange, onUndo, onRedo, canUndo, canRedo }: { data: U
 				filter: el => !(el instanceof Element && el.matches('.react-flow__handle, .react-flow__resize-control, .placeholder, .codicon')) });
 			post({ type: 'saveTablesImage', dataUrl });
 		} catch (e) {
-			post({ type: 'warn', message: `이미지 만들기 실패: ${e instanceof Error ? e.message : String(e)}` });
+			post({ type: 'warn', message: `이미지 만들기 실패: ${errorMessage(e)}` });
 		}
 	};
 	const remove = (ids: Set<string>) => {
