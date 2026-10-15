@@ -15,7 +15,8 @@ const HISTORY = 200;
 
 /**
  * 확장과 주고받기: 처음에 읽고(저장 폴더를 안 골랐으면 status.folder 없음), change는 바로 그리고 잠깐 모았다가 저장. 닫힐 때 남은 것 저장.
- * 그림 편집은 이 웹뷰 안에서만 되돌린다(VS Code Undo는 화면 XML 것). 확장이 새로 읽어 보내면 기록을 비운다
+ * 그림 편집은 이 웹뷰 안에서만 되돌린다(VS Code Undo는 화면 XML 것). 확장이 새로 읽어 보내면 기록을 비운다.
+ * 바깥에서 JSON을 고쳐 다시 읽은 것(external)은 그대로 그리고, 반영 전 그림으로 되돌릴 수 있다(되돌리면 그 그림을 저장)
  */
 function useUsedTables() {
 	const [status, setStatus] = useState<Status>();
@@ -56,9 +57,20 @@ function useUsedTables() {
 	useEffect(() => {
 		const on = (e: MessageEvent<ToWebview>) => {
 			if (e.data.type !== 'usedTables') { return; }
-			const { type: _, ...next } = e.data;
+			const { type: _, external, ...next } = e.data;
 			setStatus(next);
-			if (next.data) { current.current = next.data; past.current = []; future.current = []; setData(next.data); }
+			if (!next.data) { return; }
+			if (external) {
+				// 바깥에서 고친 JSON이 이긴다: 아직 안 보낸 그림 수정이 그걸 덮지 않게 버리고, 반영 전 그림은 되돌리기로 돌아갈 수 있게 남긴다
+				clearTimeout(timer.current);
+				pending.current = undefined;
+				if (current.current) { past.current = [...past.current.slice(1 - HISTORY), current.current]; }
+			} else {
+				past.current = [];
+			}
+			future.current = [];
+			current.current = next.data;
+			setData(next.data);
 		};
 		window.addEventListener('message', on);
 		post({ type: 'loadUsedTables' });

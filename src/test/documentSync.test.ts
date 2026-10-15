@@ -37,7 +37,7 @@ suite('디자이너 편집 동기화', () => {
 			'./project/apiDocs': { loadApiDocs: async () => ({ api: {} }) },
 			'./vscode/setup': { resolvePath: async () => undefined, offerSetup() {} },
 			'./vscode/links': { LinkedFiles: class { handle() { return false; } dispose() {} } },
-			'./vscode/tables': { UsedTablesStore: class { handle() { return false; } } },
+			'./vscode/tables': { UsedTablesStore: class { handle() { return false; } dispose() {} } },
 			'./vscode/gitBase': { onGitChange: event, blameFeed: () => ({ schedule() {}, dispose() {} }) },
 			'./vscode/viewSettings': { onBlameToggled: event },
 		'./vscode/screenOpen': { registerScreenOpen() {}, rememberScreenEditor() {} },

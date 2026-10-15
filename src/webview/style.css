@@ -251,6 +251,7 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .code-editor .cm-editor .cm-panel.cm-search label { font-size: inherit; }
 .code-editor .cm-search .cm-textfield { box-sizing: border-box; width: 240px; max-width: 40%; height: 28px; padding: 4px 8px; font: inherit; }
 .code-editor:not(.custom-theme) .cm-search .cm-textfield { color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); }
+.code-editor .cm-search .cm-search-count { display: inline-block; min-width: 4.5em; margin: 0 6px; opacity: .85; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .code-editor .cm-search .cm-button { min-height: 28px; padding: 4px 10px; font: inherit; cursor: pointer; }
 .code-editor:not(.custom-theme) .cm-search .cm-button { color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); border: 1px solid var(--vscode-button-border, var(--vscode-panel-border)); }
 .code-editor.custom-theme .cm-editor .cm-panels { color: inherit; background-color: inherit; }
@@ -926,6 +927,11 @@ textarea.edit.style-value {
 	color: var(--vscode-editor-foreground); background: color-mix(in srgb, var(--note) 25%, var(--vscode-editor-background)); }
 .used-group .group-title .codicon { font-size: 13px; color: var(--note); }
 .used-tables-flow .react-flow__node-group-frame .react-flow__resize-control { pointer-events: all; }
+/* 변(상하좌우 선)으로도 크기 조절: 선은 1px이고 내용(메모·도형) 밑에 깔려 잡히지 않았다 → 내용 위로, 잡는 폭은 안팎 4px.
+   변 가운데 연결점(선 잇기)과 모서리 손잡이는 그보다 위 */
+.used-tables-flow .react-flow__resize-control.line { z-index: 1; }
+.used-tables-flow .react-flow__resize-control.line::before { content: ''; position: absolute; inset: -4px; }
+.used-tables-flow .react-flow__resize-control.handle, .used-tables-flow .react-flow__node .react-flow__handle { z-index: 2; }
 
 /* 도구 줄 도형 아이콘(도형 SVG 그대로) */
 .flow-tool .shape-icon { width: 15px; height: 15px; overflow: visible; }

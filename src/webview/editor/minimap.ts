@@ -25,8 +25,8 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 	readonly dom: HTMLElement;
 	readonly canvas: HTMLCanvasElement;
 	readonly slider: HTMLElement;
-	/** 그린 범위(첫 줄 번호)와 줄 수 */
-	start = 1;
+	/** 미니맵 맨 위에 그린 자리(0부터 센 줄, 소수) */
+	offset = 0;
 	frame = 0;
 	idle = 0;
 	parseTo = 0;
@@ -94,18 +94,22 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 
 	/** 미니맵 배치: 문서가 다 들어가면 1번 줄부터, 아니면 슬라이더가 스크롤 비율만큼 내려가고 그 밑에 보이는 줄이 오게 */
 	layout() {
-		const v = this.view, sc = v.scrollDOM, height = this.dom.clientHeight, total = v.state.doc.lines;
+		// 실제 높이를 내림: clientHeight는 반올림이라 화면 배율 125% 등(소수 px)에서 실제보다 커서 맨 끝 슬라이더가 삐져나간다(바깥 스크롤바)
+		const v = this.view, sc = v.scrollDOM, height = Math.floor(this.dom.getBoundingClientRect().height), total = v.state.doc.lines;
 		const rows = Math.floor(height / LINE);
-		const top = v.lineBlockAtHeight(sc.scrollTop), bottom = v.lineBlockAtHeight(sc.scrollTop + sc.clientHeight);
-		const first = v.state.doc.lineAt(top.from).number, last = v.state.doc.lineAt(bottom.from).number;
-		const sliderRows = Math.max(1, last - first + 1);
+		// 화면 맨 위 줄(0부터, 그 줄 안에서 내려간 만큼 소수). 정수 줄로만 맞추면 스크롤 중에 그림이 한 줄씩 앞뒤로 튀어 움찔거린다
+		const block = v.lineBlockAtHeight(sc.scrollTop);
+		const first = v.state.doc.lineAt(block.from).number - 1 + Math.min(1, Math.max(0, (sc.scrollTop - block.top) / Math.max(1, block.height)));
+		// 슬라이더 높이는 화면에 들어가는 줄 수로 고정(걸친 줄 수로 재면 40↔41로 바뀌며 높이가 흔들린다)
+		const sliderRows = Math.max(1, Math.min(rows, Math.round(sc.clientHeight / v.defaultLineHeight))), sliderHeight = sliderRows * LINE;
+		const place = (offset: number, sliderTop: number) => ({ offset, start: Math.floor(offset) + 1, rows, sliderTop: Math.min(Math.max(0, sliderTop), height - sliderHeight), sliderHeight });
 		if (total <= rows) {
-			return { start: 1, rows, sliderTop: (first - 1) * LINE, sliderHeight: sliderRows * LINE, fits: true };
+			return { ...place(0, first * LINE), fits: true };
 		}
+		// 슬라이더는 스크롤 비율만큼 내려가고, 그림은 슬라이더 안에 보이는 줄이 오게 옮긴다(맨 끝에서 마지막 줄이 미니맵 바닥). 슬라이더는 미니맵 밖으로 안 나감(바깥 스크롤바)
 		const range = Math.max(1, sc.scrollHeight - sc.clientHeight), ratio = Math.min(1, sc.scrollTop / range);
-		const sliderHeight = sliderRows * LINE, sliderTop = Math.round(ratio * (height - sliderHeight));
-		const start = Math.max(1, Math.min(total - rows + 1, first - Math.round(sliderTop / LINE)));
-		return { start, rows, sliderTop: (first - start) * LINE, sliderHeight, fits: false };
+		const offset = Math.min(Math.max(0, first - ratio * (height - sliderHeight) / LINE), total - height / LINE);
+		return { ...place(offset, (first - offset) * LINE), fits: false };
 	}
 
 	draw() {
@@ -121,8 +125,8 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 			this.scrollbar = sc.offsetWidth - sc.clientWidth;
 			Object.assign(this.dom.style, { right: `${this.scrollbar}px`, top: `${sc.offsetTop}px`, bottom: `${v.dom.clientHeight - sc.offsetTop - sc.offsetHeight}px` });
 		}
-		const { start, rows, sliderTop, sliderHeight } = this.layout();
-		this.start = start;
+		const { offset, start, rows, sliderTop, sliderHeight } = this.layout();
+		this.offset = offset;
 		Object.assign(this.slider.style, { top: `${sliderTop}px`, height: `${sliderHeight}px` });
 		const ratio = window.devicePixelRatio || 1, width = this.dom.clientWidth, height = this.dom.clientHeight;
 		if (this.canvas.width !== Math.round(width * ratio) || this.canvas.height !== Math.round(height * ratio)) {
@@ -132,13 +136,14 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 		}
 		const total = v.state.doc.lines;
 		const typing = performance.now() < this.typingUntil && this.tileRows > 0;
-		if ((this.stale && !typing) || start < this.tileStart || start + rows > this.tileStart + this.tileRows) {
+		if ((this.stale && !typing) || start < this.tileStart || start + rows + 1 > this.tileStart + this.tileRows) {
 			this.paintTile(Math.max(1, start - rows), Math.min(total, start + rows * 2), width, ratio);
 		}
 		const g = this.canvas.getContext('2d')!;
 		g.setTransform(1, 0, 0, 1, 0, 0);
 		g.clearRect(0, 0, this.canvas.width, this.canvas.height);
-		const y = (start - this.tileStart) * LINE * ratio, h = Math.min(rows * LINE * ratio, this.tile.height - y);
+		// 소수 줄만큼 옮겨 붙이되 장치 픽셀에 맞춘다(소수 픽셀이면 막대가 흐려진다)
+		const y = Math.round((offset + 1 - this.tileStart) * LINE * ratio), h = Math.min(this.canvas.height, this.tile.height - y);
 		if (h > 0) { g.drawImage(this.tile, 0, y, this.tile.width, h, 0, 0, this.tile.width, h); }
 		// 오른쪽 끝: 파일 전체에서의 오류·경고 위치(미니맵이 다 안 들어가도 보이게)
 		g.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -278,7 +283,7 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 		const v = this.view, sc = v.scrollDOM, rect = this.dom.getBoundingClientRect(), y = e.clientY - rect.top;
 		const { sliderTop, sliderHeight, fits } = this.layout();
 		if (y < sliderTop || y > sliderTop + sliderHeight) {
-			const line = Math.min(v.state.doc.lines, Math.max(1, this.start + Math.floor(y / LINE)));
+			const line = Math.min(v.state.doc.lines, Math.max(1, Math.floor(this.offset + y / LINE) + 1));
 			const block = v.lineBlockAt(v.state.doc.line(line).from);
 			sc.scrollTop = block.top - sc.clientHeight / 2;
 		}

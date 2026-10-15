@@ -128,14 +128,14 @@ suite('Submission creation', () => {
 		const root = parseXml(text)!;
 		const model = root.children[0].children[0];
 		assert.strictEqual(nextSubmissionId(root), 'submission2');
-		const attrs = { id: 'submission2', ref: 'data:json,[\n  {"id":"a&b"},\n  {"id":"c"}\n]', target: 'data:json,response', action: '/api/search?q=1&x=2', method: 'post', mode: 'asynchronous', mediatype: 'application/json' };
+		const attrs = { id: 'submission2', ref: 'data:json,[\n  {"id":"a&b"},\n  {"id":"c"}\n]', target: 'data:json,response', action: '/api/search?q=1&x=2', method: 'post', mode: 'asynchronous', mediatype: 'application/json', processMsg: '조회중입니다...' };
 		// 생성 시 빈 이벤트와 기본 옵션을 명시한다
 		const fields: SubmissionFields = { ...attrs, 'ev:submit': '', 'ev:submitdone': '', 'ev:submiterror': '' };
 		const edit = addSubmissionNode(text, root, model, fields);
 		const updated = text.slice(0, edit.start) + edit.replacement + text.slice(edit.end);
 		const created = parseXml(updated)!.children[0].children[0].children[1];
 		assert.strictEqual(created.tag, 'xf:submission');
-		assert.deepStrictEqual(created.attrs, { ...fields, ref: attrs.ref.replaceAll('\n', '\r\n'), encoding: 'UTF-8', instance: '', replace: '', errorHandler: '', customHandler: '', processMsg: '', abortTrigger: '', 'xmlns:ev': 'http://www.w3.org/2001/xml-events' });
+		assert.deepStrictEqual(created.attrs, { ...fields, ref: attrs.ref.replaceAll('\n', '\r\n'), encoding: 'UTF-8', instance: '', replace: '', errorHandler: '', customHandler: '', abortTrigger: '', 'xmlns:ev': 'http://www.w3.org/2001/xml-events' });
 		assert.deepStrictEqual(Object.keys(created.attrs).filter(k => k !== 'xmlns:ev'), ['id', 'ref', 'target', 'action', 'method', 'mediatype', 'encoding', 'instance', 'replace',
 			'errorHandler', 'customHandler', 'mode', 'processMsg', 'ev:submit', 'ev:submitdone', 'ev:submiterror', 'abortTrigger'], 'WebSquare5 기본 생성 순서');
 		// ref·target(JSON)은 Eclipse처럼 '로 감싸고 줄바꿈을 그대로(들여쓰기도 안 붙임), 다른 속성은 이스케이프 그대로
@@ -156,6 +156,13 @@ suite('Submission creation', () => {
 		assert.deepStrictEqual(updated.attrs, { id: 'sbm_c', method: 'PATCH_CUSTOM', encoding: 'EUC-KR', custom: 'keep', 'ev:submitdone': 'scwin.done', action: '/api?a=1&b=2' });
 		assert.strictEqual(updated.children[0].tag, 'xf:x');
 		assert.strictEqual(editSubmissionNode(text, root, node, submissionFields(node)), undefined, '바뀐 게 없으면 편집 없음');
+		// 처리 중 메시지(processMsg): 넣으면 쓰고, 비우면 지운다
+		const withMsg = applyEdits(text, [editSubmissionNode(text, root, node, { ...submissionFields(node), processMsg: '조회중입니다...' })!]);
+		assert.strictEqual(parseXml(withMsg)!.children[0].children[0].children[0].attrs.processMsg, '조회중입니다...');
+		const msgRoot = parseXml(withMsg)!, msgNode = msgRoot.children[0].children[0].children[0];
+		assert.strictEqual(submissionFields(msgNode).processMsg, '조회중입니다...', '팝업에 기존 값');
+		const cleared = applyEdits(withMsg, [editSubmissionNode(withMsg, msgRoot, msgNode, { ...submissionFields(msgNode), processMsg: '' })!]);
+		assert.strictEqual(parseXml(cleared)!.children[0].children[0].children[0].attrs.processMsg, undefined);
 		assert.throws(() => editSubmissionNode(text, root, node, { ...fields, id: 'sbm_b' }), /이미 사용 중/);
 	});
 

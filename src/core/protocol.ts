@@ -46,7 +46,8 @@ export type ToWebview =
 	| { type: 'files'; kind: string; files: string[] } // 연결할 수 있는 파일(작업 폴더 기준 경로)
 	| { type: 'linkProblem'; kind: string; message: string } // 연결하지 못한 이유(알림을 꺼 둬도 경로 입력 화면에 보인다)
 	| { type: 'toast'; message: string } // 편집기 오른쪽 아래 잠깐 뜨는 알림(VS Code 알림을 꺼 둬도 보임)
-	| { type: 'usedTables'; folder?: string; file?: string; data?: UsedTables; error?: string }; // ERD 사용 테이블. folder 없음 = 저장 폴더를 아직 안 고름
+	// ERD 사용 테이블. folder 없음 = 저장 폴더를 아직 안 고름. external: 바깥(AI·사람·공유)에서 JSON을 고쳐 다시 읽음(되돌리기 기록은 이어 감)
+	| { type: 'usedTables'; folder?: string; file?: string; data?: UsedTables; error?: string; external?: boolean };
 
 /** 로드한 CSS 규칙의 원본 위치. line/ch는 0부터 시작한다. */
 export interface CssRuleSource {

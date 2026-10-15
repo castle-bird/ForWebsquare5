@@ -242,6 +242,31 @@ export default async function ({ page }) {
 			await page.keyboard.down('Control'); await page.keyboard.press('y'); await page.keyboard.up('Control');
 			assert.equal((await saved()).groups[0].x, after.groups[0].x, 'Ctrl+Y로 다시');
 			assert.equal(await page.evaluate(() => window.leakedUndo), leaked, 'Ctrl+Z·Y가 VS Code로 안 넘어감');
+			// JSON을 바깥(AI·공유)에서 고치면 그림에 반영: 다시 저장하지 않고, 아직 안 보낸 그림 수정이 그걸 덮지 않고, Ctrl+Z로 반영 전 그림으로
+			{
+				const extTable = { id: 'ext', name: 'EXT_TBL', desc: '', crud: ['R'], columns: [], keysOnly: false, color: '', x: after.tables[0].x, y: after.tables[0].y - 400 };
+				const saves = () => page.evaluate(() => window.sent.filter(m => m.type === 'saveUsedTables').length);
+				const hasExt = () => page.evaluate(() => [...document.querySelectorAll('.react-flow__node-table .name')].some(n => n.textContent === 'EXT_TBL'));
+				await page.keyboard.down('Control'); await page.keyboard.press('z'); await page.keyboard.up('Control');
+				const count = await saves();
+				await page.evaluate(d => window.send({ type: 'usedTables', folder: 'C:/x', file: 'C:/x/ui/a.json', data: d, external: true }), { ...after, tables: [...after.tables, extTable] });
+				await page.waitForFunction(() => [...document.querySelectorAll('.react-flow__node-table .name')].some(n => n.textContent === 'EXT_TBL'), { timeout: 3000 }).catch(() => assert.fail('바깥에서 고친 테이블이 그림에'));
+				await new Promise(r => setTimeout(r, 600));
+				assert.equal(await saves(), count, '바깥 수정은 다시 저장하지 않고, 보내기 전 그림 수정(Ctrl+Z)도 그걸 덮지 않음');
+				// 깨진 JSON: 그림은 그대로, 알림만
+				await page.evaluate(() => window.send({ type: 'usedTables', folder: 'C:/x', file: 'C:/x/ui/a.json', error: '바뀐 JSON을 읽지 못해' }));
+				await page.waitForSelector('.used-tables .error');
+				assert.equal(await hasExt(), true, '깨진 JSON이면 그림 그대로');
+				{ const p = await emptySpot(); await page.mouse.click(p.x, p.y); }
+				await page.keyboard.down('Control'); await page.keyboard.press('z'); await page.keyboard.up('Control');
+				const back = await saved();
+				assert.equal(back.tables.some(t => t.name === 'EXT_TBL'), false, 'Ctrl+Z로 반영 전 그림');
+				assert.equal(back.groups[0].x, g.x, '반영 전 그림은 그때 고친 것(Ctrl+Z) 그대로');
+				assert.equal(await hasExt(), false);
+				// 이어지는 확인은 바깥 수정 전 그림(after)에서
+				await page.evaluate(d => window.send({ type: 'usedTables', folder: 'C:/x', file: 'C:/x/ui/a.json', data: d, external: true }), after);
+				await page.waitForFunction(() => !document.querySelector('.used-tables .error'), { timeout: 3000 }).catch(() => assert.fail('다시 읽으면 알림 사라짐'));
+			}
 			// 복사·붙여넣기: 같은 테이블을 하나 더(새 id, 이름·컬럼 그대로)
 			const auth = await centerOf('.name', 'TB_AUTH');
 			await page.mouse.click(auth.x, auth.y);
@@ -412,6 +437,35 @@ export default async function ({ page }) {
 				// 여러 개 고른 채 하나를 우클릭하면 고른 것 모두에
 				await pickColor('청록', head);
 				await until(() => { const d = window.sent.findLast(m => m.type === 'saveUsedTables')?.data; return d && [...d.tables, ...d.memos, ...d.groups].every(x => x.color === 'cyan'); }, '고른 것 모두 청록');
+			}
+			// 메모·도형도 그룹처럼 변(상하좌우 선)을 끌어 한 방향만 크기 조절(모서리를 안 잡아도). 변 가운데 연결점은 그대로 선 잇기
+			{
+				await page.evaluate(() => window.send({ type: 'usedTables', folder: 'C:/x', file: 'C:/x/ui/a.json', data: { tables: [], links: [], groups: [],
+					memos: [{ id: 'rm', text: '메모', color: 'yellow', x: 0, y: 0, w: 220, h: 140 }],
+					shapes: [{ id: 'rs', kind: 'rect', text: '', color: 'blue', x: 320, y: 0, w: 128, h: 128 }] } }));
+				const boxOf = id => page.$eval(`.react-flow__node[data-id="${id}"]`, n => { const r = n.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
+				await page.waitForSelector('.react-flow__node[data-id="rs"]');
+				await page.click('.react-flow__controls-fitview');
+				await new Promise(r => setTimeout(r, 400));
+				const drag = async (from, dx, dy) => {
+					await page.mouse.move(from.x, from.y); await page.mouse.down();
+					await page.mouse.move(from.x + dx / 2, from.y + dy / 2, { steps: 4 }); await page.mouse.move(from.x + dx, from.y + dy, { steps: 4 }); await page.mouse.up();
+				};
+				for (const [id, kind, edge] of [['rm', 'memos', 'right'], ['rs', 'shapes', 'bottom'], ['rm', 'memos', 'left'], ['rs', 'shapes', 'top']]) {
+					const b = await boxOf(id);
+					await page.mouse.click(b.x + b.w / 2, b.y + b.h / 2);
+					await page.waitForSelector(`.react-flow__node[data-id="${id}"].selected`);
+					const before = (await saved())?.[kind]?.find(x => x.id === id) ?? { w: kind === 'memos' ? 220 : 128, h: kind === 'memos' ? 140 : 128 };
+					// 변 위 한 점(가운데 연결점을 피해 1/4 자리), 선 안쪽으로 2px
+					const at = { right: { x: b.x + b.w - 2, y: b.y + b.h / 4 }, left: { x: b.x + 2, y: b.y + b.h / 4 }, bottom: { x: b.x + b.w / 4, y: b.y + b.h - 2 }, top: { x: b.x + b.w / 4, y: b.y + 2 } }[edge];
+					const grow = { right: [60, 0], left: [-60, 0], bottom: [0, 60], top: [0, -60] }[edge];
+					await drag(at, ...grow);
+					await page.waitForFunction(i => { const x = window.sent.findLast(m => m.type === 'saveUsedTables')?.data[i.kind]?.find(n => n.id === i.id); return x && (i.horizontal ? x.w > i.w + 20 : x.h > i.h + 20); },
+						{ timeout: 3000 }, { kind, id, w: before.w, h: before.h, horizontal: edge === 'left' || edge === 'right' })
+						.catch(async () => assert.fail(`${id} ${edge} 변 끌기로 크기: ${JSON.stringify((await saved())?.[kind])} 누른 곳: ${await page.evaluate(p => document.elementsFromPoint(p.x, p.y).slice(0, 3).map(e => e.className?.baseVal ?? e.className).join(' | '), at)}`));
+					const after = (await saved())[kind].find(x => x.id === id);
+					assert.equal(edge === 'left' || edge === 'right' ? after.h : after.w, edge === 'left' || edge === 'right' ? before.h : before.w, `${id} ${edge}: 다른 방향 크기는 그대로`);
+				}
 			}
 			// ERD에 들어가면 우측 패널이 접히고, 나오면 다시 펼침
 			assert.ok(await page.$eval('.right-panel', p => p.getBoundingClientRect().width < 2), 'ERD에서 우측 패널 접힘');

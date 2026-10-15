@@ -470,6 +470,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			xmlBlame.dispose();
 			subs.forEach(s => s.dispose());
 			void links.dispose();
+			usedTables.dispose();
 		});
 	}
 }

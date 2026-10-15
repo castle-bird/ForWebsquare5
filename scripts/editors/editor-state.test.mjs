@@ -163,11 +163,102 @@ export default async function ({ page, clickTab }) {
 		await page.evaluate(() => window.editor().focus());
 		await page.keyboard.down('Control'); await page.keyboard.press('f'); await page.keyboard.up('Control');
 		await page.waitForSelector('.tab-body:not([hidden]) .cm-search');
+		// 열자마자 찾을 말 입력칸에 포커스(복사해 온 글자를 바로 붙여 넣어 찾게)
+		await page.waitForFunction(() => document.activeElement?.matches('.tab-body:not([hidden]) .cm-search [main-field]'), { timeout: 2000 })
+			.catch(async () => assert.fail(`검색창을 열면 입력칸에 포커스: ${await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 120))}`));
+		// 다른 창에서 복사해 돌아오면(VS Code가 포커스를 body에 둠) 다시 입력칸으로: 바로 붙여 넣기
+		await page.evaluate(() => { window.dispatchEvent(new Event('blur')); document.activeElement.blur(); window.dispatchEvent(new Event('focus')); });
+		assert.equal(await page.evaluate(() => document.activeElement?.matches('.tab-body:not([hidden]) .cm-search [main-field]')), true, '돌아오면 검색창 입력칸에 포커스');
+		await page.keyboard.type('abc');
+		assert.equal(await page.$eval('.tab-body:not([hidden]) .cm-search [main-field]', e => e.value.endsWith('abc')), true, '돌아온 뒤 입력은 검색창으로');
+		// 입력칸 옆에 몇 번째/찾은 개수(VS Code처럼). Enter로 다음 → 1/N, 2/N, 없으면 "결과 없음"
+		{
+			const countLabel = () => page.$eval('.tab-body:not([hidden]) .cm-search .cm-search-count', e => e.textContent);
+			const word = 'v29'; // v29, v290~v299
+			const total = await page.evaluate(w => window.editor().state.doc.toString().toLowerCase().split(w.toLowerCase()).length - 1, word);
+			await page.evaluate(() => { const v = window.editor(); v.dispatch({ selection: { anchor: 0 } }); });
+			await page.$eval('.tab-body:not([hidden]) .cm-search [main-field]', e => { e.value = ''; });
+			await page.focus('.tab-body:not([hidden]) .cm-search [main-field]');
+			await page.keyboard.type(word);
+			await page.waitForFunction(t => document.querySelector('.tab-body:not([hidden]) .cm-search .cm-search-count')?.textContent.endsWith(`/${t}`), { timeout: 2000 }, total)
+				.catch(async () => assert.fail(`찾은 개수 ${total}: ${await countLabel()}`));
+			await page.keyboard.press('Enter');
+			await page.waitForFunction(t => document.querySelector('.tab-body:not([hidden]) .cm-search .cm-search-count')?.textContent === `1/${t}`, { timeout: 2000 }, total)
+				.catch(async () => assert.fail(`Enter로 첫 번째: ${await countLabel()}`));
+			if (total > 1) {
+				await page.keyboard.press('Enter');
+				await page.waitForFunction(t => document.querySelector('.tab-body:not([hidden]) .cm-search .cm-search-count')?.textContent === `2/${t}`, { timeout: 2000 }, total)
+					.catch(async () => assert.fail(`다시 Enter로 두 번째: ${await countLabel()}`));
+			}
+			// 편집기를 클릭해 커서가 찾은 곳을 벗어나도 순번 그대로(VS Code처럼 "?" 아님). 다시 입력칸에서 Enter면 커서 다음 일치로
+			{
+				const before = await countLabel();
+				await page.evaluate(() => { const v = window.editor(); v.dispatch({ selection: { anchor: v.state.doc.line(5).from } }); });
+				await new Promise(r => setTimeout(r, 100));
+				assert.equal(await countLabel(), before, '편집기 클릭 뒤에도 순번 그대로');
+				await page.focus('.tab-body:not([hidden]) .cm-search [main-field]');
+				await page.keyboard.press('Enter');
+				await page.waitForFunction(t => document.querySelector('.tab-body:not([hidden]) .cm-search .cm-search-count')?.textContent === `1/${t}`, { timeout: 2000 }, total)
+					.catch(async () => assert.fail(`5번 줄에서 Enter면 그 다음 일치(첫 번째, v29): ${await countLabel()}`));
+			}
+			await page.keyboard.type('zzqqxx');
+			await page.waitForFunction(() => document.querySelector('.tab-body:not([hidden]) .cm-search .cm-search-count')?.textContent === '결과 없음', { timeout: 2000 })
+				.catch(async () => assert.fail(`없으면 결과 없음: ${await countLabel()}`));
+		}
 		await page.waitForFunction(() => { const p = document.querySelector('.tab-body:not([hidden]) .cm-panels-top')?.getBoundingClientRect(), m = document.querySelector('.tab-body:not([hidden]) .cm-minimap').getBoundingClientRect(); return p && m.top >= p.bottom - 1; }, { timeout: 2000 })
 			.catch(() => assert.fail('검색창을 열면 미니맵이 그 아래로'));
 		await page.keyboard.press('Escape');
 		// 문법 색을 재도 문서는 그대로(편집 영역에 손대지 않음)
 		assert.equal(await page.evaluate(() => window.editor().state.doc.lines), 300, '미니맵이 문서를 안 바꿈');
 		console.log('Script: 코드 미니맵(막대형) 켜고 끄기·그리기·클릭 이동 passed');
+	}
+	// 문서가 미니맵보다 길 때(미니맵도 스크롤) 맨 끝까지 내려도 슬라이더가 미니맵 안.
+	// 미니맵 높이가 홀수 px이면 반올림으로 슬라이더가 1px 삐져나가 바깥 스크롤바가 하나 더 생겼다
+	{
+		await page.evaluate(() => { const v = window.editor(); v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: Array.from({ length: 1500 }, (_, i) => `var v${i} = ${i};`).join('\n') } }); });
+		assert.equal(await page.evaluate(() => window.editor().state.doc.lines), 1500);
+		// 화면 배율 125%: 높이가 소수 px가 되고 clientHeight는 반올림이라 실제보다 클 수 있다
+		const viewport = page.viewport();
+		for (const [scale, less] of [[1, 0], [1, 1], [1.25, 0], [1.25, 1], [1.25, 0.4], [1.25, 1.4]]) {
+			if (page.viewport().deviceScaleFactor !== scale) {
+				await page.setViewport({ ...viewport, deviceScaleFactor: scale });
+			}
+			await page.evaluate(less => { const h = document.querySelector('.tab-body:not([hidden]) .code-host'), height = Math.floor(h.getBoundingClientRect().height) - less; h.style.flex = 'none'; h.style.height = `${height}px`; }, less);
+			await page.evaluate(() => { const sc = window.editor().scrollDOM; sc.scrollTop = sc.scrollHeight; });
+			await new Promise(r => setTimeout(r, 400));
+			const [m, s, outer] = await page.evaluate(() => {
+				const mm = document.querySelector('.tab-body:not([hidden]) .cm-minimap');
+				const scrolled = [...document.querySelectorAll('.tab-body:not([hidden]) *')].filter(e => !e.classList.contains('cm-scroller') && e.scrollHeight > e.clientHeight && !['visible', 'hidden'].includes(getComputedStyle(e).overflowY));
+				return [mm.getBoundingClientRect().height, mm.querySelector('.cm-minimap-slider').getBoundingClientRect().bottom - mm.getBoundingClientRect().top, scrolled.map(e => e.className)];
+			});
+			await page.evaluate(() => { const h = document.querySelector('.tab-body:not([hidden]) .code-host'); h.style.flex = ''; h.style.height = ''; });
+			assert.ok(s <= m + 0.01, `맨 끝에서 슬라이더가 미니맵 안(배율 ${scale}, 높이 ${m}): 슬라이더 끝 ${s}`);
+			assert.deepEqual(outer, [], '맨 끝에서 바깥 스크롤 없음');
+		}
+		await page.setViewport(viewport);
+		// 조금씩 내려가며 스크롤: 미니맵이 움찔거리지 않게 슬라이더 높이는 그대로, 슬라이더·그림 시작 줄은 뒤로 가지 않음
+		// (걸친 줄 수가 40↔41로 바뀔 때마다 슬라이더 높이와 그림 시작 줄이 앞뒤로 튀었다)
+		{
+			const samples = await page.evaluate(async () => {
+				const v = window.editor(), sc = v.scrollDOM, slider = document.querySelector('.tab-body:not([hidden]) .cm-minimap-slider'), out = [];
+				// 맨 위·맨 끝 300px만 3px씩(전체를 훑으면 너무 오래 걸린다. 튀는 현상은 어디서나 생겼다)
+				const max = sc.scrollHeight - sc.clientHeight, tops = [];
+				for (let t = 0; t <= 300; t += 3) { tops.push(t); }
+				for (let t = max - 300; t <= max; t += 3) { tops.push(t); }
+				for (const top of tops) {
+					sc.scrollTop = top;
+					await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+					// 화면 맨 위 줄(소수)에서 슬라이더 자리를 빼면 미니맵 그림이 놓인 자리
+					const b = v.lineBlockAtHeight(sc.scrollTop), first = v.state.doc.lineAt(b.from).number - 1 + Math.min(1, Math.max(0, (sc.scrollTop - b.top) / b.height));
+					const sliderTop = parseFloat(slider.style.top);
+					out.push({ top, height: slider.style.height, sliderTop, start: first - sliderTop / 2 });
+				}
+				return out;
+			});
+			assert.deepEqual([...new Set(samples.map(s => s.height))].length, 1, `슬라이더 높이 그대로: ${[...new Set(samples.map(s => s.height))]}`);
+			const back = samples.find((s, i) => i && (s.sliderTop < samples[i - 1].sliderTop - 1e-6 || s.start < samples[i - 1].start - 1e-6));
+			assert.equal(back, undefined, `아래로 스크롤하면 슬라이더·그림이 뒤로 안 감: ${JSON.stringify(back)}`);
+		}
+		console.log('Script: 긴 문서 맨 끝에서 미니맵 슬라이더가 미니맵 안 passed');
 	}
 }

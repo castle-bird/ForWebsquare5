@@ -203,6 +203,10 @@ export default async function ({ page }) {
 		assert.deepEqual(await page.$$eval('#submission-id, #submission-action, #submission-method, #submission-mode, #submission-media', els => els.map(e => e.value)), ['sbm_sel1', '/api/sel', 'get', 'synchronous', '']);
 		await page.$eval('#submission-action', el => el.focus());
 		await page.keyboard.type('2');
+		// 처리 중 메시지(processMsg): 비어 있다가 입력하면 수정 요청에 들어감
+		assert.equal(await page.$eval('#submission-processMsg', el => el.value), '');
+		await page.focus('#submission-processMsg');
+		await page.keyboard.type('조회중입니다...');
 		// 수정 팝업 코드 버튼: 비어 있으면 scwin.{id}_{이벤트}. Script에 이미 정의가 있어 그리로 이동, 속성·입력칸은 그 이름으로
 		await page.click('.submission-editor button[aria-label="submitdone Script"]');
 		await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr' && m.name === 'ev:submitdone' && m.value === 'scwin.sbm_sel1_submitdone'));
@@ -217,6 +221,7 @@ export default async function ({ page }) {
 		const editMsg = await page.evaluate(() => window.sent.find(m => m.type === 'editSubmission'));
 		assert.equal(editMsg.fields.action, '/api/sel2');
 		assert.equal(editMsg.fields.id, 'sbm_sel1');
+		assert.equal(editMsg.fields.processMsg, '조회중입니다...');
 		await page.evaluate(() => window.send({ type: 'popupAck', popup: window.sent.findLast(m => m.type === 'addSubmission' || m.type === 'editSubmission').popup, ok: true }));
 		await page.waitForFunction(() => !document.querySelector('.submission-editor'));
 		console.log('Data: Submission 더블클릭 → 수정 팝업·값 채움·수정 요청 passed');

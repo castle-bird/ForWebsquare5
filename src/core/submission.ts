@@ -4,7 +4,7 @@ import { assertFreeId, isXf, pathTo, uniqueId, usedIds, type XmlNode } from './x
 
 export const SUBMISSION_EVENTS = ['submit', 'submitdone', 'submiterror'] as const;
 const EVENT_ATTRS = SUBMISSION_EVENTS.map(e => `ev:${e}` as const);
-const FIELD_NAMES = ['id', 'ref', 'target', 'action', 'method', 'mode', 'mediatype', ...EVENT_ATTRS] as const;
+const FIELD_NAMES = ['id', 'ref', 'target', 'action', 'method', 'mode', 'mediatype', 'processMsg', ...EVENT_ATTRS] as const;
 
 const NEW_ATTRS = ['id', 'ref', 'target', 'action', 'method', 'mediatype', 'encoding', 'instance', 'replace', 'errorHandler', 'customHandler', 'mode', 'processMsg', ...EVENT_ATTRS, 'abortTrigger'];
 

@@ -90,6 +90,9 @@ export function SubmissionEditor({ initial, editing, busy, externalError, offset
 							</div></div>
 						<label className="field"><span>요청 데이터 형식</span>
 							<ChoiceSelect id="submission-media" value={fields.mediatype} options={SUBMISSION_MEDIA_TYPES} label={v => v || '(없음)'} onChange={e => update('mediatype', e.target.value)} /></label>
+						{/* processMsg: 값이 있으면 서브미션이 도는 동안 이 메시지 창을 띄운다 */}
+						<label className="field wide"><span>처리 중 메시지</span>
+							<input id="submission-processMsg" value={fields.processMsg} placeholder="조회중입니다..." onChange={e => update('processMsg', e.target.value)} /></label>
 					</div>
 				</section>
 				<section>

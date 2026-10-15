@@ -17,6 +17,7 @@ import { baseEffect, gitChanges } from './changes';
 import { markdownDoc, remoteCompletion, remoteHover, remoteSignature } from './remoteCompletion';
 import { signatureHelp } from './signatureHelp';
 import { minimap } from './minimap';
+import { searchCount } from './searchCount';
 import { blame, blameEffect } from './blame';
 import { jumped } from './jumps';
 import { notInComment } from './docComment';
@@ -82,8 +83,8 @@ const keys = Prec.high(keymap.of([{ key: 'Tab', run: acceptCompletion }, { key: 
 // 들여쓰기 단위는 파일과 상관없이 공백 4칸(포맷과 같음, CodeMirror 기본은 2칸). Tab·자동 들여쓰기·들여쓰기 가이드 간격이 이 단위를 따른다
 const indent = indentUnit.of('    ');
 
-// Ctrl+F 찾기·바꾸기 창은 위에(VS Code처럼). 기본은 아래
-const searchTop = search({ top: true });
+// Ctrl+F 찾기·바꾸기 창은 위에(VS Code처럼). 기본은 아래. 입력칸 옆에 몇 번째/찾은 개수
+const searchTop = [search({ top: true }), searchCount];
 
 /**
  * 선택이 있으면 cm-has-selection(style.css가 현재 줄 배경을 걷음): 선택 색은 줄 뒤 층이라
@@ -112,17 +113,26 @@ const completion = autocompletion({
  * 한 번 클릭으로 포커스가 안 들어온 경우도 여기서 넣는다
  */
 function restoreOnReturn(editor: EditorView): () => void {
-	let saved: { doc: Text; selection: EditorSelection; top: number; focused: boolean; wheeled?: boolean } | undefined;
+	/** focused: 떠날 때 포커스가 있던 편집기 안 요소(본문 또는 Ctrl+F 검색창 입력칸) */
+	let saved: { doc: Text; selection: EditorSelection; top: number; focused?: HTMLElement; wheeled?: boolean } | undefined;
 	/** 포커스가 아무 데도 없음(검색창 등 다른 입력칸이 아님) */
 	const nowhere = () => !document.activeElement || document.activeElement === document.body;
 	const leave = () => {
 		if (editor.dom.offsetParent) {
-			saved = { doc: editor.state.doc, selection: editor.state.selection, top: editor.scrollDOM.scrollTop, focused: editor.hasFocus };
+			const active = document.activeElement;
+			const focused = active instanceof HTMLElement && editor.dom.contains(active) ? active : undefined;
+			saved = { doc: editor.state.doc, selection: editor.state.selection, top: editor.scrollDOM.scrollTop, focused };
 		}
 	};
+	// 검색창에 포커스를 둔 채 다른 창에서 복사해 오면 돌아와서 바로 붙여 넣을 수 있게 검색창으로 되돌린다(그사이 검색창을 닫았으면 그대로)
 	const back = () => {
-		if (saved?.focused && editor.dom.offsetParent && !editor.hasFocus && nowhere()) {
-			editor.focus();
+		const focused = saved?.focused;
+		if (focused?.isConnected && editor.dom.offsetParent && nowhere()) {
+			if (focused === editor.contentDOM) {
+				editor.focus();
+			} else {
+				focused.focus();
+			}
 		}
 	};
 	const onVisibility = () => document.visibilityState === 'hidden' ? leave() : back();
