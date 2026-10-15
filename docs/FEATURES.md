@@ -72,6 +72,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 
 - 작업 폴더 안 파일을 이름으로 검색해 연결
 - VS Code에 설치된 언어 확장(Java 등)의 자동완성·포맷·마우스 오버 설명(Javadoc)·정의로 이동(Ctrl+클릭·F12)·파라미터 힌트 사용
+- Java import 목록은 IntelliJ처럼 파일을 열면 `import …` 한 줄로 접혀 있고, 누르거나 왼쪽 접기 표시로 펼칩니다
 - MyBatis 매퍼의 SQL 색·키워드 자동완성. 설정 `for-websquare5.sqlDialect`로 DB 방언을 고릅니다(`standard`(기본)·`oracle`·`mysql`·`mariadb`·`postgresql`·`mssql`·`sqlite`)
 
 ## 저장

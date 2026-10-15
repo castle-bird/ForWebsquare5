@@ -540,4 +540,20 @@ export default async function ({ page, modifiedKey, reset, checkIndentUnit, cont
 	await page.waitForFunction(() => !window.tab('Model') && document.querySelector('.canvas-frame .tab-bar button.active')?.textContent === 'Design');
 	assert.ok(await page.$('.canvas-frame > .tab-body:not([hidden]) > div'), 'Design 내용 표시');
 	console.log('Tabs: + 탭 추가·이름 변경·탭 삭제 passed');
+
+	// Java import 묶음 접기(IntelliJ처럼): 열면 처음부터 접혀 있고(`import …`), 누르면 펼침. 한 줄 import는 접지 않음
+	{
+		const imports = 'package a;\n\nimport java.util.List;\nimport java.util.Map;\n\nimport a.b.Member;\n\npublic class S {\n\tvoid run() {\n\t}\n}\n';
+		await page.evaluate(text => window.send({ type: 'linked', kind: 'service', path: 'src/S.java', text, version: 70 }), imports);
+		await clickTab('Service');
+		await page.waitForFunction(() => window.editor()?.state.doc.toString().startsWith('package a;'), { timeout: 3000 });
+		await page.waitForSelector('.tab-body:not([hidden]) .cm-foldPlaceholder', { timeout: 3000 }).catch(() => assert.fail('import 묶음이 처음부터 접힘'));
+		const visible = () => page.$$eval('.tab-body:not([hidden]) .cm-line', ls => ls.map(l => l.textContent));
+		assert.deepEqual((await visible()).slice(0, 4), ['package a;', '', 'import …', ''], '첫 import 줄만 `import …`로');
+		await page.click('.tab-body:not([hidden]) .cm-foldPlaceholder');
+		await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .cm-foldPlaceholder'), { timeout: 3000 });
+		assert.deepEqual((await visible()).slice(2, 6), ['import java.util.List;', 'import java.util.Map;', '', 'import a.b.Member;'], '누르면 펼침');
+		assert.equal(await page.evaluate(() => window.editor().state.doc.toString()), imports, '접기·펼치기는 내용을 안 바꿈');
+		console.log('Java: import 묶음 처음부터 접힘·펼치기 passed');
+	}
 }

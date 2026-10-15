@@ -1,9 +1,10 @@
 // 코드 편집기 미니맵(막대형): 글자 대신 낱말마다 그 색의 막대를 그린다(VS Code minimap.renderCharacters: false처럼).
 // 큰 흐름·오류 위치 보기용. 미니맵에 그릴 범위까지 문법을 읽고(유휴 시간에 최대 4ms씩), 준비되면 색칠한다.
 // 입력은 잠깐 멈춘 뒤, 스크롤은 프레임당 한 번 다시 그린다. 숨은 탭은 그리지 않는다
-import { ensureSyntaxTree, highlightingFor, language, syntaxTree } from '@codemirror/language';
+import { ensureSyntaxTree, foldedRanges, highlightingFor, language, syntaxTree } from '@codemirror/language';
 import { forEachDiagnostic } from '@codemirror/lint';
 import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
+import type { EditorState } from '@codemirror/state';
 import { getStyleTags } from '@lezer/highlight';
 import { capturePointer } from '../ui/pointerCapture';
 import { changedRanges, changesVersion } from './changes';
@@ -21,12 +22,55 @@ const severity = (d: { severity: string }) => d.severity === 'error' ? 'error' :
 /** 탭은 다음 탭 칸까지 */
 const nextColumn = (col: number, ch: string | undefined, tab: number) => ch === '\t' ? col + tab - col % tab : col + 1;
 
+/**
+ * 미니맵 줄(row, 1부터) ↔ 문서 줄. 접은 곳은 편집기처럼 첫 줄만 남기고 나머지 줄을 뺀다(VS Code처럼).
+ * 그러지 않으면 접힌 곳을 지나며 스크롤할 때 그림이 접힌 줄 수만큼 툭 건너뛴다
+ */
+class Rows {
+	/** 숨은 문서 줄 구간(양끝 포함, 순서대로·겹치지 않게) */
+	readonly hidden: [number, number][] = [];
+	readonly total: number;
+	constructor(state: EditorState) {
+		const { doc } = state;
+		foldedRanges(state).between(0, doc.length, (from, to) => {
+			const a = doc.lineAt(from).number + 1, b = doc.lineAt(to).number, last = this.hidden.at(-1);
+			if (b < a) { return; }
+			if (last && a <= last[1] + 1) { last[1] = Math.max(last[1], b); } else { this.hidden.push([a, b]); }
+		});
+		this.total = doc.lines - this.hidden.reduce((sum, [a, b]) => sum + b - a + 1, 0);
+	}
+	/** 문서 줄 → 미니맵 줄. 숨은 줄이면 그 접기의 첫 줄 */
+	row(line: number): number {
+		let skipped = 0;
+		for (const [a, b] of this.hidden) {
+			if (line < a) { break; }
+			if (line <= b) { return a - 1 - skipped; }
+			skipped += b - a + 1;
+		}
+		return line - skipped;
+	}
+	/** 미니맵 줄 → 문서 줄 */
+	line(row: number): number {
+		let line = row;
+		for (const [a, b] of this.hidden) {
+			if (line < a) { break; }
+			line += b - a + 1;
+		}
+		return line;
+	}
+	visible(line: number): boolean {
+		return !this.hidden.some(([a, b]) => line >= a && line <= b);
+	}
+}
+
 const minimapPlugin = ViewPlugin.fromClass(class {
 	readonly dom: HTMLElement;
 	readonly canvas: HTMLCanvasElement;
 	readonly slider: HTMLElement;
-	/** 미니맵 맨 위에 그린 자리(0부터 센 줄, 소수) */
+	/** 미니맵 맨 위에 그린 자리(0부터 센 미니맵 줄, 소수) */
 	offset = 0;
+	/** 접기를 뺀 줄 대응(문서·접기가 바뀔 때만 다시 만든다) */
+	rowsOf?: { doc: EditorState['doc']; folds: ReturnType<typeof foldedRanges>; rows: Rows };
 	frame = 0;
 	idle = 0;
 	parseTo = 0;
@@ -70,6 +114,8 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 	update(u: ViewUpdate) {
 		if (u.transactions.some(tr => tr.reconfigured)) { this.colors.clear(); this.textColor = ''; this.stale = true; }
 		if (u.geometryChanged) { this.textColor = ''; this.stale = true; }
+		// 접거나 펼치면 그릴 줄이 바뀐다
+		if (foldedRanges(u.startState) !== foldedRanges(u.state)) { this.stale = true; this.schedule(); }
 		if (u.docChanged || u.startState.facet(language) !== u.state.facet(language)) {
 			cancelIdleCallback(this.idle); this.idle = 0; this.parsedTo = 0; this.parseTo = 0; this.tree = undefined;
 		}
@@ -87,6 +133,14 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 		}
 	}
 
+	rows(): Rows {
+		const { state } = this.view, folds = foldedRanges(state), cached = this.rowsOf;
+		if (cached?.doc === state.doc && cached.folds === folds) { return cached.rows; }
+		const rows = new Rows(state);
+		this.rowsOf = { doc: state.doc, folds, rows };
+		return rows;
+	}
+
 	schedule() {
 		if (this.frame) { return; }
 		this.frame = requestAnimationFrame(() => { this.frame = 0; this.draw(); });
@@ -95,21 +149,21 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 	/** 미니맵 배치: 문서가 다 들어가면 1번 줄부터, 아니면 슬라이더가 스크롤 비율만큼 내려가고 그 밑에 보이는 줄이 오게 */
 	layout() {
 		// 실제 높이를 내림: clientHeight는 반올림이라 화면 배율 125% 등(소수 px)에서 실제보다 커서 맨 끝 슬라이더가 삐져나간다(바깥 스크롤바)
-		const v = this.view, sc = v.scrollDOM, height = Math.floor(this.dom.getBoundingClientRect().height), total = v.state.doc.lines;
+		const v = this.view, sc = v.scrollDOM, height = Math.floor(this.dom.getBoundingClientRect().height), lines = this.rows(), total = lines.total;
 		const rows = Math.floor(height / LINE);
 		// 화면 맨 위 줄(0부터, 그 줄 안에서 내려간 만큼 소수). 정수 줄로만 맞추면 스크롤 중에 그림이 한 줄씩 앞뒤로 튀어 움찔거린다
 		const block = v.lineBlockAtHeight(sc.scrollTop);
-		const first = v.state.doc.lineAt(block.from).number - 1 + Math.min(1, Math.max(0, (sc.scrollTop - block.top) / Math.max(1, block.height)));
+		const first = lines.row(v.state.doc.lineAt(block.from).number) - 1 + Math.min(1, Math.max(0, (sc.scrollTop - block.top) / Math.max(1, block.height)));
 		// 슬라이더 높이는 화면에 들어가는 줄 수로 고정(걸친 줄 수로 재면 40↔41로 바뀌며 높이가 흔들린다)
 		const sliderRows = Math.max(1, Math.min(rows, Math.round(sc.clientHeight / v.defaultLineHeight))), sliderHeight = sliderRows * LINE;
 		const place = (offset: number, sliderTop: number) => ({ offset, start: Math.floor(offset) + 1, rows, sliderTop: Math.min(Math.max(0, sliderTop), height - sliderHeight), sliderHeight });
 		if (total <= rows) {
-			return { ...place(0, first * LINE), fits: true };
+			return { ...place(0, first * LINE), lines, fits: true };
 		}
 		// 슬라이더는 스크롤 비율만큼 내려가고, 그림은 슬라이더 안에 보이는 줄이 오게 옮긴다(맨 끝에서 마지막 줄이 미니맵 바닥). 슬라이더는 미니맵 밖으로 안 나감(바깥 스크롤바)
 		const range = Math.max(1, sc.scrollHeight - sc.clientHeight), ratio = Math.min(1, sc.scrollTop / range);
 		const offset = Math.min(Math.max(0, first - ratio * (height - sliderHeight) / LINE), total - height / LINE);
-		return { ...place(offset, (first - offset) * LINE), fits: false };
+		return { ...place(offset, (first - offset) * LINE), lines, fits: false };
 	}
 
 	draw() {
@@ -125,7 +179,7 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 			this.scrollbar = sc.offsetWidth - sc.clientWidth;
 			Object.assign(this.dom.style, { right: `${this.scrollbar}px`, top: `${sc.offsetTop}px`, bottom: `${v.dom.clientHeight - sc.offsetTop - sc.offsetHeight}px` });
 		}
-		const { offset, start, rows, sliderTop, sliderHeight } = this.layout();
+		const { offset, start, rows, sliderTop, sliderHeight, lines } = this.layout();
 		this.offset = offset;
 		Object.assign(this.slider.style, { top: `${sliderTop}px`, height: `${sliderHeight}px` });
 		const ratio = window.devicePixelRatio || 1, width = this.dom.clientWidth, height = this.dom.clientHeight;
@@ -134,10 +188,10 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 			Object.assign(this.canvas, { width: Math.round(width * ratio), height: Math.round(height * ratio) });
 			this.stale = true;
 		}
-		const total = v.state.doc.lines;
+		const total = lines.total;
 		const typing = performance.now() < this.typingUntil && this.tileRows > 0;
 		if ((this.stale && !typing) || start < this.tileStart || start + rows + 1 > this.tileStart + this.tileRows) {
-			this.paintTile(Math.max(1, start - rows), Math.min(total, start + rows * 2), width, ratio);
+			this.paintTile(Math.max(1, start - rows), Math.min(total, start + rows * 2), width, ratio, lines);
 		}
 		const g = this.canvas.getContext('2d')!;
 		g.setTransform(1, 0, 0, 1, 0, 0);
@@ -149,17 +203,17 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 		g.setTransform(ratio, 0, 0, ratio, 0, 0);
 		forEachDiagnostic(v.state, (d, dFrom) => {
 			g.fillStyle = MARK[severity(d)];
-			g.fillRect(width - 3, Math.min(height - 3, (v.state.doc.lineAt(dFrom).number - 1) / total * height), 3, 3);
+			g.fillRect(width - 3, Math.min(height - 3, (lines.row(v.state.doc.lineAt(dFrom).number) - 1) / total * height), 3, 3);
 		});
 	}
 
 	/**
-	 * first~last 줄의 막대를 미리 그림에 그린다. 그림이 그대로 쓸 만하면(내용이 안 바뀜) 겹치는 줄은 옮겨 붙이고 새로 보이는 줄만 그린다
+	 * first~last 미니맵 줄의 막대를 미리 그림에 그린다. 그림이 그대로 쓸 만하면(내용이 안 바뀜) 겹치는 줄은 옮겨 붙이고 새로 보이는 줄만 그린다
 	 * (스크롤로 범위를 벗어날 때 한 프레임이 길어지지 않게)
 	 */
-	paintTile(first: number, last: number, width: number, ratio: number) {
+	paintTile(first: number, last: number, width: number, ratio: number, lines = this.rows()) {
 		const state = this.view.state;
-		this.parse(state.doc.line(last).to);
+		this.parse(state.doc.line(lines.line(last)).to);
 		const tree = this.tree ?? syntaxTree(state);
 		const old = this.tile, oldFirst = this.tileStart, oldLast = this.tileStart + this.tileRows - 1;
 		const reuse = !this.stale && this.tileRows > 0 && old.width === Math.round(width * ratio) && first <= oldLast && last >= oldFirst;
@@ -168,10 +222,10 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 		const g = tile.getContext('2d')!;
 		if (reuse) {
 			g.drawImage(old, 0, (oldFirst - first) * LINE * ratio);
-			if (first < oldFirst) { this.paintLines(g, first, first, oldFirst - 1, width, ratio, tree); }
-			if (last > oldLast) { this.paintLines(g, first, oldLast + 1, last, width, ratio, tree); }
+			if (first < oldFirst) { this.paintLines(g, first, first, oldFirst - 1, width, ratio, tree, lines); }
+			if (last > oldLast) { this.paintLines(g, first, oldLast + 1, last, width, ratio, tree, lines); }
 		} else {
-			this.paintLines(g, first, first, last, width, ratio, tree);
+			this.paintLines(g, first, first, last, width, ratio, tree, lines);
 		}
 		this.tile = tile;
 		this.stale = false;
@@ -200,25 +254,28 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 		});
 	}
 
-	/** 그림(첫 줄 top) 위에 a~b 줄의 막대를 그린다 */
-	paintLines(g: CanvasRenderingContext2D, top: number, a: number, b: number, width: number, ratio: number, tree: ReturnType<typeof syntaxTree>) {
+	/** 그림(첫 미니맵 줄 top) 위에 r0~r1 미니맵 줄의 막대를 그린다. 접혀 숨은 문서 줄은 건너뛴다 */
+	paintLines(g: CanvasRenderingContext2D, top: number, r0: number, r1: number, width: number, ratio: number, tree: ReturnType<typeof syntaxTree>, lines: Rows) {
 		const v = this.view, doc = v.state.doc, tab = v.state.tabSize, cols = width - PAD - 4;
+		const a = lines.line(r0), b = lines.line(r1), yOf = (n: number) => (lines.row(n) - top) * LINE;
 		g.setTransform(ratio, 0, 0, ratio, 0, 0);
 		g.globalAlpha = 1;
 		const from = doc.line(a).from, to = doc.line(b).to;
 		// 오류·경고 줄: 옅은 배경
 		forEachDiagnostic(v.state, (d, dFrom) => {
-			if (dFrom < from || dFrom > to) { return; }
+			const n = doc.lineAt(dFrom).number;
+			if (dFrom < from || dFrom > to || !lines.visible(n)) { return; }
 			g.fillStyle = LINE_TINT[severity(d)];
-			g.fillRect(0, (doc.lineAt(dFrom).number - top) * LINE, width, LINE);
+			g.fillRect(0, yOf(n), width, LINE);
 		});
 		// Git 변경: 왼쪽 끝 막대(VS Code 미니맵 거터처럼). 삭제는 지워진 자리(줄 위 경계)에 짧은 선
 		for (const { from: c0, to: c1, kind } of changedRanges(v.state)) {
 			if (c1 < a || c0 > b) { continue; }
 			g.fillStyle = this.changeColors[kind];
-			if (kind === 'deleted') { g.fillRect(0, (c0 - top) * LINE - 1, PAD - 1, 2); continue; }
-			const s0 = Math.max(a, c0), s1 = Math.min(b, c1);
-			g.fillRect(0, (s0 - top) * LINE, 2, (s1 - s0 + 1) * LINE);
+			if (kind === 'deleted') { g.fillRect(0, yOf(c0) - 1, PAD - 1, 2); continue; }
+			for (let n = Math.max(a, c0), end = Math.min(b, c1); n <= end; n++) {
+				if (lines.visible(n)) { g.fillRect(0, yOf(n), 2, LINE); }
+			}
 		}
 		const columnAt = (line: { from: number; text: string }, pos: number) => {
 			let col = 0;
@@ -229,7 +286,8 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 		g.globalAlpha = .6;
 		g.fillStyle = this.textColor;
 		for (let n = a; n <= b; n++) {
-			const line = doc.line(n), y = (n - top) * LINE;
+			if (!lines.visible(n)) { continue; }
+			const line = doc.line(n), y = yOf(n);
 			let col = 0, run = -1;
 			for (let i = 0; i <= line.text.length && col <= cols; i++) {
 				const ch = line.text[i];
@@ -251,12 +309,13 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 				g.fillStyle = this.color(cls);
 				const s = Math.max(node.from, from), e = Math.min(node.to, to);
 				for (let n = doc.lineAt(s).number, endLine = doc.lineAt(e).number; n <= endLine; n++) {
+					if (!lines.visible(n)) { continue; }
 					const line = doc.line(n), s0 = Math.max(s, line.from), e0 = Math.min(e, line.to);
 					// 앞뒤 공백은 빼고(문자열·주석 안 공백은 그대로 막대)
 					const text = line.text.slice(s0 - line.from, e0 - line.from), lead = text.length - text.trimStart().length, trail = text.length - text.trimEnd().length;
 					if (lead === text.length) { continue; }
 					const c0 = columnAt(line, s0 + lead), c1 = Math.min(cols, columnAt(line, e0 - trail));
-					if (c1 > c0) { g.fillRect(PAD + c0, (n - top) * LINE, c1 - c0, LINE - .5); }
+					if (c1 > c0) { g.fillRect(PAD + c0, yOf(n), c1 - c0, LINE - .5); }
 				}
 			},
 		});
@@ -281,13 +340,13 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 		if (e.button !== 0) { return; }
 		e.preventDefault();
 		const v = this.view, sc = v.scrollDOM, rect = this.dom.getBoundingClientRect(), y = e.clientY - rect.top;
-		const { sliderTop, sliderHeight, fits } = this.layout();
+		const { sliderTop, sliderHeight, fits, lines } = this.layout();
 		if (y < sliderTop || y > sliderTop + sliderHeight) {
-			const line = Math.min(v.state.doc.lines, Math.max(1, Math.floor(this.offset + y / LINE) + 1));
+			const line = lines.line(Math.min(lines.total, Math.max(1, Math.floor(this.offset + y / LINE) + 1)));
 			const block = v.lineBlockAt(v.state.doc.line(line).from);
 			sc.scrollTop = block.top - sc.clientHeight / 2;
 		}
-		const total = v.state.doc.lines;
+		const total = lines.total;
 		// 끈 픽셀 → 스크롤: 다 들어가면 줄 비율, 아니면 슬라이더가 움직일 수 있는 거리 비율
 		const scale = fits ? sc.scrollHeight / (total * LINE) : Math.max(1, sc.scrollHeight - sc.clientHeight) / Math.max(1, rect.height - sliderHeight);
 		this.drag = { y: e.clientY, top: sc.scrollTop, scale };

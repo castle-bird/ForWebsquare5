@@ -261,4 +261,51 @@ export default async function ({ page, clickTab }) {
 		}
 		console.log('Script: 긴 문서 맨 끝에서 미니맵 슬라이더가 미니맵 안 passed');
 	}
+	// 접은 줄은 미니맵에서도 빠진다(VS Code처럼): 접힌 곳을 지나며 스크롤해도 미니맵 그림이 접힌 줄 수만큼 툭 건너뛰지 않는다.
+	// 줄마다 길이가 달라(n % 50 + 1 글자) 미니맵 줄마다 막대 길이를 읽어, 앞 프레임 그림을 몇 줄 밀면 맞는지 본다
+	{
+		await page.evaluate(() => {
+			const lenOf = n => n % 50 + 1, v = window.editor(), lines = ['function big() {'];
+			for (let n = 2; n <= 138; n++) { lines.push('x'.repeat(lenOf(n))); }
+			lines.push('}');
+			for (let n = 140; n <= 1500; n++) { lines.push('x'.repeat(lenOf(n))); }
+			v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: lines.join('\n') }, selection: { anchor: 3 } });
+			v.scrollDOM.scrollTop = 0;
+			v.focus();
+		});
+		await page.keyboard.down('Control'); await page.keyboard.down('Shift'); await page.keyboard.press('BracketLeft'); await page.keyboard.up('Shift'); await page.keyboard.up('Control');
+		await page.waitForSelector('.tab-body:not([hidden]) .cm-foldPlaceholder', { timeout: 3000 }).catch(() => assert.fail('블록 접힘'));
+		// 문서를 바꾼 직후는 입력 중으로 보고 미니맵 다시 그리기를 잠깐(150ms) 미룬다 → 다 그린 뒤부터 잰다
+		await new Promise(r => setTimeout(r, 400));
+		const jumps = await page.evaluate(async () => {
+			const v = window.editor(), sc = v.scrollDOM, canvas = document.querySelector('.tab-body:not([hidden]) .cm-minimap canvas');
+			const ratio = canvas.width / canvas.clientWidth, rows = Math.floor(canvas.clientHeight / 2);
+			/** 미니맵 줄(2px)마다 막대 끝(가장 오른쪽 칠한 점)의 x */
+			const bars = () => {
+				const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data, out = [];
+				for (let r = 0; r < rows; r++) {
+					const y = Math.round((r * 2 + 1) * ratio);
+					let right = -1;
+					for (let x = canvas.width - 4 * ratio - 1; x >= 0; x--) { if (data[(y * canvas.width + x) * 4 + 3] > 0) { right = x; break; } }
+					out.push(right);
+				}
+				return out;
+			};
+			const out = [];
+			let before;
+			for (let top = 0; top <= Math.min(4000, sc.scrollHeight - sc.clientHeight); top += 20) {
+				sc.scrollTop = top;
+				await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+				const now = bars();
+				// 앞 그림을 0~4줄 밀어서 대부분(90%) 맞으면 이어진 움직임
+				if (before && ![0, 1, 2, 3, 4].some(d => { let same = 0; for (let i = 0; i + d < rows; i++) { same += before[i + d] === now[i] ? 1 : 0; } return same >= (rows - d) * 0.9; })) {
+					out.push({ top, line: v.state.doc.lineAt(v.lineBlockAtHeight(sc.scrollTop).from).number });
+				}
+				before = now;
+			}
+			return out;
+		});
+		assert.deepEqual(jumps.slice(0, 3), [], `접힌 곳을 지나도 미니맵 그림이 이어서 움직임: ${JSON.stringify(jumps.slice(0, 5))} 외 ${jumps.length}곳`);
+		console.log('Script: 접은 줄은 미니맵에서도 빠짐 passed');
+	}
 }

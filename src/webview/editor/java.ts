@@ -1,8 +1,9 @@
 import { java, javaLanguage } from '@codemirror/lang-java';
 import { docComments } from './docComment';
-import { getIndentUnit, indentService, LanguageSupport, syntaxTree } from '@codemirror/language';
+import { foldEffect, foldService, getIndentUnit, indentService, LanguageSupport, syntaxTree } from '@codemirror/language';
 import { styleTags, tags as t } from '@lezer/highlight';
-import { countColumn } from '@codemirror/state';
+import { countColumn, type EditorState } from '@codemirror/state';
+import { ViewPlugin } from '@codemirror/view';
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 
 /**
@@ -24,10 +25,51 @@ const javaIndent = indentService.of((context, pos) => {
 	return Math.max(0, indent);
 });
 
+/**
+ * import 묶음 접기(IntelliJ·VS Code처럼): 이어진 import 줄(사이 빈 줄 허용)을 `import ` 뒤부터 마지막 import 줄 끝까지 접는다.
+ * 두 줄 이상일 때만, 묶음의 첫 줄에서
+ */
+const IMPORT = /^(\s*import\s+)\S/;
+function importRange(state: EditorState, lineStart: number): { from: number; to: number } | undefined {
+	const { doc } = state, first = doc.lineAt(lineStart), head = IMPORT.exec(first.text);
+	if (!head) {
+		return undefined;
+	}
+	// 앞쪽(빈 줄 건너뜀)도 import면 묶음 중간이다
+	for (let n = first.number - 1; n >= 1; n--) {
+		const text = doc.line(n).text;
+		if (text.trim()) {
+			if (IMPORT.test(text)) { return undefined; }
+			break;
+		}
+	}
+	let last = first;
+	for (let n = first.number + 1; n <= doc.lines; n++) {
+		const line = doc.line(n);
+		if (IMPORT.test(line.text)) { last = line; } else if (line.text.trim()) { break; }
+	}
+	return last.number > first.number ? { from: first.from + head[1].length, to: last.to } : undefined;
+}
+const importFold = foldService.of((state, lineStart) => importRange(state, lineStart) ?? null);
+
+/** 파일을 열면 첫 import 묶음은 접힌 채로(IntelliJ처럼). 편집기를 만든 직후 한 번만 */
+const foldImportsOnOpen = ViewPlugin.define(view => {
+	queueMicrotask(() => {
+		for (let n = 1; n <= view.state.doc.lines; n++) {
+			const range = importRange(view.state, view.state.doc.line(n).from);
+			if (range) {
+				view.dispatch({ effects: foldEffect.of(range) });
+				break;
+			}
+		}
+	});
+	return {};
+});
+
 const base = java();
 // @lezer/java는 어노테이션(@Override)에 색 태그가 없어 이름이 변수 색으로 칠해진다 → @와 이름을 annotation으로(테마의 어노테이션 색)
 const language = javaLanguage.configure({ props: [styleTags({ 'MarkerAnnotation Annotation': t.annotation, 'MarkerAnnotation/Identifier Annotation/Identifier': t.annotation })] });
-export const javaSupport = new LanguageSupport(language, [base.support, javaIndent, docComments('java')]);
+export const javaSupport = new LanguageSupport(language, [base.support, javaIndent, docComments('java'), importFold, foldImportsOnOpen]);
 
 const KEYWORDS: Completion[] = ('abstract assert boolean break byte case catch char class continue default do double else enum extends final finally float for '
 	+ 'if implements import instanceof int interface long native new package private protected public record return sealed short static super switch '
