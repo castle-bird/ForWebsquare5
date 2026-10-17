@@ -54,7 +54,10 @@ export function DataEditor({ node, externalError, offsetIndex = 0, onApply, onCl
 	const gridKeyDown = (e: KeyboardEvent<HTMLTableElement>) => {
 		const direction = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key];
 		if (!direction) { return; }
-		const cell = (e.target as HTMLElement).closest('td');
+		// 글자 입력칸의 좌우 방향키는 입력 커서 이동에 쓴다(오타를 고치다 칸이 바뀌지 않게). 위아래와 체크박스·선택 상자는 칸 이동
+		const origin = e.target as HTMLElement;
+		if (direction[1] !== 0 && origin instanceof HTMLInputElement && origin.type !== 'checkbox') { return; }
+		const cell = origin.closest('td');
 		const tableRows = [...e.currentTarget.tBodies[0].rows];
 		const rowIndex = cell ? tableRows.indexOf(cell.parentElement as HTMLTableRowElement) : -1;
 		if (!cell || rowIndex < 0) { return; }

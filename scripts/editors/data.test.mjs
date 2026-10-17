@@ -89,8 +89,13 @@ export default async function ({ page }) {
 		await page.click('.data-editor input[aria-label="1행 id"]');
 		await page.keyboard.down('Control'); await page.keyboard.press('A'); await page.keyboard.up('Control');
 		await page.keyboard.type('customer');
+		// 글자 입력칸의 좌우 방향키는 칸 이동이 아니라 입력 커서 이동
+		await page.keyboard.press('ArrowLeft');
+		assert.deepEqual(await page.evaluate(() => [document.activeElement?.getAttribute('aria-label'), document.activeElement?.selectionStart]), ['1행 id', 7], '←: 입력 커서만 이동');
 		await page.keyboard.press('ArrowRight');
-		assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '1행 name');
+		assert.deepEqual(await page.evaluate(() => [document.activeElement?.getAttribute('aria-label'), document.activeElement?.selectionStart]), ['1행 id', 8], '→: 입력 커서만 이동');
+		await page.focus('.data-editor input[aria-label="1행 name"]');
+		await page.keyboard.press('End');
 		// Enter: 입력칸에서 나와 팝업에 포커스(값은 그대로, Esc로 닫기 유지). 제목줄 ID도
 		await page.keyboard.type('n');
 		await page.keyboard.press('Enter');
