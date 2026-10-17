@@ -6,9 +6,10 @@ VS Code에서 WebSquare5 화면을 편집할 수 있는 확장 프로그램입�
 ## 사용방법
 
 1. 확장 탭에서 **ForWebsquare5**를 설치합니다. 직접 설치하려면 [Releases](https://github.com/castle-bird/ForWebsquare5/releases)의 `.vsix`를 사용하세요.
-2. 설치 후 처음 XML을 열면 **ForWebsquare5 시작하기**가 자동으로 열립니다(Eclipse 폴더를 아직 고르지 않았을 때 한 번). 다시 보려면 `Ctrl+Shift+P`에서 `>Welcome: Open Walkthrough`를 입력하고 **ForWebsquare5 시작하기**를 선택합니다.
-3. **폴더 선택**에서 WebSquare5 플러그인이 설치된 **Eclipse 폴더**를 선택합니다. 예: `C:\WEBSQUARE_DEV_PACK_SP5\eclipse_egov4.1`
-   컴포넌트 정의·wpack·API 문서를 이 폴더에서 자동으로 찾습니다.
+2. 화면 XML을 열면 WebSquare5 플러그인이 설치된 **Eclipse(또는 WebSquare Studio) 폴더**를 로컬 드라이브(C:·D: 등)에서 자동으로 찾아 적용합니다. 컴포넌트 정의·wpack·API 문서는 그 폴더에서 찾고, 찾은 위치는 이 PC에 기억해 다음부터는 다시 찾지 않습니다.
+   - 설치본이 여러 개면(전자정부 프레임워크 버전별 Eclipse 등) 프로젝트마다 고릅니다: 그 프로젝트를 작업 공간으로 연 Eclipse → 가장 최근에 실행한 Eclipse → 엔진 버전이 높은 것 순입니다. 알림의 **다른 설치본 선택**으로 바꿀 수 있습니다.
+3. 못 찾으면 알림의 **폴더 선택**에서 Eclipse 폴더를 고릅니다. 예: `C:\WEBSQUARE_DEV_PACK_SP5\eclipse_egov4.1`. `D:\`처럼 넓게 골라도 그 밑의 설치본을 찾습니다.
+   설정은 `Ctrl+Shift+P` → **WebSquare5: 환경 설정**에서 다시 바꾸거나 **설치 폴더 자동으로 찾기**를 할 수 있습니다. 안내는 `>Welcome: Open Walkthrough` → **ForWebsquare5 시작하기**에서 볼 수 있습니다.
 
 ![ForWebsquare5 시작하기](images/start_page.png)
 

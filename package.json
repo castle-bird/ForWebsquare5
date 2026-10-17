@@ -12,7 +12,7 @@
   },
   "homepage": "https://github.com/castle-bird/ForWebsquare5#readme",
   "description": "VS Code에서 WebSquare5 에디터를 사용할 수 있게 해주는 비공식 확장",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "icon": "media/logo.png",
   "engines": {
     "vscode": "^1.125.0"
@@ -79,12 +79,12 @@
       {
         "id": "setup",
         "title": "ForWebsquare5 시작하기",
-        "description": "Eclipse 설치 폴더 하나만 고르면 나머지는 자동으로 찾습니다.",
+        "description": "화면 XML을 열면 WebSquare5 설치 폴더를 자동으로 찾습니다. 못 찾을 때만 폴더 하나를 고르면 됩니다.",
         "steps": [
           {
             "id": "eclipse",
             "title": "Eclipse 설치 폴더",
-            "description": "**폴더:** Eclipse 설치 폴더 (예: `C:\\eclipse_egov{버전}`)\n그 안에서 컴포넌트 정의·wpack 변환기·API 문서를 자동으로 찾습니다. 못 찾은 항목은 저장 시·자동완성 사용 시 알림으로 안내합니다.\n[폴더 선택](command:for-websquare5.choose?%5B%22eclipseInstallPath%22%5D)",
+            "description": "**폴더:** Eclipse 또는 WebSquare Studio 설치 폴더 (예: `C:\\eclipse_egov{버전}`)\n비워 두면 화면 XML을 열 때 로컬 드라이브(C:·D: 등)에서 자동으로 찾습니다. 찾은 폴더 안에서 컴포넌트 정의·wpack 변환기·API 문서를 찾고, 못 찾으면 알림으로 폴더 선택을 안내합니다.\n[폴더 선택](command:for-websquare5.choose?%5B%22eclipseInstallPath%22%5D) · [자동으로 찾기](command:for-websquare5.setup)",
             "media": {
               "markdown": "media/setup-eclipse.md"
             },
@@ -132,7 +132,7 @@
           "type": "string",
           "default": "",
           "scope": "resource",
-          "markdownDescription": "**폴더:** Eclipse 설치 폴더 (예: `C:\\eclipse_egov{버전}`)\n\n지정하면 이 폴더 밑을 뒤져서 컴포넌트 정의 파일·wpack 변환기·API 문서 폴더를 자동으로 찾습니다. 플러그인 폴더 이름은 설치본마다 달라도 됩니다.\n\n상대 경로는 작업 폴더 기준."
+          "markdownDescription": "**폴더:** Eclipse 또는 WebSquare Studio 설치 폴더 (예: `C:\\eclipse_egov{버전}`)\n\n지정하면 이 폴더 밑을 뒤져서 컴포넌트 정의 파일·wpack 변환기·API 문서 폴더를 자동으로 찾습니다. 플러그인 폴더 이름은 설치본마다 달라도 됩니다.\n\n**비워두면:** 화면 XML을 열 때 로컬 드라이브(C:·D: 등)에서 설치 폴더를 자동으로 찾아 이 PC에 기억합니다. 못 찾으면 알림으로 폴더 선택을 안내합니다.\n\n상대 경로는 작업 폴더 기준."
         },
         "for-websquare5.apiDocumentationPath": {
           "type": "string",

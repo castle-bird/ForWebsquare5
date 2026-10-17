@@ -78,8 +78,9 @@ export function annotate(root: XmlNode, defs: ComponentDef[], udcs: ReadonlySet<
 }
 
 export async function findDefinitionFile(eclipseRoot: string): Promise<string | undefined> {
+	// 정의 파일은 플러그인의 config/<버전>에 있다. Node 플러그인의 node_modules(수천 개)는 뒤지지 않는다
 	const versionDirs = await findDirs(eclipseRoot, (dir, names) =>
-		names.includes('WebSquareConfig.xml') && path.basename(path.dirname(dir)) === 'config');
+		names.includes('WebSquareConfig.xml') && path.basename(path.dirname(dir)) === 'config', 8, name => name === 'node_modules');
 	const best = versionDirs.sort(numeric).pop();
 	return best && path.join(best, 'WebSquareConfig.xml');
 }

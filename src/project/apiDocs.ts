@@ -98,7 +98,7 @@ export function parseApiEvents(html: string): ScriptApi[string] {
 }
 
 export async function findApiDocs(eclipseRoot: string): Promise<string | undefined> {
-	const dirs = await findDirs(eclipseRoot, (_dir, names) => names.includes('index.html') && names.some(n => API_DIR.test(n)));
+	const dirs = await findDirs(eclipseRoot, (_dir, names) => names.includes('index.html') && names.some(n => API_DIR.test(n)), 8, name => name === 'node_modules');
 	return dirs[0];
 }
 

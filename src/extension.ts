@@ -13,7 +13,7 @@ import { loadApiDocs } from './project/apiDocs';
 import { engineModules, udcNames } from './project/modules';
 import { annotate, loadComponents, type ComponentDef } from './project/components';
 import { convert, disposeWpack, publish, readWpackConfig, warmWpack } from './project/wpack';
-import { offerSetup, registerSetup, resolvePath, type SetupKey } from './vscode/setup';
+import { offerSetup, onDidChangeInstall, registerSetup, resolvePath, type SetupKey } from './vscode/setup';
 import { applyCodeEdit, applyNodeEdit, formatCode } from './vscode/documentEdit';
 import { LinkedFiles, registerLinks } from './vscode/links';
 import { UsedTablesStore } from './vscode/tables';
@@ -73,8 +73,11 @@ const wpackQueues = new Map<string, Promise<unknown>>();
 const wpackDone = new Map<string, string>();
 let warnedNoWpack = false, warnedNoDefs = false;
 
-/** 변환 대상이 아닌 곳: 의존성·Git·Eclipse 배포본(.metadata, 우리가 XML을 복사해 넣는다) */
-const NOT_SCREEN_DIR = /[\\/](node_modules|\.git|\.metadata)[\\/]/;
+/**
+ * 변환 대상이 아닌 곳: 의존성·Git·Eclipse 배포본(.metadata, 우리가 XML을 복사해 넣는다)·빌드 산출물(Maven target, Gradle build, Eclipse Java 출력 bin)·WEB-INF·META-INF.
+ * Java 빌드는 이런 곳에 XML을 한꺼번에 많이 복사하므로 파일을 읽기 전에 거른다(저장 시 변환은 이 목록과 상관없다)
+ */
+const NOT_SCREEN_DIR = /[\\/](node_modules|\.git|\.metadata|target|build|bin|WEB-INF|META-INF)[\\/]/i;
 
 /**
  * 작업 폴더의 XML이 디스크에서 바뀌면(AI·다른 프로그램·Git) 저장 이벤트가 없으므로 디스크 내용으로 변환한다.
@@ -84,7 +87,8 @@ function watchScreenFiles(): vscode.Disposable {
 	const watcher = vscode.workspace.createFileSystemWatcher('**/*.xml');
 	const timers = new Map<string, NodeJS.Timeout>();
 	const onDisk = (uri: vscode.Uri) => {
-		if (uri.scheme !== 'file' || NOT_SCREEN_DIR.test(uri.fsPath)) {
+		// 작업 폴더 기준으로 본다: 작업 폴더 자체가 D:\build\… 같은 곳에 있어도 거르지 않게
+		if (uri.scheme !== 'file' || NOT_SCREEN_DIR.test(`/${vscode.workspace.asRelativePath(uri, false)}`)) {
 			return;
 		}
 		const key = uri.toString();
@@ -145,7 +149,7 @@ async function wpackConvert(uri: vscode.Uri, xml: string, fromDisk = false): Pro
 	if (!exe) {
 		if (!warnedNoWpack) {
 			warnedNoWpack = true;
-			void offerSetup('wpackExecutable', 'wpack 변환기를 찾지 못해 저장 시 변환을 건너뜁니다.');
+			void offerSetup('wpackExecutable', 'wpack 변환기를 찾지 못해 저장 시 변환을 건너뜁니다.', uri, webRoot);
 		}
 		return;
 	}
@@ -228,7 +232,14 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			}
 		};
 		const toast = (message: string) => void post({ type: 'toast', message });
-		let definitions =loadDefinitions(document.uri, webRoot);
+		// defsNow: 마지막으로 다 읽은 정의(아직이면 undefined). 문서는 이것으로 보내고, 첫 정의를 기다리다 먼저 보냈으면(earlySent) 빈 목록으로 보낸다
+		let defsNow: ComponentDef[] | undefined, earlySent = false;
+		const trackDefinitions = () => {
+			const loading = loadDefinitions(document.uri, webRoot);
+			void loading.then(d => { if (definitions === loading) { defsNow = d.defs; } });
+			return loading;
+		};
+		let definitions = trackDefinitions();
 		const loadApi = () => resolvePath('apiDocumentationPath', document.uri, webRoot).then(loadApiDocs);
 		let api = loadApi();
 		const styles = loadStyles(document, panel.webview, webRoot);
@@ -251,7 +262,8 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		let latest = 0;
 		const sendDocument = async () => {
 			const request = ++latest;
-			const msg = await documentMessage(document, panel.webview, webRoot, (await definitions).defs, await udcs);
+			const defs = defsNow ?? (earlySent ? [] : (await definitions).defs);
+			const msg = await documentMessage(document, panel.webview, webRoot, defs, await udcs);
 			if (request === latest && msg.version === document.version) { await post(msg); }
 		};
 
@@ -299,6 +311,14 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		// 화면 XML(Source·Script)과 연결 파일은 따로 줄 세운다(느린 Java 포맷이 화면 편집을 막지 않게)
 		const codeQueues = new Map<string, Promise<unknown>>();
 		const queue = (target: CodeTarget, job: () => Promise<void>) => serial(codeQueues, linkIdOf(target) === undefined ? 'xml' : target, job);
+		const reloadDefinitions = () => {
+			definitions = trackDefinitions();
+			void definitions.then(d => post({ type: 'definitions', ...d })).then(() => sendDocument());
+		};
+		const reloadApi = () => {
+			api = loadApi();
+			void api.then(result => post({ type: 'scriptApi', ...result }));
+		};
 		const subs = [
 			moduleWatcher,
 			vscode.workspace.onDidChangeConfiguration(e => {
@@ -308,13 +328,17 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 				}
 				const eclipse = changed('eclipseInstallPath');
 				if (eclipse || changed('componentDefinitionFile')) {
-					definitions = loadDefinitions(document.uri, webRoot);
-					void definitions.then(d => post({ type: 'definitions', ...d })).then(sendDocument);
+					reloadDefinitions();
 				}
 				if (eclipse || changed('apiDocumentationPath')) {
-					api = loadApi();
-					void api.then(result => post({ type: 'scriptApi', ...result }));
+					reloadApi();
 				}
+			}),
+			// 설정 없이 설치 폴더를 자동으로 찾았거나 기억한 위치가 바뀌면: 정의·API를 다시 읽고 변환기를 미리 띄운다
+			onDidChangeInstall(() => {
+				reloadDefinitions();
+				reloadApi();
+				void resolvePath('wpackExecutable', document.uri, webRoot).then(warmWpack).catch(() => undefined);
 			}),
 			// Git 상태는 저장할 때마다도 바뀌어 자주 불린다 → 모아서
 			onGitChange(() => {
@@ -348,7 +372,16 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 					void links.reload(undefined, true);
 					void api.then(result => post({ type: 'scriptApi', ...result }));
 					void modules.then(post);
+					// 정의가 늦으면(설치 폴더 자동 탐색·디스크가 바쁠 때) 기다리지 않고 문서부터 보여 준다. 정의가 오면 아래에서 다시 보낸다
+					const early = setTimeout(() => void styles.then(s => {
+						if (defsNow) { return; }
+						earlySent = true;
+						void post(s);
+						void post({ type: 'definitions', defs: [], error: 'WebSquare5 컴포넌트 정의를 불러오는 중입니다…' });
+						return sendDocument();
+					}), 1000);
 					void Promise.all([definitions, styles]).then(([d, s]) => {
+						clearTimeout(early);
 						void post({ type: 'definitions', ...d });
 						void post(s);
 						return sendDocument();
@@ -492,7 +525,7 @@ async function loadDefinitions(uri: vscode.Uri, webRoot?: string): Promise<{ def
 		if (!source) {
 			if (!warnedNoDefs) {
 				warnedNoDefs = true;
-				void offerSetup('componentDefinitionFile', '컴포넌트 정의 파일(WebSquareConfig.xml)을 찾지 못해 Property·Event 목록이 비어 있습니다.');
+				void offerSetup('componentDefinitionFile', '컴포넌트 정의 파일(WebSquareConfig.xml)을 찾지 못해 Property·Event 목록이 비어 있습니다.', uri, webRoot);
 			}
 			return { defs: [], error: '컴포넌트 정의(WebSquareConfig.xml)를 찾지 못했습니다. (F1 → WebSquare5: 환경 설정)' };
 		}

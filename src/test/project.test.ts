@@ -12,6 +12,7 @@ import { attachFrames } from '../project/frames';
 import { cleanSample, loadApiDocs, parseApiEvents, parseApiMethods } from '../project/apiDocs';
 import { SCREEN, DEFS } from './helpers';
 import { fromWebPath } from '../project/paths';
+import { eclipseUsage, findInstalls, isInside, unescapeProperty } from '../project/discover';
 
 suite('웹 경로 경계', () => {
 	test('인코딩된 상위 경로는 거부하고 정상 상대·루트·유니코드 경로는 유지', () => {
@@ -366,5 +367,56 @@ suite('wpack', () => {
 		this.timeout(60_000);
 		const js = await convert(exe!, { destRoot: '_wpack_' }, path.join('ui', 'T.xml'), SCREEN);
 		assert.ok(js.includes('tbx_title'), js.slice(0, 200));
+	});
+});
+
+suite('설치본 자동 탐색', () => {
+	const mkdir = (...parts: string[]) => fs.mkdirSync(path.join(...parts), { recursive: true });
+
+	test('plugins에 com.inswave.* 플러그인이 있는 Eclipse 폴더를 얕은 것부터 찾고, 시스템·의존성·숨김 폴더는 건너뜀', async () => {
+		const drive = fs.mkdtempSync(path.join(os.tmpdir(), 'ws5-drive-'));
+		// 개발팩처럼 plugins가 4단계 아래인 곳과 eclipse처럼 3단계 아래인 곳, 폴더 이름은 제각각
+		mkdir(drive, 'WS5_PACK', 'bin', 'studio', 'plugins', 'com.inswave.websquare.resource_1.0');
+		mkdir(drive, 'tools', 'eclipse', 'plugins', 'com.inswave.node.win32_16');
+		// WebSquare5 플러그인이 없는 Eclipse, 건너뛰는 곳에 있는 설치본
+		mkdir(drive, 'plain-eclipse', 'plugins', 'org.eclipse.core_1.0');
+		mkdir(drive, 'proj', 'node_modules', 'x', 'plugins', 'com.inswave.websquare.a');
+		mkdir(drive, 'Users', 'me', 'AppData', 'eclipse', 'plugins', 'com.inswave.websquare.a');
+		mkdir(drive, '.hidden', 'eclipse', 'plugins', 'com.inswave.websquare.a');
+		const { installs, complete } = await findInstalls([drive]);
+		assert.ok(complete);
+		assert.deepStrictEqual(installs, [path.join(drive, 'tools', 'eclipse'), path.join(drive, 'WS5_PACK', 'bin', 'studio')]);
+		assert.deepStrictEqual((await findInstalls([drive], { maxDepth: 3 })).installs, [path.join(drive, 'tools', 'eclipse')], '깊이 제한');
+	});
+
+	test('시간이 지나거나 취소되면 그때까지 찾은 것만(다 보지 못했다고 알림)', async () => {
+		const drive = fs.mkdtempSync(path.join(os.tmpdir(), 'ws5-drive-'));
+		mkdir(drive, 'eclipse', 'plugins', 'com.inswave.websquare.a');
+		assert.deepStrictEqual(await findInstalls([drive], { deadline: Date.now() - 1 }), { installs: [], complete: false });
+		assert.deepStrictEqual(await findInstalls([drive], { cancelled: () => true }), { installs: [], complete: false });
+	});
+
+	test('설치본 사용 흔적: 연 작업 공간(RECENT_WORKSPACES, 한글·여러 개)과 마지막 실행 시각', async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ws5-eclipse-'));
+		const settings = path.join(root, 'configuration', '.settings');
+		mkdir(settings);
+		mkdir(root, 'configuration', 'org.eclipse.osgi');
+		const used = new Date('2026-01-02T03:04:05Z');
+		fs.utimesSync(path.join(root, 'configuration', 'org.eclipse.osgi'), used, used);
+		fs.utimesSync(path.join(root, 'configuration'), new Date(0), new Date(0));
+		// Eclipse가 쓰는 형식: Java properties 이스케이프, 한글은 \uXXXX, 작업 공간은 \n으로 구분
+		fs.writeFileSync(path.join(settings, 'org.eclipse.ui.ide.prefs'),
+			'MAX_RECENT_WORKSPACES=10\r\nRECENT_WORKSPACES=D\\:\\\\eGov4\\\\workspace\\nD\\:\\\\\\uD504\\uB85C\\uC81D\\uD2B8\\\\ws\r\nRECENT_WORKSPACES_PROTOCOL=3\r\n', 'latin1');
+		assert.deepStrictEqual(await eclipseUsage(root), { lastUsed: used.getTime(), workspaces: ['D:\\eGov4\\workspace', 'D:\\프로젝트\\ws'] });
+		assert.deepStrictEqual(await eclipseUsage(path.join(root, 'none')), { lastUsed: 0, workspaces: [] }, '흔적이 없으면 0·빈 목록');
+		assert.strictEqual(unescapeProperty('C\\:\\\\a\\tb\\u0041'), 'C:\\a\tbA');
+	});
+
+	test('경로 포함 판단: 같은 폴더·하위는 안, 이름만 비슷한 옆 폴더는 밖', () => {
+		const ws = path.resolve('eGov', 'workspace');
+		assert.ok(isInside(path.join(ws, 'proj', 'webapp'), ws));
+		assert.ok(isInside(ws, ws));
+		assert.ok(!isInside(path.resolve('eGov', 'workspace2', 'proj'), ws));
+		assert.ok(!isInside(path.resolve('eGov'), ws));
 	});
 });

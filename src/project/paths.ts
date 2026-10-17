@@ -28,7 +28,8 @@ export function serial<T>(queues: Map<string, Promise<unknown>>, key: string, jo
 
 export const numeric = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: true });
 
-export async function findDirs(root: string, test: (dir: string, names: string[]) => boolean, maxDepth = 8): Promise<string[]> {
+/** skip: 들어가지 않을 하위 폴더 이름(찾는 것이 그 안에 있을 리 없는 큰 폴더를 건너뛰어 빠르게) */
+export async function findDirs(root: string, test: (dir: string, names: string[]) => boolean, maxDepth = 8, skip?: (name: string) => boolean): Promise<string[]> {
 	const results: string[] = [];
 	let level = [root];
 	let visited = 0;
@@ -43,7 +44,7 @@ export async function findDirs(root: string, test: (dir: string, names: string[]
 			if (test(dir, names)) {
 				results.push(dir);
 			}
-			next.push(...entries.filter(e => e.isDirectory()).map(e => path.join(dir, e.name)));
+			next.push(...entries.filter(e => e.isDirectory() && !skip?.(e.name)).map(e => path.join(dir, e.name)));
 		}
 		level = next;
 	}
