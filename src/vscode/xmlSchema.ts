@@ -11,6 +11,7 @@ import { cached, exists, findDirs, numeric } from '../project/paths';
 
 /** DTD 파일 이름 → 내용과 어디서 읽었는지(못 찾으면 undefined) */
 const dtds = new Map<string, Promise<{ text: string; source: string } | undefined>>();
+const parsedSchemas = new Map<string, XmlElementSpec[]>();
 
 const MISS_TTL = 60_000;
 const MAVEN_DIRS = [['org', 'mybatis'], ['org', 'apache', 'ibatis']];
@@ -56,19 +57,33 @@ export async function xmlSchemaOf(file: string, text: string): Promise<{ element
 		return undefined;
 	}
 	let dtd: { text: string; source: string } | undefined;
+	let fromJar = false;
 	if (!/^[a-z]+:\/\//i.test(doctype.system)) {
 		const local = path.resolve(path.dirname(file), doctype.system);
 		dtd = await readFile(local, 'utf8').then(t => ({ text: t, source: local }), () => undefined);
 	}
 	const name = path.posix.basename(doctype.system.replace(/\\/g, '/'));
-	dtd ??= await cached(dtds, name, async () => {
-		const found = await findDtd(name);
-		// 못 찾은 결과는 잠시만 기억한다(그사이 jar를 받았을 수 있다)
-		if (!found) {
-			setTimeout(() => dtds.delete(name), MISS_TTL);
+	if (!dtd) {
+		fromJar = true;
+		dtd = await cached(dtds, name, async () => {
+			const found = await findDtd(name);
+			// 못 찾은 결과는 잠시만 기억한다(그사이 jar를 받았을 수 있다)
+			if (!found) {
+				setTimeout(() => dtds.delete(name), MISS_TTL);
+			}
+			return found;
+		});
+	}
+	if (!dtd) {
+		return undefined;
+	}
+	const key = `${dtd.source}:${doctype.root}`;
+	let elements = fromJar ? parsedSchemas.get(key) : undefined;
+	if (!elements) {
+		elements = parseDtd(dtd.text, doctype.root);
+		if (fromJar) {
+			parsedSchemas.set(key, elements);
 		}
-		return found;
-	});
-	const elements = dtd && parseDtd(dtd.text, doctype.root);
-	return elements?.length ? { elements, source: dtd!.source } : undefined;
+	}
+	return elements.length ? { elements, source: dtd.source } : undefined;
 }

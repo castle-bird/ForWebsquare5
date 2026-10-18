@@ -303,15 +303,20 @@ export function editGridCells(text: string, root: XmlNode, cells: GridCellEdit[]
 		if (attrs.length) { pending.set(cell.index, attrs); }
 	}
 	const changes: TextEdit[] = [];
-	const visit = (node: XmlNode, ancestors: XmlNode[]) => {
+	const ancestors: XmlNode[] = [];
+	const visit = (node: XmlNode) => {
 		const attrs = pending.get(node.index);
 		if (attrs && isWs(node, 'column')) {
 			const change = setAttributes(text, node, attrs, ancestors);
 			if (change) { changes.push(change); }
 			pending.delete(node.index);
 		}
-		if (pending.size) { node.children.forEach(child => visit(child, [...ancestors, node])); }
+		if (pending.size) {
+			ancestors.push(node);
+			node.children.forEach(visit);
+			ancestors.pop();
+		}
 	};
-	visit(root, []);
+	visit(root);
 	return pending.size ? undefined : changes;
 }

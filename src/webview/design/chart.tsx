@@ -47,7 +47,7 @@ export function FusionChart({ node }: { node: XmlNode }) {
 		const observer = new ResizeObserver(draw);
 		observer.observe(canvas);
 		return () => observer.disconnect();
-	});
+	}, [node, collection]);
 	return <canvas ref={ref} style={{ display: 'block', width: '100%', height: '100%' }} />;
 }
 

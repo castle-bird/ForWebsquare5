@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { errorMessage } from '../core/errors';
 import { childTags, readWebConfig } from './config';
-import { exists, findDirs } from './paths';
+import { exists, findDirs, serial } from './paths';
 
 interface WpackConfig {
 	destRoot: string;
@@ -35,7 +35,8 @@ const nodeFor = (script: string) => path.resolve(path.dirname(script), '..', '..
  */
 export async function findWpack(eclipseRoot: string): Promise<string | undefined> {
 	const dirs = await findDirs(eclipseRoot, (dir, names) =>
-		(path.basename(dir) === 'w-pack' && names.includes('index.js')) || names.includes(WPACK_NAME));
+		(path.basename(dir) === 'w-pack' && names.includes('index.js')) || names.includes(WPACK_NAME),
+		8, (name, dir) => path.basename(dir) === 'node_modules' && name !== 'w-pack');
 	const scripts: string[] = [];
 	for (const dir of dirs) {
 		// 폴더 이름이 w-pack이어도 exe만 있는 곳(index.js 없음)이 있다
@@ -62,13 +63,7 @@ export async function eclipseDeployRoots(webRoot: string): Promise<string[]> {
 		if (await exists(server)) {
 			const project = path.relative(dir, webRoot).split(path.sep)[0];
 			const roots = (await readdir(server)).filter(n => /^tmp\d+$/.test(n)).map(n => path.join(server, n, 'wtpwebapps', project));
-			const found: string[] = [];
-			for (const r of roots) {
-				if (await exists(r)) {
-					found.push(r);
-				}
-			}
-			return found;
+			return (await Promise.all(roots.map(async r => await exists(r) ? r : undefined))).filter((r): r is string => !!r);
 		}
 	}
 	return [];
@@ -89,10 +84,11 @@ function serverOptions(config: WpackConfig, src: string, dest: string): Record<s
 	return { module: 'w-pack', baseDir: src, src, dest, js: '0', css: '0', noFixBaseDir: 'true', ...config.scopeCommon && { scopeCommon: config.scopeCommon } };
 }
 
-interface Server { child: ChildProcess; next: number; waiting: Map<number, { resolve(): void; reject(e: Error): void }>; queue: Promise<unknown> }
+interface Server { child: ChildProcess; next: number; waiting: Map<number, { resolve(): void; reject(e: Error): void }> }
 
 /** w-pack/index.js마다 상주 변환 프로세스 하나(wpackServer.js). 한 번 실패한 변환기는 CLI로만 */
 const servers = new Map<string, Server>();
+const serverQueues = new Map<string, Promise<unknown>>();
 const broken = new Set<string>();
 const SERVER_FILE = path.join(__dirname, 'wpackServer.js');
 
@@ -104,7 +100,7 @@ function startServer(script: string): Server | undefined {
 	const node = nodeFor(script);
 	// execArgv: 확장 호스트(Electron)의 실행 옵션을 물려받으면 설치본 Node가 모르는 옵션이라 바로 끝난다
 	const child = fork(SERVER_FILE, [path.dirname(script)], { execPath: node, execArgv: [], cwd: path.dirname(script), silent: true, windowsHide: true });
-	const server: Server = { child, next: 0, waiting: new Map(), queue: Promise.resolve() };
+	const server: Server = { child, next: 0, waiting: new Map() };
 	let log = '';
 	child.stdout?.resume();
 	child.stderr?.on('data', (d: Buffer) => { log = (log + d.toString()).slice(-4000); });
@@ -126,15 +122,14 @@ function startServer(script: string): Server | undefined {
 
 /** 상주 변환으로 src → dest. 60초 안에 끝나지 않으면 프로세스를 끝내고 실패 */
 function serverConvert(script: string, options: Record<string, string>): Promise<void> {
-	const server = startServer(script)!;
-	const job = server.queue.then(() => new Promise<void>((resolve, reject) => {
+	return serial(serverQueues, script, () => new Promise<void>((resolve, reject) => {
+		if (broken.has(script)) { reject(new Error('wpack 상주 변환 비활성화')); return; }
+		const server = startServer(script)!;
 		const id = ++server.next;
 		const timer = setTimeout(() => { server.child.kill(); reject(new Error('wpack 상주 변환 시간 초과')); }, 60_000);
 		server.waiting.set(id, { resolve: () => { clearTimeout(timer); resolve(); }, reject: e => { clearTimeout(timer); reject(e); } });
 		server.child.send({ id, options });
 	}));
-	server.queue = job.catch(() => undefined);
-	return job;
 }
 
 /** 첫 변환을 기다리지 않게 미리 띄운다(화면 편집기를 열 때). 쓸 수 없는 변환기면 아무것도 안 함 */
@@ -147,6 +142,7 @@ export async function warmWpack(exe: string | undefined): Promise<void> {
 export function disposeWpack(): void {
 	servers.forEach(server => server.child.kill());
 	servers.clear();
+	serverQueues.clear();
 }
 
 export async function convert(exe: string, config: WpackConfig, relPath: string, xml: string): Promise<string> {
@@ -195,9 +191,9 @@ export async function publish(webRoot: string, config: WpackConfig, relPath: str
 	for (const deploy of await eclipseDeployRoots(webRoot)) {
 		targets.push([path.join(deploy, jsRel), js], [path.join(deploy, relPath), xml]);
 	}
-	for (const [file, content] of targets) {
+	await Promise.all(targets.map(async ([file, content]) => {
 		await mkdir(path.dirname(file), { recursive: true });
 		await writeFile(file, content);
-	}
+	}));
 	return targets.map(t => t[0]);
 }

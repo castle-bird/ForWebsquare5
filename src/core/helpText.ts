@@ -7,7 +7,7 @@ const HEADING = /^\(.+\)$/;
 // 코드 표시: 줄 끝 `;`·`{`·`}`, 주석 줄, function·scwin.·var 선언, 줄 앞 XML 태그
 const CODE = /;\s*(\/\/.*)?$|[{}]\s*$|^\s*[{}]|^\s*\/\/|\bfunction\s*\w*\s*\(|^\s*(var|let|const)\s|^\s*scwin\.|^\s*<\/?[A-Za-z][\w:.-]*[\s>/]/;
 
-const trimBlank = (lines: string[]) => {
+export const trimBlank = (lines: string[]) => {
 	let start = 0, end = lines.length;
 	while (start < end && !lines[start].trim()) { start++; }
 	while (end > start && !lines[end - 1].trim()) { end--; }
@@ -15,8 +15,8 @@ const trimBlank = (lines: string[]) => {
 };
 
 /** 가장 적게 들여쓴 만큼 왼쪽 공백을 걷어 낸다(코드 모양은 유지) */
-function dedent(lines: string[]): string[] {
-	const indent = Math.min(...lines.filter(l => l.trim()).map(l => /^\s*/.exec(l)![0].length));
+export function dedent(lines: string[]): string[] {
+	const indent = Math.min(...lines.filter(l => l.trim()).map(l => /^[ \t]*/.exec(l)![0].length));
 	return lines.map(l => l.slice(Number.isFinite(indent) ? indent : 0));
 }
 

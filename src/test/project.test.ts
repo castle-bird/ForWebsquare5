@@ -24,8 +24,10 @@ suite('웹 경로 경계', () => {
 			assert.throws(() => fromWebPath(root, '/%2e%2e%5csecret.xml', '/screens/main.xml'), /웹 루트 밖/);
 		}
 		assert.strictEqual(fromWebPath(root, '../img/a.png', '/screens/main.xml'), path.join(root, 'img', 'a.png'));
+		assert.strictEqual(fromWebPath(root, '../img/a.png', '/screens/dir#1/main?2.xml'), path.join(root, 'screens', 'img', 'a.png'));
 		assert.strictEqual(fromWebPath(root, '/images/한 글.png?x=1#icon', '/screens/main.xml'), path.join(root, 'images', '한 글.png'));
 		assert.strictEqual(fromWebPath(root, '/..assets/a.png', '/screens/main.xml'), path.join(root, '..assets', 'a.png'));
+		assert.throws(() => fromWebPath(root, '//evil.com/a.xml', '/screens/main.xml'), /웹 루트 밖/);
 	});
 });
 

@@ -4,7 +4,8 @@ import { execFile } from 'node:child_process';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { exists } from './paths';
+import { exists, isInside } from './paths';
+export { isInside };
 
 /** 훑지 않는 폴더(소문자): 시스템·사용자 앱 데이터·의존성·빌드 결과. 점으로 시작하는 폴더와 바로가기(junction)도 들어가지 않는다 */
 const SKIP = new Set([
@@ -88,12 +89,6 @@ export async function eclipseUsage(root: string): Promise<{ lastUsed: number; wo
 	const line = prefs.split(/\r?\n/).find(l => l.startsWith('RECENT_WORKSPACES='));
 	const workspaces = line ? unescapeProperty(line.slice('RECENT_WORKSPACES='.length)).split('\n').map(s => s.trim()).filter(Boolean) : [];
 	return { lastUsed: Math.max(...times), workspaces };
-}
-
-/** file이 dir 안에 있거나 dir 자체인지(Windows는 대소문자 무시) */
-export function isInside(file: string, dir: string): boolean {
-	const relative = path.relative(dir, file);
-	return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
 }
 
 /** 훑을 곳: Windows는 로컬 고정 드라이브(C:·D: 등, 네트워크·이동식 제외), 그 밖에는 홈·/opt·/Applications */

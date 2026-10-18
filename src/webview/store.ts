@@ -4,14 +4,14 @@ import { DEFAULT_LINK_EXTS, DEFAULT_LINK_TABS, type LinkTab } from '../core/link
 import type { CodeThemeState } from '../core/codeTheme';
 import type { Blame } from '../core/blame';
 import { DEFAULT_CODE_OPTIONS, type CodeOptions } from '../core/codeOptions';
-import { findNode, isWs, isXf, localName, nodeAt, pathTo, uniqueId, usedIds, type XmlNode } from '../core/xmlModel';
+import { findNode, isWs, isXf, localName, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
 import type { DropPosition } from '../core/paste';
 import { selectionIndex } from '../core/selection';
 import { movedIndexes } from '../core/move';
 import { leadOf, sourceChange, type TextEdit } from '../core/edit';
 import { errorMessage } from '../core/errors';
 import { isStructure, pasteNode } from '../core/paste';
-import { wrapProblem } from '../core/wrap';
+import { nextGroupId, wrapProblem } from '../core/wrap';
 import { isDataRoot } from '../core/data';
 import { isMerged, mergeProblem } from '../core/merge';
 import { setStyle, styleChanges } from '../core/style';
@@ -178,12 +178,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 		} else if (data.type === 'definitions') {
 			set({ defs: data });
 		} else if (data.type === 'styles') {
-			// 외부 웹 폰트: @font-face는 Shadow DOM 안에서 안 먹어서 문서에 붙인다 (폰트는 캔버스에서도 보인다)
-			for (const href of data.imports ?? []) {
-				if (!document.querySelector(`link[href="${CSS.escape(href)}"]`)) {
-					document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href }));
-				}
-			}
 			set({ styles: data });
 		} else if (data.type === 'scriptApi') {
 			set({ api: data });
@@ -337,7 +331,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 		if (problem) { post({ type: 'warn', message: problem }); return; }
 		const [first, ...more] = components;
 		post({ type: 'wrap', version: doc.version, index: first.index, ...more.length && { more: more.map(n => n.index) } });
-		set({ selected: first.index, extra: [], pendingSelect: uniqueId(usedIds(root), 'group') });
+		set({ selected: first.index, extra: [], pendingSelect: nextGroupId(root) });
 	},
 
 	del: () => {

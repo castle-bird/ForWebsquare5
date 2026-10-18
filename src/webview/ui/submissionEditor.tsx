@@ -123,10 +123,7 @@ export function SubmissionEditor({ initial, editing, busy, externalError, offset
 				</section>
 			</div>
 			{(error || externalError) && <p className="error" role="alert">{error || externalError}</p>}
-			<div className="submission-actions">
-				<button type="button" className="btn btn-secondary" onClick={onClose}>닫기</button>
-				<button type="submit" className="btn btn-primary" disabled={busy}>확인</button>
-			</div>
+			<PopupActions onClose={onClose} applyDisabled={busy} />
 		</form>
 		{resizeHandles}
 		{picker && <DataRefPicker key={picker} kind={picker} value={fields[picker]} dataIds={dataIds} offsetIndex={offsetIndex + 1}

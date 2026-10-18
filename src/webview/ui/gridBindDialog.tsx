@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { GRID_BIND_MODES, type GridBindMode, type GridExtras } from '../../core/grid';
-import { PopupTitle, usePopupWindow } from './popupWindow';
+import { PopupActions, PopupTitle, usePopupWindow } from './popupWindow';
 
 export function GridBindDialog({ gridId, listId, columnCount, hasContent, onConfirm, onClose }: {
 	gridId: string; listId: string; columnCount: number; hasContent: boolean; onConfirm(mode: GridBindMode, extras: GridExtras): void; onClose(): void;
@@ -35,10 +35,7 @@ export function GridBindDialog({ gridId, listId, columnCount, hasContent, onConf
 					</div>
 				</section>
 			</div>
-			<div className="submission-actions">
-				<button type="button" className="btn btn-secondary" onClick={onClose}>닫기</button>
-				<button type="submit" className="btn btn-primary">확인</button>
-			</div>
+			<PopupActions onClose={onClose} />
 		</form>
 		{resizeHandles}
 	</dialog>;

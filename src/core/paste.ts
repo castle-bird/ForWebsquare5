@@ -1,4 +1,4 @@
-import { applyEdits, eolOf, leadOf, setAttribute, startTagEnd, type TextEdit } from './edit';
+import { applyEdits, eolOf, indentStep, leadOf, setAttribute, startTagEnd, type TextEdit } from './edit';
 import { EV, findNode, isWs, isXf, localName, parseXml, pathTo, uniqueId, usedIds, type XmlNode } from './xmlModel';
 import { DATA_KINDS } from './data';
 
@@ -19,7 +19,7 @@ export const isContainer = (n: XmlNode) => CONTAINERS.has(localName(n.tag));
 export type DropPosition = 'before' | 'after' | 'inside';
 export type InsertPosition = DropPosition | 'first';
 
-/** 줄마다 들여쓰기 from → to. 속성값 안의 줄(Eclipse가 쓴 여러 줄 ref 등)은 값이라 건드리지 않는다. s는 태그 바깥에서 시작 */
+/** 줄마다 들여쓰기 from → to. 속성값·주석·CDATA·처리 명령 안의 줄은 값이라 건드리지 않는다. s는 태그 바깥에서 시작 */
 export function reindentLines(s: string, from: string, to: string): string {
 	const inValue = new Set<number>();
 	for (let i = 0, tag = false, quote = ''; i < s.length; i++) {
@@ -29,13 +29,25 @@ export function reindentLines(s: string, from: string, to: string): string {
 		} else if (tag) {
 			if (c === '"' || c === "'") { quote = c; } else if (c === '>') { tag = false; }
 		} else if (c === '<') {
-			// 주석·CDATA·처리 명령 안의 따옴표·<는 태그가 아니다
+			// 주석·CDATA·처리 명령 안의 따옴표·<·줄바꿈은 태그 밖 값이라 건드리지 않는다
 			const close = s.startsWith('<!--', i) ? '-->' : s.startsWith('<![CDATA[', i) ? ']]>' : s.startsWith('<?', i) ? '?>' : '';
-			if (close) { const end = s.indexOf(close, i); i = end < 0 ? s.length : end + close.length - 1; } else { tag = true; }
+			if (close) {
+				const end = s.indexOf(close, i);
+				const toIndex = end < 0 ? s.length : end + close.length;
+				for (; i < toIndex; i++) { if (s[i] === '\n') { inValue.add(i); } }
+				i--;
+			} else { tag = true; }
 		}
 	}
 	return s.replace(/(\r?\n)([ \t]*)/g, (line: string, nl: string, ws: string, at: number) =>
 		inValue.has(at + nl.length - 1) ? line : nl + (ws.startsWith(from) ? to + ws.slice(from.length) : ws));
+}
+
+/** 여러 노드의 원문을 첫 노드의 들여쓰기에 맞춰 하나로 묶는다(insertNode 입력용) */
+export function joinSnippets(text: string, nodes: XmlNode[]): string {
+	const lead = (n: XmlNode) => leadOf(text, n.start) ?? '';
+	const first = lead(nodes[0]);
+	return first + nodes.map(n => reindentLines(text.slice(n.start, n.end), lead(n), first)).join(eolOf(text) + first);
 }
 
 export function insertNode(text: string, target: XmlNode, position: InsertPosition, xml: string): TextEdit {
@@ -77,7 +89,7 @@ export function insertNode(text: string, target: XmlNode, position: InsertPositi
 	const lineStart = close - closeIndent.length;
 	const last = target.children.at(-1);
 	const lastIndent = last && leadOf(text, last.start);
-	const childIndent = lastIndent ?? closeIndent + (closeIndent.includes(' ') && !closeIndent.includes('\t') ? '    ' : '\t');
+	const childIndent = lastIndent ?? closeIndent + indentStep(closeIndent);
 	return { start: lineStart, end: lineStart, replacement: childIndent + reindent(childIndent) + eol };
 }
 

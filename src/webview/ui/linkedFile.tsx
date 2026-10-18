@@ -3,7 +3,7 @@ import { cleanPath, linkTarget, type LinkTab } from '../../core/links';
 import type { LinkState, ToExtension } from '../../core/protocol';
 import { CodeEditor } from '../editor/codeEditor';
 import { linkLanguage } from '../editor/linkLanguages';
-import { isModKey } from '../keys';
+import { isModKey, isUndoRedo } from '../keys';
 import { post, useEditorStore } from '../store';
 import { Menu } from './menu';
 import { FileInput } from './fileInput';
@@ -67,7 +67,7 @@ function LinkedFile({ tab, state, active }: { tab: LinkTab; state: LinkState; ac
 				if (linked) {
 					post({ type: 'saveLink', kind });
 				}
-			} else if ((isModKey(e, 'z') || isModKey(e, 'y')) && !(e.target as Element).closest?.('.cm-editor')) {
+			} else if (isUndoRedo(e) && !(e.target as Element).closest?.('.cm-editor')) {
 				e.stopPropagation();
 			}
 		};

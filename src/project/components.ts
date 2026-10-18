@@ -54,7 +54,8 @@ export function annotate(root: XmlNode, defs: ComponentDef[], udcs: ReadonlySet<
 		const key = d.ns + ' ' + d.id;
 		byKey.set(key, [...byKey.get(key) ?? [], i]);
 	});
-	const walk = (node: XmlNode, ancestors: string[]) => {
+	const ancestors: string[] = [];
+	const walk = (node: XmlNode) => {
 		let candidates = byKey.get(node.ns + ' ' + localName(node.tag)) ?? [];
 		const narrow = (keep: (d: ComponentDef) => boolean) => {
 			const kept = candidates.filter(i => keep(defs[i]));
@@ -63,7 +64,8 @@ export function annotate(root: XmlNode, defs: ComponentDef[], udcs: ReadonlySet<
 			}
 		};
 		if (candidates.length > 1) {
-			narrow(d => d.parents.includes(ancestors[0]));
+			const parent = ancestors.at(-1);
+			if (parent) { narrow(d => d.parents.includes(parent)); }
 			narrow(d => d.bases.some(b => ancestors.includes(b)));
 			const full = node.attrs.appearance === 'full';
 			narrow(d => ['radio', 'checkbox'].includes(d.realType) === full);
@@ -72,9 +74,11 @@ export function annotate(root: XmlNode, defs: ComponentDef[], udcs: ReadonlySet<
 		if (node.def === undefined && udcs.has(localName(node.tag))) {
 			node.udc = true;
 		}
-		node.children.forEach(c => walk(c, [localName(node.tag), ...ancestors]));
+		ancestors.push(localName(node.tag));
+		node.children.forEach(walk);
+		ancestors.pop();
 	};
-	walk(root, []);
+	walk(root);
 }
 
 export async function findDefinitionFile(eclipseRoot: string): Promise<string | undefined> {

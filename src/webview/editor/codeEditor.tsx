@@ -471,7 +471,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 		signatureSource.current = signature;
 	}, [definition, signature]);
 	// 처음 값은 편집기를 만들 때 이미 넣었다
-	const applied = useRef({ lang, wordWrap, minimapOn });
+	const applied = useRef({ lang, wordWrap, minimapOn, blameOn, readOnly });
 	useEffect(() => {
 		if (applied.current.lang !== lang) {
 			applied.current.lang = lang;
@@ -497,9 +497,15 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 	useEffect(() => {
 		const v = view.current, s = sync.current;
 		if (!v) { return; }
-		const effects = [blameConf.reconfigure(blameOn ? blame : [])];
-		if (blameOn && blameData && blameData.version === s.base && !s.inFlight && !s.queued && !s.conflict) { effects.push(blameEffect(blameData.data)); }
-		v.dispatch({ effects });
+		const effects = [];
+		if (applied.current.blameOn !== blameOn) {
+			applied.current.blameOn = blameOn;
+			effects.push(blameConf.reconfigure(blameOn ? blame : []));
+		}
+		if (blameOn && blameData && blameData.version === s.base && !s.inFlight && !s.queued && !s.conflict) {
+			effects.push(blameEffect(blameData.data));
+		}
+		if (effects.length) { v.dispatch({ effects }); }
 	}, [blameOn, blameData]);
 	useEffect(() => {
 		remoteProblems.current = diagnostics;
@@ -513,7 +519,10 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 		}
 	}, [codeTheme]);
 	useEffect(() => {
-		view.current?.dispatch({ effects: readOnlyConf.reconfigure(EditorState.readOnly.of(readOnly)) });
+		if (applied.current.readOnly !== readOnly) {
+			applied.current.readOnly = readOnly;
+			view.current?.dispatch({ effects: readOnlyConf.reconfigure(EditorState.readOnly.of(readOnly)) });
+		}
 	}, [readOnly]);
 	// 다른 곳(Design·VS Code)에서 바뀐 문서. 보낸 편집이 처리 중이면 그 결과(ack)가 기준이라 건너뛴다.
 	useEffect(() => {

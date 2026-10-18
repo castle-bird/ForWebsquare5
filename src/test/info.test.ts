@@ -31,6 +31,8 @@ suite('Info 탭 개정 이력', () => {
 		assert.throws(() => editHistory(mixed, m.root, m.head, []));
 		const bare = '<html><head><title/></head></html>', b = headOf(bare);
 		assert.throws(() => editHistory(bare, b.root, b.head, [row('1', 'x')]), /namespace/);
+		const defNs = '<html xmlns="http://www.inswave.com/websquare">\n\t<head>\n\t\t<model/>\n\t</head>\n</html>', d = headOf(defNs);
+		assert.ok(applyEdits(defNs, [editHistory(defNs, d.root, d.head, [row('1', 'x')])]).includes('<historyInfo>\n\t\t\t<history meta_no="1"'));
 	});
 });
 

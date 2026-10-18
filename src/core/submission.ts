@@ -1,4 +1,4 @@
-import { eolOf, startTagEnd, withAttrs, type TextEdit } from './edit';
+import { eolOf, setAttributes, withAttrs, type TextEdit } from './edit';
 import { insertNode } from './paste';
 import { assertFreeId, isXf, pathTo, uniqueId, usedIds, type XmlNode } from './xmlModel';
 
@@ -62,14 +62,9 @@ const dataAttr = (text: string, name: string, value: string) => DATA_ATTRS.inclu
 export function editSubmissionNode(text: string, root: XmlNode, node: XmlNode, fields: SubmissionFields): TextEdit | undefined {
 	if (!isXf(node, 'submission')) { throw new Error('xf:submission만 수정할 수 있습니다.'); }
 	assertFreeId(root, fields.id, '올바른 Submission ID를 입력해 주세요.', node);
-	const end = startTagEnd(text, node.start) + 1;
-	const tag = text.slice(node.start, end);
-	const selfClosing = tag.endsWith('/>');
 	const changed = Object.entries(fields).filter(([name, value]) => value !== (node.attrs[name] ?? ''));
-	const xml = withAttrs(selfClosing ? tag : `${tag.slice(0, -1)}/>`, changed.map(([name, value]) => [name, dataAttr(text, name, value) || undefined]),
+	return setAttributes(text, node, changed.map(([name, value]) => [name, dataAttr(text, name, value) || undefined]),
 		pathTo(root, node.index)?.slice(0, -1), DATA_ATTRS);
-	const replacement = selfClosing ? xml : `${xml.slice(0, -2)}>`;
-	return replacement === tag ? undefined : { start: node.start, end, replacement };
 }
 
 export function addSubmissionNode(text: string, root: XmlNode, model: XmlNode, fields: SubmissionFields): TextEdit {

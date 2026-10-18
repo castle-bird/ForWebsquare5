@@ -8,24 +8,30 @@ import { emptyTables, readUsedTables } from '../core/tables';
 import type { ToExtension, ToWebview } from '../core/protocol';
 
 const FOLDER_KEY = 'for-websquare5.usedTablesFolder';
+const folderChanged = new vscode.EventEmitter<void>();
 type TablesMessage = Extract<ToExtension, { type: 'loadUsedTables' | 'saveUsedTables' | 'chooseTablesFolder' | 'saveTablesImage' }>;
 
 export class UsedTablesStore {
-	/** 저장은 차례로(빠르게 연달아 고쳐도 옛 내용이 새 내용을 덮지 않게) */
+	/** 저장·다시 읽기는 차례로(빠르게 연달아 고쳐도 옛 내용이 새 내용을 덮지 않게) */
 	private saving: Promise<unknown> = Promise.resolve();
 	/** 지금 보는 JSON 파일 감시 */
 	private watcher?: { file: string; watcher?: vscode.FileSystemWatcher; timer?: NodeJS.Timeout };
 	private disposed = false;
 	/** 이 저장소가 마지막으로 읽거나 쓴 JSON 글자. 감시에 걸린 내용이 이것과 같으면 우리가 쓴 것이라 다시 읽지 않는다 */
 	private known?: string;
+	private readonly folderSub = folderChanged.event(() => this.queueLoad());
 
 	constructor(private readonly screen: vscode.Uri, private readonly state: vscode.Memento, private readonly defaultFolder: vscode.Uri,
 		private readonly post: (msg: ToWebview) => Thenable<unknown>) {}
 
+	private queueLoad(): void {
+		this.saving = this.saving.then(() => this.load()).catch(() => undefined);
+	}
+
 	/** 처리한 메시지면 true */
 	handle(msg: ToExtension): msg is TablesMessage {
 		switch (msg.type) {
-			case 'loadUsedTables': void this.load(); return true;
+			case 'loadUsedTables': this.queueLoad(); return true;
 			case 'chooseTablesFolder': void this.choose(msg.pick); return true;
 			case 'saveUsedTables': {
 				this.saving = this.saving.then(() => this.save(msg.data)).catch(e => this.post({ type: 'usedTables', ...this.where(), error: `저장 실패: ${errorMessage(e)}` }));
@@ -44,15 +50,19 @@ export class UsedTablesStore {
 	}
 
 	private async load(): Promise<void> {
+		if (this.disposed) { return; }
 		const { folder, file } = this.where();
 		await this.watch(file);
+		if (this.disposed) { return; }
 		if (!folder || !file) { await this.post({ type: 'usedTables' }); return; }
 		try {
 			const text = await fs.readFile(file, 'utf8');
+			if (this.disposed) { return; }
 			this.known = text;
 			const data = readUsedTables(JSON.parse(text));
 			await this.post({ type: 'usedTables', folder, file, data });
 		} catch (e) {
+			if (this.disposed) { return; }
 			const missing = (e as NodeJS.ErrnoException).code === 'ENOENT';
 			await this.post({ type: 'usedTables', folder, file, data: emptyTables(), ...!missing && { error: `읽기 실패(빈 목록으로 시작하며, 저장하면 덮어씁니다): ${errorMessage(e)}` } });
 		}
@@ -66,7 +76,7 @@ export class UsedTablesStore {
 			folder = uri.fsPath;
 		}
 		await this.state.update(FOLDER_KEY, folder);
-		await this.load();
+		folderChanged.fire();
 	}
 
 	/** ERD 그림 PNG: 기본 위치는 JSON 옆(폴더를 안 골랐으면 화면 옆) 같은 이름 */
@@ -141,6 +151,7 @@ export class UsedTablesStore {
 
 	dispose(): void {
 		this.disposed = true;
+		this.folderSub.dispose();
 		this.unwatch();
 	}
 }

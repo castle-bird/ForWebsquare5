@@ -1,6 +1,6 @@
 // 표 행을 손잡이(Codicon gripper)로 끌어 순서 바꾸기(DataList·DataMap, 선택 항목 팝업, 팔레트 즐겨찾기). 놓을 자리는 행의 위·아래 절반
 // 브라우저 끌기(draggable)는 끄는 동안 휠을 막아서 포인터 이벤트로 끈다: 휠로 굴리거나 목록 위·아래 가장자리로 가져가면 스크롤
-import { useRef, useState, type Dispatch, type PointerEvent, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type PointerEvent, type SetStateAction } from 'react';
 import { edgeSpeed } from './edgeScroll';
 import { capturePointer } from './pointerCapture';
 
@@ -22,6 +22,7 @@ export function useRowDrag<T extends { uid: string | number }>(setRows: Dispatch
 	/** data 속성(문자열) → 원래 uid(숫자일 수 있음) */
 	const uids = useRef(new Map<string, T['uid']>());
 	const [drop, setDrop] = useState<{ uid: T['uid']; after: boolean }>();
+	useEffect(() => () => drag.current?.stop(), []);
 
 	/** 포인터 높이(스크롤 칸 밖이면 칸 안으로 당김)에 있는 같은 목록의 행과 그 위·아래 절반 */
 	const update = (d: Drag<T['uid']>) => {

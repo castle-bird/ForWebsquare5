@@ -30,6 +30,19 @@ window.addEventListener('message', ({ data }: MessageEvent<ToWebview>) => {
 	}
 });
 
+function waitReply<T>(map: Map<number, (v: T | undefined) => void>, id: number, timeout: number, abort?: CompletionContext): Promise<T | undefined> {
+	return new Promise<T | undefined>(resolve => {
+		const done = (v: T | undefined) => {
+			map.delete(id);
+			clearTimeout(timer);
+			resolve(v);
+		};
+		const timer = setTimeout(() => done(undefined), timeout);
+		map.set(id, done);
+		abort?.addEventListener('abort', () => done(undefined));
+	});
+}
+
 /** 연결 탭 마우스 올림 설명: VS Code 언어 확장(Java 언어 서버의 Javadoc 등). 확장 문서와 내용이 같을 때(synced)만 묻는다 */
 export function remoteHover(target: CodeTarget, post: (msg: ToExtension) => void, synced: () => number | undefined) {
 	return async (view: EditorView, pos: number) => {
@@ -37,12 +50,9 @@ export function remoteHover(target: CodeTarget, post: (msg: ToExtension) => void
 		const word = view.state.wordAt(pos);
 		if (version === undefined || !word) { return null; }
 		const line = view.state.doc.lineAt(pos), id = ++nextId;
-		const text = await new Promise<string | undefined>(resolve => {
-			const done = (t: string | undefined) => { pendingHovers.delete(id); clearTimeout(timer); resolve(t); };
-			const timer = setTimeout(() => done(undefined), TIMEOUT);
-			pendingHovers.set(id, done);
-			post({ type: 'hover', target, id, version, line: line.number - 1, ch: pos - line.from });
-		});
+		const waiting = waitReply(pendingHovers, id, TIMEOUT);
+		post({ type: 'hover', target, id, version, line: line.number - 1, ch: pos - line.from });
+		const text = await waiting;
 		if (!text) { return null; }
 		const dom = colorDoc(renderMarkdown(text, codeHighlighter(view.state)), view.state);
 		dom.classList.add('ws-hover');
@@ -58,12 +68,9 @@ export function remoteSignature(target: CodeTarget, post: (msg: ToExtension) => 
 		const version = await whenSynced();
 		if (version === undefined) { return undefined; }
 		const line = view.state.doc.lineAt(pos), id = ++nextId;
-		return new Promise<SignatureInfo | undefined>(resolve => {
-			const done = (s: SignatureInfo | undefined) => { pendingSignatures.delete(id); clearTimeout(timer); resolve(s); };
-			const timer = setTimeout(() => done(undefined), TIMEOUT);
-			pendingSignatures.set(id, done);
-			post({ type: 'signature', target, id, version, line: line.number - 1, ch: pos - line.from, trigger });
-		});
+		const waiting = waitReply(pendingSignatures, id, TIMEOUT);
+		post({ type: 'signature', target, id, version, line: line.number - 1, ch: pos - line.from, trigger });
+		return waiting;
 	};
 }
 
@@ -138,26 +145,10 @@ function toCompletion(item: RemoteCompletion, rank: number, detail: Promise<Remo
 
 function request(post: (msg: ToExtension) => void, msg: Omit<Extract<ToExtension, { type: 'complete' }>, 'type' | 'id'>, context: CompletionContext): [Promise<Reply | undefined>, Details] {
 	const id = ++nextId;
-	const details: Details = new Promise(resolve => {
-		const done = (items: RemoteCompletionDetail[] | undefined) => {
-			pendingDetails.delete(id);
-			clearTimeout(timer);
-			resolve(items);
-		};
-		const timer = setTimeout(() => done(undefined), DETAILS_TIMEOUT);
-		pendingDetails.set(id, done);
-	});
-	return [new Promise(resolve => {
-		const done = (reply: Reply | undefined) => {
-			pending.delete(id);
-			clearTimeout(timer);
-			resolve(reply);
-		};
-		const timer = setTimeout(() => done(undefined), TIMEOUT);
-		pending.set(id, done);
-		context.addEventListener('abort', () => done(undefined));
-		post({ type: 'complete', id, ...msg });
-	}), details];
+	const details: Details = waitReply(pendingDetails, id, DETAILS_TIMEOUT);
+	const replied = waitReply(pending, id, TIMEOUT, context);
+	post({ type: 'complete', id, ...msg });
+	return [replied, details];
 }
 
 /**

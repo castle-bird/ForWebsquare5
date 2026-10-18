@@ -186,7 +186,8 @@ export function useTreeRename(root: XmlNode | undefined, selected: number | unde
 		const onKey = (e: KeyboardEvent) => {
 			const el = e.composedPath()[0] as HTMLElement;
 			// 화면(캔버스)에서 고른 뒤의 F2는 부모 고르기(main.tsx)
-			if (e.key !== 'F2' || el.closest?.('input, textarea, select, [contenteditable], .code-editor') || lastPressedIn('.canvas-host')) { return; }
+			if (e.key !== 'F2' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey
+				|| el.closest?.('input, textarea, select, dialog, [contenteditable], .code-editor') || document.activeElement?.closest('dialog') || lastPressedIn('.canvas-host')) { return; }
 			const n = root && selected !== undefined ? nodeAt(root, selected) : undefined;
 			const row = n && document.querySelector<HTMLElement>('.pane .tree-row.selected');
 			if (n && row?.offsetParent) {

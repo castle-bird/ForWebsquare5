@@ -12,6 +12,9 @@ export function leadOf(text: string, pos: number): string | undefined {
 	return /^[ \t]*$/.test(lead) ? lead : undefined;
 }
 
+export const indentStep = (indent: string) => /^ +$/.test(indent) ? '    ' : '\t';
+export const indentUnit = (text: string) => /^([ \t]+)</m.exec(text)?.[1] ?? '\t';
+
 export const INVALID_XML_CHAR = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/;
 
 export const applyEdits = (text: string, edits: (TextEdit | undefined)[]) => edits.filter(e => e !== undefined)
@@ -122,16 +125,22 @@ const quoteFor = (value: string) => value.includes('"') && !value.includes("'") 
 
 /** literal: 줄바꿈 그대로 쓸 속성 이름(setAttribute 참고) */
 export function withAttrs(xml: string, attrs: [string, string | undefined][], ancestors: XmlNode[] = [], literal: string[] = []): string {
+	const node = parseXml(xml);
+	if (!node) { return xml; }
 	for (const [name, value] of attrs) {
-		xml = applyEdits(xml, [setAttribute(xml, parseXml(xml)!, name, value, ancestors, literal.includes(name))]);
+		const edit = setAttribute(xml, node, name, value, ancestors, literal.includes(name));
+		if (edit) {
+			xml = applyEdits(xml, [edit]);
+			if (edit.replacement.includes(' xmlns:ev=')) { node.attrs['xmlns:ev'] = 'http://www.w3.org/2001/xml-events'; }
+		}
 	}
 	return xml;
 }
 
 /** 여러 속성은 시작 태그만 고친다. 본문 재파싱 없이 따옴표·공백·접두사 검증을 유지한다. */
-export function setAttributes(text: string, node: XmlNode, attrs: [string, string | undefined][], ancestors: XmlNode[] = []): TextEdit | undefined {
+export function setAttributes(text: string, node: XmlNode, attrs: [string, string | undefined][], ancestors: XmlNode[] = [], literal: string[] = []): TextEdit | undefined {
 	const tag = text.slice(node.start, startTagEnd(text, node.start) + 1);
-	const change = sourceChange(tag, withAttrs(tag, attrs, ancestors));
+	const change = sourceChange(tag, withAttrs(tag, attrs, ancestors, literal));
 	return change && { ...change, start: node.start + change.start, end: node.start + change.end };
 }
 

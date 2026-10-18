@@ -6,10 +6,12 @@ export const isMapper = (xml: string) => /<!DOCTYPE\s+mapper\b|<mapper[\s>]/.tes
 
 const STATEMENT = /<(\/?)(select|insert|update|delete|sql)\b[^>]*?(\/?)>/g;
 
+const stripXmlComments = (s: string) => s.replace(/<!--[\s\S]*?-->/g, m => m.includes('\n') ? '\n' : '');
+
 /** offset이 SQL 주석 안인지: 같은 줄의 -- 뒤(문자열·XML 주석 안 -- 는 빼고), 아직 안 닫은 /* 뒤 */
 export function inSqlComment(xml: string, offset: number): boolean {
-	const before = xml.slice(0, offset);
-	const line = before.slice(before.lastIndexOf('\n') + 1).replace(/'[^']*'|<!--.*?-->/g, '');
+	const before = stripXmlComments(xml.slice(0, offset));
+	const line = before.slice(before.lastIndexOf('\n') + 1).replace(/'[^']*'/g, '');
 	return line.includes('--') || before.lastIndexOf('/*') > before.lastIndexOf('*/');
 }
 
@@ -24,7 +26,7 @@ export function inSql(xml: string, offset: number): boolean {
 		return false;
 	}
 	let open = false;
-	for (const m of before.matchAll(STATEMENT)) {
+	for (const m of stripXmlComments(before).matchAll(STATEMENT)) {
 		open = !m[1] && !m[3];
 	}
 	return open;

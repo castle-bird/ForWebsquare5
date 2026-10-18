@@ -8,6 +8,7 @@ import { ARROWS, GROUP_SIZE, MEMO_SIZE, NOTE_COLORS, SHAPE_SIZE, SHAPES, type Ar
 import { toPng } from 'html-to-image';
 import { errorMessage } from '../../core/errors';
 import { isModKey } from '../keys';
+import { isLightTheme } from '../editor/themes';
 import { post } from '../store';
 import { DiagramContext, Field, NODE_TYPES, editItem, newId, editTable, fieldKey, insertColumn, mixedKeys, shapeIcon, useDiagram,
 	type FlowNode, type GroupNode, type MemoNode, type MenuItem, type ShapeNode, type TableNode } from './usedTablesNodes';
@@ -515,21 +516,24 @@ function Diagram({ data, onChange, onUndo, onRedo, canUndo, canRedo }: { data: U
 	};
 
 	// 테이블 하나만 고르면 그것과 이어진 것만 또렷하게(나머지는 흐리게). 선은 마주 보는 면에
-	const picked = nodes.filter(n => n.selected);
-	const focus = picked.length === 1 && picked[0].type === 'table' ? picked[0].id : undefined;
-	const near = new Set(focus ? [focus, ...edges.filter(e => e.source === focus || e.target === focus).flatMap(e => [e.source, e.target])] : []);
-	// 고른 도형은 위로(테이블에 가려 크기 손잡이·연결점을 못 잡지 않게, 그림 도구처럼)
-	const shownNodes = nodes.map(n => {
-		const raised = n.type === 'shape' && n.selected ? { ...n, zIndex: 1 } : n;
-		return focus && n.type !== 'group-frame' && !near.has(n.id) ? { ...raised, data: { ...raised.data, dim: true } } as FlowNode : raised;
-	});
-	const byId = new Map(nodes.map(n => [n.id, n]));
-	const shownEdges = edges.map(e => {
-		const a = byId.get(e.source), b = byId.get(e.target);
-		const [sourceHandle, targetHandle] = a && b ? facingSides(a, b) : [undefined, undefined];
-		return { ...e, sourceHandle, targetHandle, className: !focus ? undefined : e.source === focus || e.target === focus ? 'hot' : 'dim' };
-	});
-	const light = document.body.classList.contains('vscode-light') || document.body.classList.contains('vscode-high-contrast-light');
+	const { shownNodes, shownEdges } = useMemo(() => {
+		const picked = nodes.filter(n => n.selected);
+		const focus = picked.length === 1 && picked[0].type === 'table' ? picked[0].id : undefined;
+		const near = new Set(focus ? [focus, ...edges.filter(e => e.source === focus || e.target === focus).flatMap(e => [e.source, e.target])] : []);
+		// 고른 도형은 위로(테이블에 가려 크기 손잡이·연결점을 못 잡지 않게, 그림 도구처럼)
+		const shownNodes = nodes.map(n => {
+			const raised = n.type === 'shape' && n.selected ? { ...n, zIndex: 1 } : n;
+			return focus && n.type !== 'group-frame' && !near.has(n.id) ? { ...raised, data: { ...raised.data, dim: true } } as FlowNode : raised;
+		});
+		const byId = new Map(nodes.map(n => [n.id, n]));
+		const shownEdges = edges.map(e => {
+			const a = byId.get(e.source), b = byId.get(e.target);
+			const [sourceHandle, targetHandle] = a && b ? facingSides(a, b) : [undefined, undefined];
+			return { ...e, sourceHandle, targetHandle, className: !focus ? undefined : e.source === focus || e.target === focus ? 'hot' : 'dim' };
+		});
+		return { shownNodes, shownEdges };
+	}, [nodes, edges]);
+	const light = isLightTheme();
 	const tool = (icon: string | ReactNode, label: string, run: () => void, extra?: { disabled?: boolean; title?: string; pressed?: boolean; text?: boolean; badge?: number }): ReactNode =>
 		<button type="button" className={clsx('flow-tool', { 'with-text': extra?.text })} title={extra?.title ?? label} aria-label={label} disabled={extra?.disabled} aria-pressed={extra?.pressed} onClick={run}>
 			{typeof icon === 'string' ? <span className={`codicon codicon-${icon}`} /> : icon}{extra?.text && <span>{label}</span>}{extra?.badge && <span className="tool-key">{extra.badge}</span>}</button>;

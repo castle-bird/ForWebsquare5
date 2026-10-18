@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { clsx } from 'clsx';
 import type { ComponentDef } from '../../core/protocol';
 import { EV, type XmlNode } from '../../core/xmlModel';
@@ -111,6 +111,9 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 	};
 
 	useEffect(hide, [node?.index]); // 노드 객체는 문서가 바뀔 때마다 새로 오므로 번호로 비교
+	useEffect(() => () => window.clearTimeout(fadeTimer.current), []);
+	const propGroups = useMemo(() => node && propertyGroups(node, def, choices), [node, def, choices]);
+	const evGroups = useMemo(() => node && eventGroups(node, def), [node, def]);
 	useEffect(() => {
 		if (!help) {
 			return;
@@ -144,8 +147,8 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 			}}>
 			{warning && <p className="warning" title={warning}>{warning}</p>}
 			<Tabs order={tabOrder} onReorder={setTabOrder} items={{
-				Property: node && <PropertyTable groups={propertyGroups(node, def, choices)} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} />,
-				Event: node && <PropertyTable groups={eventGroups(node, def)} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} isEvent onScript={onScript} />,
+				Property: propGroups && <PropertyTable groups={propGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} />,
+				Event: evGroups && <PropertyTable groups={evGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} isEvent onScript={onScript} />,
 			}} />
 			<div className="style-area">
 				<span>Style</span>
@@ -166,7 +169,7 @@ function PropertyTable({ groups: all, search, onSearch, keyWidth, onKeyWidth, on
 	groups: RowGroup[]; search: Search; onSearch(s: Search): void; keyWidth?: number; onKeyWidth(w: number): void; onKeyClick(e: ReactMouseEvent<HTMLElement>, row: Row): void; onEdit: Edit;
 	isEvent?: boolean; onScript?(eventName: string): void;
 }) {
-	const match = matcher(search.text);
+	const match = useMemo(() => matcher(search.text), [search.text]);
 	const groups = match ? all.map(g => ({ ...g, rows: g.rows.filter(r => match(r[search.field])) })).filter(g => g.rows.length) : all;
 	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 	const toggle = (c: string) => setCollapsed(s => {
@@ -227,7 +230,8 @@ function ColumnResizer({ onResize }: { onResize(width: number): void }) {
 				onResize(Math.min(d.max, Math.max(60, d.width + e.clientX - d.x)));
 			}
 		}}
-		onPointerUp={() => drag.current = undefined} />;
+		onPointerUp={() => drag.current = undefined}
+		onPointerCancel={() => drag.current = undefined} />;
 }
 
 function Editable({ value, onCommit, className, disabled, multiline, suggestions }: {

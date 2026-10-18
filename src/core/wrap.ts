@@ -1,6 +1,8 @@
-import { deleteNode, eolOf, leadOf, type TextEdit } from './edit';
+import { deleteNode, eolOf, indentUnit, leadOf, type TextEdit } from './edit';
 import { inScreenBody, isContainer } from './paste';
 import { localName, pathTo, uniqueId, usedIds, XFORMS_NS, type XmlNode } from './xmlModel';
+
+export const nextGroupId = (root: XmlNode): string => uniqueId(usedIds(root), 'group');
 
 /** 원문을 다른 부모로 옮기지 않고 같은 부모 아래 컴포넌트만 감싼다. */
 export function wrapProblem(root: XmlNode, nodes: XmlNode[]): string | undefined {
@@ -32,8 +34,8 @@ export function wrapComponents(text: string, root: XmlNode, nodes: XmlNode[]): {
 	}
 	const tag = (prefix ? prefix + ':' : '') + 'group';
 	const xmlns = declaration ? '' : ` xmlns:${prefix}="${XFORMS_NS}"`;
-	const id = uniqueId(usedIds(root), 'group'), lead = leadOf(text, first.start) ?? '', eol = eolOf(text);
-	const unit = /^([ \t]+)</m.exec(text)?.[1] ?? '\t';
+	const id = nextGroupId(root), lead = leadOf(text, first.start) ?? '', eol = eolOf(text);
+	const unit = indentUnit(text);
 	// 자손의 텍스트·CDATA를 바꾸지 않도록 원문 내부 들여쓰기는 그대로 둔다.
 	const children = ordered.map(n => lead + unit + text.slice(n.start, n.end)).join(eol);
 	const replacement = `<${tag} id="${id}"${xmlns}>${eol}${children}${eol}${lead}</${tag}>`;

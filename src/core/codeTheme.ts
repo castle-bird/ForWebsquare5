@@ -128,7 +128,7 @@ export function fromVsCodeTheme(theme: VsTheme): ThemeOverlay & { dark: boolean 
 	const rules = (Array.isArray(theme.tokenColors) ? theme.tokenColors : []) as TokenRule[];
 	const c = theme.colors ?? {};
 	const global = rules.find(r => !r.scope)?.settings;
-	const pick = (...keys: (string | undefined)[]) => keys.find(isColor);
+	const pick = (...keys: (string | undefined)[]) => keys.find(isColor)?.trim();
 	const colors: ThemeOverlay['colors'] = {};
 	const set = (key: ColorKey, value: string | undefined) => { if (value) { colors[key] = value; } };
 	set('background', pick(c['editor.background'], global?.background));
@@ -148,7 +148,7 @@ export function fromVsCodeTheme(theme: VsTheme): ThemeOverlay & { dark: boolean 
 	const first = (kind: TokenKind, has: (s: NonNullable<TokenRule['settings']>) => boolean) => TOKEN_SCOPES[kind].map(scope => best(scope, has)).find(Boolean);
 	const tokens: ThemeOverlay['tokens'] = {};
 	for (const kind of TOKEN_KINDS) {
-		const color = first(kind, s => isColor(s.foreground))?.foreground, fontStyle = first(kind, s => typeof s.fontStyle === 'string')?.fontStyle;
+		const color = first(kind, s => isColor(s.foreground))?.foreground?.trim(), fontStyle = first(kind, s => typeof s.fontStyle === 'string')?.fontStyle;
 		if (color || fontStyle !== undefined) { tokens[kind] = { ...color && { color }, ...fontStyle !== undefined && { fontStyle } }; }
 	}
 	const type = theme.type?.toLowerCase();

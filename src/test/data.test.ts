@@ -295,6 +295,12 @@ suite('DataMap/DataList fields', () => {
 		const without = base.slice(0, removed.start) + removed.replacement + base.slice(removed.end);
 		assert.ok(!without.includes('<old>'));
 		assert.ok(without.includes('<external>x</external>'));
+		// key id를 바꾸고 value를 따로 넘기지 않아도 기존 <old> 값·속성을 새 태그 이름으로 보존
+		const renamedKey = editDataFields(base, root, map, [
+			{ sourceIndex: map.children[0].children[0].index, id: 'renamed_key', name: 'Old', dataType: 'text', length: '', encYN: false },
+		])!;
+		const renamedXml = base.slice(0, renamedKey.start) + renamedKey.replacement + base.slice(renamedKey.end);
+		assert.ok(renamedXml.includes('<renamed_key custom="value-attr">old value</renamed_key>') && !renamedXml.includes('<old'), renamedXml);
 	});
 
 	test('DataMap/DataList 자체 id도 바꿀 수 있고, 문서 전체에서 고유해야 한다', () => {

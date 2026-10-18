@@ -29,7 +29,8 @@ export const followsVsCode = (s: CodeThemeState) => s.theme === 'vscode' && s.da
 /** 코드 편집기 바깥 클래스: 고른·가져온 테마면 custom-theme(선택·팝업 색을 테마에 맡김, style.css) */
 export const editorClass = (s: CodeThemeState) => followsVsCode(s) ? 'code-editor' : 'code-editor custom-theme';
 
-const vsTheme = () => document.body.classList.contains('vscode-light') || document.body.classList.contains('vscode-high-contrast-light') ? vsCodeLight : vsCodeDark;
+export const isLightTheme = () => document.body.classList.contains('vscode-light') || document.body.classList.contains('vscode-high-contrast-light');
+const vsTheme = () => isLightTheme() ? vsCodeLight : vsCodeDark;
 
 /** 문법 색 종류 → CodeMirror(Lezer) 태그. VS Code(TextMate)보다 덜 잘게 나뉘어 가져온 테마는 비슷하게 맞는다 */
 const TAGS: Record<TokenKind, Tag[]> = {

@@ -8,6 +8,7 @@ export const rememberScreenEditor = (document: vscode.TextDocument) => designerD
 
 export function registerScreenOpen(context: vscode.ExtensionContext, viewType: string): void {
 	const pending = new WeakSet<vscode.TextDocument>();
+	const nonScreenVersion = new WeakMap<vscode.TextDocument, number>();
 	let disposed = false;
 	const open = async () => {
 		const editor = vscode.window.activeTextEditor;
@@ -15,12 +16,16 @@ export function registerScreenOpen(context: vscode.ExtensionContext, viewType: s
 		const tab = group.activeTab;
 		if (disposed || !vscode.workspace.isTrusted || !editor || !(tab?.input instanceof vscode.TabInputText)) { return; }
 		const document = editor.document;
-		if (document.uri.scheme !== 'file' || !/\.xml$/i.test(document.uri.path) || document.isDirty || document.isClosed
-			|| tab.input.uri.toString() !== document.uri.toString() || designerDocuments.has(document) || pending.has(document)) { return; }
-		pending.add(document);
 		const version = document.version;
+		if (document.uri.scheme !== 'file' || !/\.xml$/i.test(document.uri.path) || document.isDirty || document.isClosed
+			|| tab.input.uri.toString() !== document.uri.toString() || designerDocuments.has(document) || pending.has(document)
+			|| nonScreenVersion.get(document) === version) { return; }
+		pending.add(document);
 		try {
-			if (!isScreen(parseXml(document.getText())) || !await findWebRoot(document.uri.fsPath)) { return; }
+			if (!isScreen(parseXml(document.getText())) || !await findWebRoot(document.uri.fsPath)) {
+				nonScreenVersion.set(document, version);
+				return;
+			}
 			// 파일을 찾는 동안 사용자가 다른 탭으로 이동하거나 편집했으면 포커스를 빼앗지 않는다.
 			if (disposed || document.isClosed || document.isDirty || document.version !== version || designerDocuments.has(document)
 				|| vscode.window.activeTextEditor !== editor || vscode.window.tabGroups.activeTabGroup !== group || group.activeTab !== tab) { return; }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UsedTables } from '../../core/tables';
 import type { ToWebview } from '../../core/protocol';
 import { post } from '../store';
-import { isModKey } from '../keys';
+import { isUndoRedo } from '../keys';
 import { UsedTablesDiagram } from './usedTablesDiagram';
 
 type Status = Omit<Extract<ToWebview, { type: 'usedTables' }>, 'type'>;
@@ -97,7 +97,7 @@ export function UsedTablesPane() {
 
 	return <div className="used-tables"
 		// 입력칸의 Ctrl+Z·Y는 입력칸 것만: VS Code로 넘어가면 화면 XML 문서가 되돌려진다
-		onKeyDown={e => { if (isModKey(e.nativeEvent, 'z') || isModKey(e.nativeEvent, 'y')) { e.stopPropagation(); } }}>
+		onKeyDown={e => { if (isUndoRedo(e.nativeEvent)) { e.stopPropagation(); } }}>
 		<div className="used-tables-bar">
 			<span className="title">사용 테이블</span>
 			<span className="where" title={status.file}>{status.file}</span>

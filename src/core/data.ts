@@ -1,6 +1,6 @@
 import { insertNode } from './paste';
-import { assertFreeId, findNode, isWs, isXf, parseXml, prefixOf, uniqueId, usedIds, VALID_ID, type XmlNode } from './xmlModel';
-import { applyEdits, eolOf, escapeText, INVALID_XML_CHAR, leadOf, setAttribute, setText, sourceChange, startTagEnd, type TextEdit } from './edit';
+import { assertFreeId, findNode, isWs, isXf, prefixOf, uniqueId, usedIds, VALID_ID, type XmlNode } from './xmlModel';
+import { applyEdits, eolOf, escapeText, INVALID_XML_CHAR, leadOf, setAttribute, setText, sourceChange, startTagEnd, withAttrs, type TextEdit } from './edit';
 
 /** Data 트리의 생성 루트: 지우면 하위 항목을 추가할 수 없으므로 보호한다. */
 export const isDataRoot = (n: XmlNode) => isWs(n, 'dataCollection') || isXf(n, 'model');
@@ -67,11 +67,11 @@ export function editDataFields(text: string, root: XmlNode, node: XmlNode, field
 	const eol = eolOf(text);
 	const rowXml = fields.map(field => {
 		const original = field.sourceIndex === undefined ? undefined : originals.get(field.sourceIndex);
-		let raw = original ? text.slice(original.start, original.end) : `<${rowTag}/>`;
-		for (const [attr, value] of Object.entries({ id: field.id, name: field.name, dataType: field.dataType, length: field.length || undefined, encYN: field.encYN ? 'true' : undefined })) {
-			raw = applyEdits(raw, [setAttribute(raw, parseXml(raw)!, attr, value)]);
-		}
-		return raw;
+		const raw = original ? text.slice(original.start, original.end) : `<${rowTag}/>`;
+		return withAttrs(raw, [
+			['id', field.id], ['name', field.name], ['dataType', field.dataType],
+			['length', field.length || undefined], ['encYN', field.encYN ? 'true' : undefined],
+		]);
 	});
 	const infoOpen = text.slice(info.start, openEnd + 1).replace(/\s*\/?>$/, '>');
 	const infoXml = rowXml.length
@@ -80,9 +80,14 @@ export function editDataFields(text: string, root: XmlNode, node: XmlNode, field
 	const replacements = [{ start: info.start, end: info.end, replacement: infoXml }, ...idEdit ? [idEdit] : []];
 	const data = map ? node.children.find(c => c.tag === `${prefix}data`) : undefined;
 	const values = new Map(data?.children.map(c => [c.tag, c]) ?? []);
+	const oldId = (f: DataField) => (f.sourceIndex === undefined ? undefined : originals.get(f.sourceIndex)?.attrs.id) ?? f.id;
 	const previousIds = new Set([...originals.values()].map(c => c.attrs.id));
-	const changedValue = fields.some(f => f.value !== undefined && f.value !== (values.get(f.id)?.text ?? ''));
-	const removedValue = [...previousIds].some(pid => !ids.has(pid) && values.has(pid));
+	const keptOldIds = new Set(fields.map(oldId));
+	const changedValue = fields.some(f => {
+		const prev = oldId(f);
+		return (f.value !== undefined && f.value !== (values.get(prev)?.text ?? '')) || (prev !== f.id && values.has(prev));
+	});
+	const removedValue = [...previousIds].some(pid => !keptOldIds.has(pid) && values.has(pid));
 	if (map && (changedValue || removedValue)) {
 		const dataTagEnd = data ? startTagEnd(text, data.start) : -1;
 		const dataSelfClosing = data ? text[dataTagEnd - 1] === '/' : false;
@@ -93,12 +98,18 @@ export function editDataFields(text: string, root: XmlNode, node: XmlNode, field
 			for (const child of [...data.children].reverse()) { remaining = remaining.slice(0, child.start - from) + remaining.slice(child.end - from); }
 			if (remaining.trim()) { throw new Error('w2:data 안에 다른 내용이 있어 Source 탭에서 편집해야 합니다.'); }
 		}
-		const valueRows = fields.filter(f => f.value || values.has(f.id)).map(f => {
-			const old = values.get(f.id);
+		const valueRows = fields.filter(f => f.value || values.has(oldId(f))).map(f => {
+			const old = values.get(oldId(f));
 			if (old) {
 				if (old.children.length && f.value !== undefined && f.value !== (old.text ?? '')) { throw new Error(`${f.id} 값에 하위 노드가 있어 Source 탭에서 편집해야 합니다.`); }
 				const change = f.value === undefined ? undefined : setText(text, old, f.value);
-				return change ? text.slice(old.start, change.start) + change.replacement + text.slice(change.end, old.end) : text.slice(old.start, old.end);
+				let raw = change ? text.slice(old.start, change.start) + change.replacement + text.slice(change.end, old.end) : text.slice(old.start, old.end);
+				if (old.tag !== f.id) {
+					raw = `<${f.id}${raw.slice(1 + old.tag.length)}`;
+					const close = raw.lastIndexOf('</');
+					if (close >= 0) { raw = `${raw.slice(0, close + 2)}${f.id}${raw.slice(close + 2 + old.tag.length)}`; }
+				}
+				return raw;
 			}
 			return `<${f.id}>${escapeText(f.value ?? '')}</${f.id}>`;
 		});
@@ -109,7 +120,7 @@ export function editDataFields(text: string, root: XmlNode, node: XmlNode, field
 		const dataXml = `${dataOpen}${valueRows.length ? `${eol}${valueRows.map(raw => `${indent}\t${raw}`).join(eol)}${eol}${indent}` : ''}</${prefix}data>`;
 		if (data) { replacements.push({ start: data.start, end: data.end, replacement: dataXml }); }
 		else {
-			const insertAt = node.end - `</${node.tag}>`.length;
+			const insertAt = text.lastIndexOf('</', node.end - 1);
 			replacements.push({ start: insertAt, end: insertAt, replacement: `${eol}${indent}\t${dataXml}${eol}${indent}` });
 		}
 	}
@@ -142,8 +153,9 @@ export function renameDataRefs(text: string, root: XmlNode, { from, to, columns 
 	const column = columns?.size ? new RegExp(String.raw`(?<![\w.-])` + idPattern(from) + String.raw`\.(` + [...columns.keys()].map(idPattern).join('|') + String.raw`)(?![\w.-])`, 'g') : undefined;
 	const bound = `data:${from}`;
 	const edits: TextEdit[] = [];
+	const ancestors: XmlNode[] = [];
 	/** scope: 이 데이터에 바인딩된 그리드 안·그 본문 안·itemset 안 */
-	const walk = (node: XmlNode, ancestors: XmlNode[], scope?: 'grid' | 'gridBody' | 'itemset') => {
+	const walk = (node: XmlNode, scope?: 'grid' | 'gridBody' | 'itemset') => {
 		const local = (name: string, value: string) => columns && (scope === 'gridBody' && name === 'id' && isWs(node, 'column')
 			|| scope === 'itemset' && name === 'ref') ? columns.get(value) : undefined;
 		for (const [name, value] of Object.entries(node.attrs)) {
@@ -155,8 +167,10 @@ export function renameDataRefs(text: string, root: XmlNode, { from, to, columns 
 		const inner = isWs(node, 'gridView') ? (node.attrs.dataList === bound ? 'grid' : undefined)
 			: isXf(node, 'itemset') ? (node.attrs.nodeset === bound ? 'itemset' : undefined)
 			: scope === 'grid' && isWs(node, 'gBody') ? 'gridBody' : scope;
-		node.children.forEach(c => walk(c, [...ancestors, node], inner));
+		ancestors.push(node);
+		node.children.forEach(c => walk(c, inner));
+		ancestors.pop();
 	};
-	walk(root, []);
+	walk(root);
 	return edits;
 }

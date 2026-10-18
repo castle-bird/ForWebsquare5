@@ -28,23 +28,28 @@ export function serial<T>(queues: Map<string, Promise<unknown>>, key: string, jo
 
 export const numeric = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: true });
 
-/** skip: 들어가지 않을 하위 폴더 이름(찾는 것이 그 안에 있을 리 없는 큰 폴더를 건너뛰어 빠르게) */
-export async function findDirs(root: string, test: (dir: string, names: string[]) => boolean, maxDepth = 8, skip?: (name: string) => boolean): Promise<string[]> {
+/** skip: 들어가지 않을 하위 폴더(찾는 것이 그 안에 있을 리 없는 큰 폴더를 건너뛰어 빠르게) */
+export async function findDirs(root: string, test: (dir: string, names: string[]) => boolean, maxDepth = 8, skip?: (name: string, dir: string) => boolean): Promise<string[]> {
 	const results: string[] = [];
 	let level = [root];
 	let visited = 0;
 	for (let depth = 0; level.length && depth <= maxDepth && visited < 20_000; depth++) {
+		const batch = level.slice(0, 20_000 - visited);
+		visited += batch.length;
+		const loaded = await Promise.all(batch.map(async dir => ({
+			dir,
+			entries: await readdir(dir, { withFileTypes: true }).catch(() => []),
+		})));
 		const next: string[] = [];
-		for (const dir of level) {
-			if (visited++ >= 20_000) {
-				break;
-			}
-			const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-			const names = entries.map(e => e.name);
-			if (test(dir, names)) {
+		for (const { dir, entries } of loaded) {
+			if (test(dir, entries.map(e => e.name))) {
 				results.push(dir);
 			}
-			next.push(...entries.filter(e => e.isDirectory() && !skip?.(e.name)).map(e => path.join(dir, e.name)));
+			for (const e of entries) {
+				if (e.isDirectory() && !skip?.(e.name, dir)) {
+					next.push(path.join(dir, e.name));
+				}
+			}
 		}
 		level = next;
 	}
@@ -62,12 +67,19 @@ export async function findWebRoot(file: string): Promise<string | undefined> {
 	}
 }
 
+/** file이 dir 안에 있거나 dir 자체인지(Windows는 대소문자 무시) */
+export function isInside(file: string, dir: string): boolean {
+	const relative = path.relative(dir, file);
+	return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
+}
+
 export const webPath = (webRoot: string, file: string) => '/' + path.relative(webRoot, file).split(path.sep).join('/');
 
 export function fromWebPath(webRoot: string, href: string, from: string): string {
-	const file = path.resolve(path.join(webRoot, decodeURIComponent(new URL(href, 'http://root' + encodeURI(from)).pathname)));
-	const relative = path.relative(path.resolve(webRoot), file);
-	if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+	const base = 'http://root' + (from.startsWith('/') ? '' : '/') + from.split('/').map(encodeURIComponent).join('/');
+	const url = new URL(href, base);
+	const file = url.origin === 'http://root' ? path.resolve(path.join(webRoot, decodeURIComponent(url.pathname))) : '';
+	if (!file || !isInside(file, path.resolve(webRoot))) {
 		throw new Error('웹 루트 밖의 경로는 사용할 수 없습니다.');
 	}
 	return file;

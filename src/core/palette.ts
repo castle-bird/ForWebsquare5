@@ -1,9 +1,9 @@
 import type { ComponentDef } from './protocol';
-import { eolOf, type TextEdit } from './edit';
+import { eolOf, indentUnit, type TextEdit } from './edit';
 import { insertNode, isContainer, type InsertPosition } from './paste';
 import { gridColumnXml } from './grid';
 import { setStyle } from './style';
-import { isWs, localName, uniqueId, usedIds, XFORMS_NS, type XmlNode } from './xmlModel';
+import { isWs, localName, nsPrefix, uniqueId, usedIds, XFORMS_NS, type XmlNode } from './xmlModel';
 
 export const paletteKey = (def: Pick<ComponentDef, 'id' | 'ns' | 'realType'>) => JSON.stringify([def.ns, def.id, def.realType]);
 
@@ -49,17 +49,16 @@ export function componentDropPosition(target: XmlNode, ratio: number): InsertPos
 
 export function insertComponent(text: string, root: XmlNode, target: XmlNode, position: InsertPosition, def: ComponentDef, size?: Record<string, string>): { edit: TextEdit; id: string } {
 	const prefix = (ns: string) => {
-		if (root.attrs.xmlns === ns) { return ''; }
-		const decl = Object.keys(root.attrs).find(k => k.startsWith('xmlns:') && root.attrs[k] === ns);
-		if (!decl) { throw new Error(`화면에 ${ns} 네임스페이스 선언이 없어 넣을 수 없습니다.`); }
-		return decl.slice(6) + ':';
+		const p = nsPrefix(root, ns);
+		if (p === undefined) { throw new Error(`화면에 ${ns} 네임스페이스 선언이 없어 넣을 수 없습니다.`); }
+		return p;
 	};
 	const p = prefix(def.ns);
 	const used = usedIds(root);
 	const next = (base: string) => uniqueId(used, base);
 	const id = next(def.realType);
 	const eol = eolOf(text);
-	const unit = /^([ \t]+)</m.exec(text)?.[1] ?? '\t';
+	const unit = indentUnit(text);
 	const style = size && Object.keys(size).length ? ` style="${setStyle(undefined, size)}"` : '';
 	const x = () => prefix(XFORMS_NS);
 	const choices = () => [`<${x()}choices></${x()}choices>`];

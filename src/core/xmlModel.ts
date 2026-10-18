@@ -27,9 +27,10 @@ export function parseXml(text: string): XmlNode | undefined {
 		if (n.type !== 'tag') {
 			return [];
 		}
-		const own = { ...scope };
+		let own = scope;
 		for (const [k, v] of Object.entries(n.attribs)) {
 			if (k === 'xmlns' || k.startsWith('xmlns:')) {
+				if (own === scope) { own = { ...scope }; }
 				own[k.slice(6)] = v;
 			}
 		}
@@ -96,8 +97,14 @@ export const isXf = (n: XmlNode | undefined, name: string) => n?.ns === XFORMS_N
 /** 이벤트 핸들러 속성 접두어(ev:onclick) */
 export const EV = 'ev:';
 
-export const isScreen = (root: XmlNode | undefined) => root?.tag === 'html'
-	&& Object.entries(root.attrs).some(([k, v]) => (k === 'xmlns' || k.startsWith('xmlns:')) && v === WEBSQUARE_NS);
+/** node에 선언된 ns의 태그 접두사(기본 네임스페이스면 '', 접두사가 있으면 'w2:', 선언이 없으면 undefined) */
+export function nsPrefix(node: XmlNode, ns: string): string | undefined {
+	if (node.attrs.xmlns === ns) { return ''; }
+	const decl = Object.keys(node.attrs).find(k => k.startsWith('xmlns:') && node.attrs[k] === ns);
+	return decl && `${decl.slice(6)}:`;
+}
+
+export const isScreen = (root: XmlNode | undefined) => root?.tag === 'html' && nsPrefix(root, WEBSQUARE_NS) !== undefined;
 
 export const VALID_ID = /^[A-Za-z_][\w.-]*$/;
 

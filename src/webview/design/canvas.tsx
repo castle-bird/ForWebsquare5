@@ -13,6 +13,7 @@ import { render, textTarget, outlineIcon, breaksToNewlines, newlinesToBreaks, ty
 import { classLabel, REF_MIME, setDragGhost } from '../ui/tree';
 import { PALETTE_MIME, readPaletteDrag, type PaletteDrag } from '../ui/palette';
 import { edgeSpeed } from '../ui/edgeScroll';
+import { capturePointer } from '../ui/pointerCapture';
 import { componentDropPosition, findPaletteDef, insertPositions } from '../../core/palette';
 import type { InsertPosition } from '../../core/paste';
 import canvasCss from './canvas.css';
@@ -182,6 +183,7 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 					onPointerDown={e => { columnResize.onPointerDown(e); cellRange.onPointerDown(e); }}
 					onPointerMove={e => { columnResize.onPointerMove(e); cellRange.onPointerMove(e); }}
 					onPointerUp={e => { columnResize.onPointerUp(e); cellRange.onPointerUp(); }}
+					onPointerCancel={() => { columnResize.onPointerCancel(); cellRange.onPointerUp(); }}
 					onContextMenu={e => {
 						const el = target(e);
 						if (el && onContextMenu) {
@@ -391,6 +393,7 @@ function useCellRange(body: XmlNode, page: RefObject<HTMLDivElement | null>, onS
 		if (drag.current?.frame !== undefined) { cancelAnimationFrame(drag.current.frame); }
 		drag.current = undefined;
 	};
+	useEffect(() => stop, []);
 	return {
 		/** 끌어서 고르는 중(그리드 옮기기 native drag를 막는다) */
 		active: () => !!drag.current,
@@ -413,7 +416,7 @@ function useCellRange(body: XmlNode, page: RefObject<HTMLDivElement | null>, onS
 			d.y = e.clientY;
 			// 다른 칸으로 넘어가면(끌기 시작) 캔버스 밖에서 놓아도 끝나게 포인터를 잡는다. 누르자마자 잡으면 click이 칸 대신 캔버스로 가 선택이 안 됨
 			if (select(d) && !swallowClick.current) {
-				try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 합성 이벤트 등 활성 포인터가 없으면 캡처 없이 */ }
+				capturePointer(e);
 				swallowClick.current = true;
 			}
 			if (swallowClick.current && d.frame === undefined) { autoScroll(); }
@@ -438,7 +441,7 @@ function useColumnResize(onResized: (index: number, width: number) => void) {
 			const width = parseFloat(col?.style.width ?? '') || rendered;
 			const tableWidth = table?.style.width.endsWith('px') ? parseFloat(table.style.width) : undefined;
 			drag.current = { index: wseIndex(c), col, table, tableWidth, startX: e.clientX, width, scale: rendered / width || 1 };
-			try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 합성 이벤트(테스트) 등 활성 포인터가 없으면 캡처 없이 진행 */ }
+			capturePointer(e);
 		},
 		onPointerMove: (e: ReactPointerEvent<HTMLDivElement>) => {
 			const d = drag.current;
@@ -454,6 +457,7 @@ function useColumnResize(onResized: (index: number, width: number) => void) {
 			const width = d && widthAt(d, e.clientX);
 			if (d && width !== undefined && width !== Math.round(d.width)) { onResized(d.index, width); }
 		},
+		onPointerCancel: () => { drag.current = undefined; },
 	};
 }
 
@@ -715,12 +719,14 @@ function resize(e: ReactPointerEvent, el: HTMLElement, dir: string, commit: (pro
 	const up = () => {
 		window.removeEventListener('pointermove', move);
 		window.removeEventListener('pointerup', up);
+		window.removeEventListener('pointercancel', up);
 		if (next) {
 			commit(Object.fromEntries(Object.entries(next).map(([k, v]) => [k, `${Math.round(v)}px`])));
 		}
 	};
 	window.addEventListener('pointermove', move);
 	window.addEventListener('pointerup', up);
+	window.addEventListener('pointercancel', up);
 }
 
 /**

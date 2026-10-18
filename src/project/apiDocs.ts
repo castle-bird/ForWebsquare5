@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { DomUtils, parseDocument } from 'htmlparser2';
 import type { ApiParam, ApiReturn, ScriptApi } from '../core/protocol';
 import { errorMessage } from '../core/errors';
+import { dedent, trimBlank } from '../core/helpText';
 import { cached, findDirs } from './paths';
 
 const API_DIR = /^(\$p(?:\.|$)|WebSquare(?:\.|$))/;
@@ -14,17 +15,15 @@ const hasClass = (name: string) => (e: { attribs?: Record<string, string> }) => 
  * (브라우저의 xmp처럼 엔티티는 풀지 않고 원문 그대로 쓴다)
  */
 export function cleanSample(raw: string): string {
-	const lines = raw.replace(/\r\n?/g, '\n').split('\n').map(l => l.trimEnd());
-	while (lines.length && !lines[0]) { lines.shift(); }
-	while (lines.length && !lines[lines.length - 1]) { lines.pop(); }
-	const indent = Math.min(...lines.filter(Boolean).map(l => /^[ \t]*/.exec(l)![0].length));
-	return lines.map(l => l.slice(Number.isFinite(indent) ? indent : 0)).join('\n').replace(/\n{3,}/g, '\n\n');
+	const lines = trimBlank(raw.replace(/\r\n?/g, '\n').split('\n').map(l => l.trimEnd()));
+	return dedent(lines).join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
 /** xmp 안의 원문. htmlparser2는 xmp 안 XML을 요소로 파싱해 textContent가 태그를 버리므로, 원본 문자열에서 시작 태그와 닫는 태그 사이를 자른다 */
 function xmpSource(html: string, xmp: { startIndex: number | null }): string {
-	const open = html.indexOf('>', xmp.startIndex ?? 0) + 1, close = html.toLowerCase().indexOf('</xmp', open);
-	return html.slice(open, close < 0 ? undefined : close);
+	const open = html.indexOf('>', xmp.startIndex ?? 0) + 1;
+	const close = /<\/xmp/i.exec(html.slice(open));
+	return close ? html.slice(open, open + close.index) : html.slice(open);
 }
 
 function parseDetailList(doc: ReturnType<typeof parseDocument>, html: string, tagClass: string, descClass: string): ScriptApi[string] {
@@ -78,8 +77,7 @@ function parseDetailList(doc: ReturnType<typeof parseDocument>, html: string, ta
 	});
 }
 
-export function parseApiMethods(html: string): ScriptApi[string] {
-	const doc = parseDocument(html, { withStartIndices: true });
+export function parseApiMethods(html: string, doc = parseDocument(html, { withStartIndices: true })): ScriptApi[string] {
 	const methods = parseDetailList(doc, html, 'apiname', 'pdesc');
 	if (methods.length > 0) {
 		return methods;
@@ -93,8 +91,8 @@ export function parseApiMethods(html: string): ScriptApi[string] {
 	});
 }
 
-export function parseApiEvents(html: string): ScriptApi[string] {
-	return parseDetailList(parseDocument(html, { withStartIndices: true }), html, 'ename', 'edesc');
+export function parseApiEvents(html: string, doc = parseDocument(html, { withStartIndices: true })): ScriptApi[string] {
+	return parseDetailList(doc, html, 'ename', 'edesc');
 }
 
 export async function findApiDocs(eclipseRoot: string): Promise<string | undefined> {
@@ -117,7 +115,8 @@ async function readApiDocs(directory: string): Promise<{ api: ScriptApi; events:
 	const entries = (await readdir(directory, { withFileTypes: true })).filter(e => e.isDirectory() && API_DIR.test(e.name));
 	const loaded = await Promise.all(entries.map(async e => {
 		const html = await readFile(path.join(directory, e.name, `${e.name}.html`), 'utf8');
-		return [e.name, parseApiMethods(html), parseApiEvents(html)] as const;
+		const doc = parseDocument(html, { withStartIndices: true });
+		return [e.name, parseApiMethods(html, doc), parseApiEvents(html, doc)] as const;
 	}));
 	if (!loaded.length) { throw new Error('API 문서가 없습니다.'); }
 	return {

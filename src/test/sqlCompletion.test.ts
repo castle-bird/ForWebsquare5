@@ -44,6 +44,8 @@ suite('MyBatis SQL 자동완성', () => {
 		const block = '<mapper><select id="s">\nSELECT a, /* 이름 x */ b, /* 주문 y\n</select></mapper>';
 		assert.ok(inSql(block, block.indexOf(' b')), '닫힌 /* */ 뒤');
 		assert.ok(!inSql(block, block.indexOf('y')), '안 닫은 /* 안');
+		const multiComment = '<mapper><select id="s">\n<!-- 여러 줄\n주석 끝 --> SELECT col FROM dual\n</select></mapper>';
+		assert.ok(inSql(multiComment, multiComment.indexOf('FROM')), '여러 줄 XML 주석 끝 --> 뒤는 SQL -- 주석이 아님');
 	});
 
 	test('키워드·함수: 방언 함수는 그 방언에만', () => {

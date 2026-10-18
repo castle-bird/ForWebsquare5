@@ -1,7 +1,7 @@
 // 그리드 칸 속성 표: 칸(행,열)마다 한 줄, 칸들에 적힌 속성마다 한 열이라 칸끼리 한눈에 비교하며 고친다. 비우면 그 속성을 지운다
 // Excel처럼: 클릭은 입력칸 하나, 끌기·Shift+클릭은 범위 → Ctrl+C(탭·줄로 나눈 글자, Excel과 주고받음)·Ctrl+X·Ctrl+V·Delete
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
-import { isModKey } from '../keys';
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { isModKey, isUndoRedo } from '../keys';
 import { GRID_CELL_PARTS, gridPartCells, type GridCellEdit, type GridCellPart } from '../../core/grid';
 import { defOf, type XmlNode } from '../../core/xmlModel';
 import type { ComponentDef } from '../../core/protocol';
@@ -45,7 +45,7 @@ export function GridCellsEditor({ grid, defs, externalError, offsetIndex = 0, on
 	grid: XmlNode; defs?: ComponentDef[]; externalError?: string; offsetIndex?: number;
 	onApply(cells: GridCellEdit[]): void; onClose(): void;
 }) {
-	const parts = Object.fromEntries(GRID_CELL_PARTS.map(p => [p, gridPartCells(grid, p)])) as Record<GridCellPart, ReturnType<typeof gridPartCells>>;
+	const parts = useMemo(() => Object.fromEntries(GRID_CELL_PARTS.map(p => [p, gridPartCells(grid, p)])) as Record<GridCellPart, ReturnType<typeof gridPartCells>>, [grid]);
 	const heads = HEAD_PARTS.filter(p => parts[p]);
 	const [head, setHead] = useState<GridCellPart | undefined>(heads[0]);
 	const [all, setAll] = useState(false);
@@ -73,6 +73,7 @@ export function GridCellsEditor({ grid, defs, externalError, offsetIndex = 0, on
 		if (dragging.current?.frame) { cancelAnimationFrame(dragging.current.frame); }
 		dragging.current = undefined;
 	};
+	useEffect(() => stopDrag, []);
 	/** 표 가장자리(EDGE px 안·밖)에 머무는 동안 매 프레임 굴리고(멀수록 빠르게) 새로 보인 칸까지 고른다 */
 	const autoScroll = () => {
 		const d = dragging.current;
@@ -216,8 +217,12 @@ export function GridCellsEditor({ grid, defs, externalError, offsetIndex = 0, on
 	};
 
 	return <dialog {...popupProps} onKeyDown={e => {
-		const redo = isModKey(e.nativeEvent, 'y') || isModKey(e.nativeEvent, 'z') && e.shiftKey;
-		if (isModKey(e.nativeEvent, 'z') || redo) { e.preventDefault(); e.stopPropagation(); step(redo); return; }
+		if (isUndoRedo(e.nativeEvent)) {
+			e.preventDefault();
+			e.stopPropagation();
+			step(isModKey(e.nativeEvent, 'y') || e.shiftKey);
+			return;
+		}
 		popupProps.onKeyDown(e);
 	}} className="popup data-editor grid-cells-editor" aria-label={`${grid.attrs.id ?? 'gridView'} 칸 속성`}>
 		<PopupTitle titleProps={titleProps} badge="GridView" onClose={onClose}><span>{grid.attrs.id || '(id 없음)'}</span><span className="popup-meta">· 칸 속성</span></PopupTitle>

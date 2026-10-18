@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { resizeBox, resizeEdges, type Box, type ResizeEdge } from './resizeBox';
-import { isModKey } from '../keys';
+import { isUndoRedo } from '../keys';
 import { capturePointer } from './pointerCapture';
 
 let globalPopupZIndex = 100;
@@ -80,7 +80,7 @@ export function usePopupWindow(options: { initialOffset?: number; onClose?(): vo
 		if (e.key === 'Escape') {
 			e.stopPropagation();
 			onClose?.();
-		} else if (isModKey(e.nativeEvent, 'z') || isModKey(e.nativeEvent, 'y')) {
+		} else if (isUndoRedo(e.nativeEvent)) {
 			// 입력칸의 되돌리기만: VS Code 웹뷰는 이 키를 VS Code에도 넘겨 화면 XML 문서까지 되돌린다(팝업 열린 채 문서가 바뀜)
 			e.stopPropagation();
 		} else if (leavesOnEnter(e)) {
@@ -113,12 +113,12 @@ function leavesOnEnter(e: KeyboardEvent<HTMLElement>) {
 		&& input instanceof HTMLInputElement && !['checkbox', 'radio', 'color', 'file', 'button', 'submit'].includes(input.type);
 }
 
-/** 팝업 아래 버튼 줄: 왼쪽 children(안내·추가 버튼) · 닫기 · 확인 */
-export function PopupActions({ onClose, onApply, applyDisabled, children }: { onClose(): void; onApply(): void; applyDisabled?: boolean; children?: ReactNode }) {
-	return <div className="data-editor-actions">
+/** 팝업 아래 버튼 줄: 왼쪽 children(안내·추가 버튼) · 닫기 · 확인(onApply가 없으면 form submit) */
+export function PopupActions({ onClose, onApply, applyDisabled, children }: { onClose(): void; onApply?(): void; applyDisabled?: boolean; children?: ReactNode }) {
+	return <div className={onApply ? 'data-editor-actions' : 'submission-actions'}>
 		{children}
 		<button type="button" className="btn btn-secondary" onClick={onClose}>닫기</button>
-		<button type="button" className="btn btn-primary" disabled={applyDisabled} onClick={onApply}>확인</button>
+		<button type={onApply ? 'button' : 'submit'} className="btn btn-primary" disabled={applyDisabled} onClick={onApply}>확인</button>
 	</div>;
 }
 

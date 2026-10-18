@@ -104,6 +104,21 @@ async function installRoot(uri: vscode.Uri, webRoot: string | undefined, autoPic
 	return autoPick && webRoot ? autoChoose(webRoot) : undefined;
 }
 
+async function findInInstall(root: string, key: FileKey, checkRevalidate = false): Promise<string | undefined> {
+	const known = installs().files[root]?.[key];
+	if (known && await exists(known)) {
+		if (checkRevalidate) {
+			revalidate(root);
+		}
+		return known;
+	}
+	const found = await scan(key, root);
+	if (found) {
+		rememberFile(root, key, found);
+	}
+	return found;
+}
+
 export async function resolvePath(key: SetupKey, uri: vscode.Uri, webRoot?: string): Promise<string | undefined> {
 	if (key === 'eclipseInstallPath') {
 		return installRoot(uri, webRoot, false);
@@ -113,19 +128,7 @@ export async function resolvePath(key: SetupKey, uri: vscode.Uri, webRoot?: stri
 		return configured;
 	}
 	const root = await installRoot(uri, webRoot, true);
-	if (!root) {
-		return undefined;
-	}
-	const known = installs().files[root]?.[key];
-	if (known && await exists(known)) {
-		revalidate(root);
-		return known;
-	}
-	const found = await scan(key, root);
-	if (found) {
-		rememberFile(root, key, found);
-	}
-	return found;
+	return root && findInInstall(root, key, true);
 }
 
 /**
@@ -143,7 +146,11 @@ function revalidate(root: string): void {
 		const known = installs().files[root] ?? {};
 		const files = { ...known };
 		for (const [key, file] of found) {
-			if (file) { files[key] = file; }
+			if (file) {
+				files[key] = file;
+			} else {
+				delete files[key];
+			}
 		}
 		if (FILE_KEYS.some(key => files[key] !== known[key])) {
 			await updateInstalls(i => ({ ...i, files: { ...i.files, [root]: files } }));
@@ -154,17 +161,7 @@ function revalidate(root: string): void {
 
 const existing = async (roots: string[]) => (await Promise.all(roots.map(async root => await exists(root) ? root : undefined))).filter(root => root !== undefined);
 
-async function definitionOf(root: string): Promise<string | undefined> {
-	const known = installs().files[root]?.componentDefinitionFile;
-	if (known && await exists(known)) {
-		return known;
-	}
-	const found = await scan('componentDefinitionFile', root);
-	if (found) {
-		rememberFile(root, 'componentDefinitionFile', found);
-	}
-	return found;
-}
+const definitionOf = (root: string) => findInInstall(root, 'componentDefinitionFile');
 
 /** opened: 이 프로젝트를 작업 공간으로 연 적 있는 Eclipse. lastUsed: 그 Eclipse를 마지막으로 실행한 시각 */
 interface Candidate { root: string; definition: string; opened: boolean; lastUsed: number }
@@ -324,8 +321,7 @@ export async function offerSetup(key: SetupKey, message: string, uri?: vscode.Ur
 
 async function choose(key: SetupKey): Promise<void> {
 	const item = ITEMS[key];
-	const uri = referenceUri();
-	const webRoot = uri && await findWebRoot(uri.fsPath);
+	const { uri, webRoot } = await referenceContext();
 	const current = uri && await resolvePath(key, uri, webRoot);
 	const [picked] = await vscode.window.showOpenDialog({
 		title: `${item.label}: ${item.example}`, openLabel: '선택', defaultUri: current ? vscode.Uri.file(item.folder ? current : path.dirname(current)) : undefined,
@@ -355,15 +351,22 @@ function referenceUri(): vscode.Uri | undefined {
 	return input instanceof vscode.TabInputCustom || input instanceof vscode.TabInputText ? input.uri : vscode.workspace.workspaceFolders?.[0]?.uri;
 }
 
+async function referenceContext(): Promise<{ uri?: vscode.Uri; webRoot?: string }> {
+	const uri = referenceUri();
+	return { uri, webRoot: uri && await findWebRoot(uri.fsPath) };
+}
+
 /** 설치본을 고를 때 기준이 되는 위치: 지금 보는 화면의 웹 루트, 없으면 첫 작업 폴더 */
 async function nearRoot(): Promise<string | undefined> {
-	const uri = referenceUri();
-	return uri && (await findWebRoot(uri.fsPath) ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath);
+	const { uri, webRoot } = await referenceContext();
+	return uri && (webRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath);
 }
 
 async function updateSetupContext(): Promise<void> {
-	const uri = referenceUri();
-	const webRoot = uri && await findWebRoot(uri.fsPath);
+	const { uri, webRoot } = await referenceContext();
+	if (uri && webRoot) {
+		await installRoot(uri, webRoot, true);
+	}
 	await Promise.all((Object.keys(ITEMS) as SetupKey[]).map(async key => vscode.commands.executeCommand(
 		'setContext', `for-websquare5.found.${key}`, !!uri && !!await resolvePath(key, uri, webRoot))));
 }
@@ -376,8 +379,10 @@ export function registerSetup(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(
 		installChanged,
 		vscode.commands.registerCommand('for-websquare5.setup', async () => {
-			const uri = referenceUri();
-			const webRoot = uri && await findWebRoot(uri.fsPath);
+			const { uri, webRoot } = await referenceContext();
+			if (uri && webRoot) {
+				await installRoot(uri, webRoot, true);
+			}
 			const current = chosen();
 			const rows = await Promise.all((Object.keys(ITEMS) as SetupKey[]).map(async key => {
 				const found = uri && await resolvePath(key, uri, webRoot);

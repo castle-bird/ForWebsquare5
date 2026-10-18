@@ -164,6 +164,14 @@ function App() {
 	useEffect(() => document.body.style.setProperty('--code-font-features', fontFeatures), [fontFeatures]);
 	const defs = useEditorStore(s => s.defs);
 	const styles = useEditorStore(s => s.styles);
+	// 외부 웹 폰트: @font-face는 Shadow DOM 안에서 안 먹어서 문서에 붙인다 (폰트는 캔버스에서도 보인다)
+	useEffect(() => {
+		for (const href of styles?.imports ?? []) {
+			if (!document.querySelector(`link[href="${CSS.escape(href)}"]`)) {
+				document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href }));
+			}
+		}
+	}, [styles?.imports]);
 	const api = useEditorStore(s => s.api);
 	const modules = useEditorStore(s => s.modules);
 	const selected = useEditorStore(s => s.selected);

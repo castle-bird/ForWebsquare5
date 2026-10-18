@@ -153,16 +153,18 @@ async function wpackConvert(uri: vscode.Uri, xml: string, fromDisk = false): Pro
 		}
 		return;
 	}
-	if (fromDisk && wpackDone.get(file) === xml) {
-		return;
-	}
-	wpackDone.set(file, xml);
 	const name = path.basename(file);
 	await serial(wpackQueues, file, async () => {
+		if (fromDisk && wpackDone.get(file) === xml) {
+			return;
+		}
+		wpackDone.set(file, xml);
 		await publish(webRoot, config, rel, xml, await convert(exe, config, rel, xml));
 		vscode.window.setStatusBarMessage(`$(check) wpack: ${name}`, 3000);
 	}).catch(e => {
-		wpackDone.delete(file);
+		if (wpackDone.get(file) === xml) {
+			wpackDone.delete(file);
+		}
 		void vscode.window.showErrorMessage(`wpack 변환 실패 (${name}): ${errorMessage(e)}`);
 	});
 }
@@ -247,7 +249,10 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		// 공통 JS(config.xml engine module)·config.xml이 저장되면 다시 읽어 자동완성·설명에 반영. 어떤 .js가 공통인지는 config.xml이 정하므로 다 받고 모아서 다시 읽는다
 		const moduleWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(webRoot), '{**/*.js,websquare/config.xml}'));
 		let moduleTimer: NodeJS.Timeout | undefined;
-		const reloadModules = () => {
+		const reloadModules = (uri: vscode.Uri) => {
+			if (/^[\\/]?(node_modules|\.git|\.metadata|target|build|bin|WEB-INF|META-INF|_wpack)[\\/_]/i.test(path.relative(webRoot, uri.fsPath))) {
+				return;
+			}
 			clearTimeout(moduleTimer);
 			moduleTimer = setTimeout(() => {
 				modules = loadModules(webRoot);
@@ -538,14 +543,18 @@ async function loadDefinitions(uri: vscode.Uri, webRoot?: string): Promise<{ def
 async function loadStyles(document: vscode.TextDocument, webview: vscode.Webview, webRoot: string): Promise<Extract<ToWebview, { type: 'styles' }>> {
 	const css: string[] = [], rules: CssRuleSource[] = [], imports: string[] = [], failed: string[] = [], broken: string[] = [];
 	try {
-		for (const file of await stylesheetFiles(webRoot, document.uri.fsPath, document.getText())) {
-			const errors: string[] = [], fileRules: CssRuleSource[] = [];
-			try {
-				css.push(scopeCss(await readFile(file, 'utf8'), file, webRoot, p => webview.asWebviewUri(vscode.Uri.file(p)).toString(), imports, errors, fileRules));
-				rules.push(...fileRules);
-			} catch {
+		const files = await stylesheetFiles(webRoot, document.uri.fsPath, document.getText());
+		const texts = await Promise.all(files.map(file => readFile(file, 'utf8').catch(() => undefined)));
+		const toUri = (p: string) => webview.asWebviewUri(vscode.Uri.file(p)).toString();
+		for (let i = 0; i < files.length; i++) {
+			const file = files[i], text = texts[i];
+			if (text === undefined) {
 				failed.push(path.relative(webRoot, file));
+				continue;
 			}
+			const errors: string[] = [], fileRules: CssRuleSource[] = [];
+			css.push(scopeCss(text, file, webRoot, toUri, imports, errors, fileRules));
+			rules.push(...fileRules);
 			broken.push(...errors.map(e => `${path.relative(webRoot, file)} ${e}`));
 		}
 	} catch (e) {

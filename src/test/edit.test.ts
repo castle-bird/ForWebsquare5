@@ -142,6 +142,8 @@ suite('edit', () => {
 			'<html><body>\n\t<xf:trigger id="g_copy1"/>\n\t<xf:group id="g">\n\t\t<xf:input id="i"/>\n\t</xf:group>\n</body></html>');
 		assert.strictEqual(apply(text, pasteNode(text, root, g, copied, 'after')),
 			'<html><body>\n\t<xf:group id="g">\n\t\t<xf:input id="i"/>\n\t</xf:group>\n\t<xf:trigger id="g_copy1"/>\n</body></html>');
+		const multi = '\t<xf:group id="m"><!--\nraw\n--><![CDATA[\ncdata\n]]></xf:group>';
+		assert.ok(apply(text, pasteNode(text, root, g, multi)).includes('\t\t<xf:group id="m"><!--\nraw\n--><![CDATA[\ncdata\n]]></xf:group>'), '주석·CDATA 안쪽 줄은 들여쓰지 않음');
 		assert.throws(() => pasteNode(text, root, root.children[0], copied, 'before'), /앞뒤/);
 	});
 

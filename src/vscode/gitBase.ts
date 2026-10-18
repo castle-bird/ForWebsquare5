@@ -94,17 +94,27 @@ export function onGitChange(listener: () => void): vscode.Disposable {
  * git blame은 파일 이력만큼 걸릴 수 있어(긴 이력이면 수백 ms 이상) 입력마다 돌리지 않는다
  */
 export function blameFeed(job: () => Promise<void>, delay = 1000) {
-	let timer: NodeJS.Timeout | undefined, running = false, again = false;
+	let timer: NodeJS.Timeout | undefined, running = false, again = false, disposed = false;
 	const run = async (): Promise<void> => {
+		if (disposed) { return; }
 		if (running) { again = true; return; }
 		running = true;
 		try { await job(); } catch { /* 표시만 안 함 */ } finally {
 			running = false;
-			if (again) { again = false; void run(); }
+			if (again && !disposed) { again = false; void run(); }
 		}
 	};
 	return {
-		schedule(ms = delay) { clearTimeout(timer); timer = setTimeout(() => void run(), ms); },
-		dispose() { clearTimeout(timer); },
+		schedule(ms = delay) {
+			if (disposed) { return; }
+			again = false;
+			clearTimeout(timer);
+			timer = setTimeout(() => void run(), ms);
+		},
+		dispose() {
+			disposed = true;
+			again = false;
+			clearTimeout(timer);
+		},
 	};
 }

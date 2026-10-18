@@ -1,10 +1,10 @@
 // 셀 병합: gridView 컬럼, 또는 group(tagname th·td)으로 만든 표의 셀. 고른 셀이 직사각형으로 빈틈없이 붙어 있을 때만.
 // 왼쪽 위 셀에 합친 칸 수(colSpan·rowSpan)를 넣고 나머지 셀은 지운다. 지워지는 group 셀 안의 컴포넌트는 왼쪽 위 셀로 옮겨 잃지 않는다
-import { applyEdits, deleteNode, eolOf, escape, leadOf, lineIndent, setAttribute, setText, sourceChange, startTagEnd, type TextEdit } from './edit';
+import { applyEdits, deleteNode, eolOf, escape, indentStep, leadOf, lineIndent, setAttribute, setText, sourceChange, startTagEnd, type TextEdit } from './edit';
 import { errorMessage } from './errors';
 import { columnLayout, gridColumnXml } from './grid';
-import { insertNode, reindentLines } from './paste';
-import { EV, isWs, kid, kids, localName, nodeAt, parseXml, pathTo, prefixOf, uniqueId, usedIds, WEBSQUARE_NS, type XmlNode } from './xmlModel';
+import { insertNode, joinSnippets } from './paste';
+import { EV, isWs, kid, kids, localName, nodeAt, nsPrefix, parseXml, pathTo, prefixOf, uniqueId, usedIds, WEBSQUARE_NS, type XmlNode } from './xmlModel';
 
 const CELL_TAGS = ['th', 'td'];
 const tagnameOf = (n: XmlNode) => n.attrs.tagname?.toLowerCase();
@@ -88,11 +88,11 @@ export function mergeProblem(root: XmlNode, cells: XmlNode[]): string | undefine
 
 /** WebSquare 네임스페이스 접두사(`w2:`). 문서에 선언돼 있어야 한다 */
 function websquarePrefix(root: XmlNode): string {
-	const decl = Object.entries(root.attrs).find(([k, v]) => v === WEBSQUARE_NS && (k === 'xmlns' || k.startsWith('xmlns:')));
-	if (!decl) {
+	const p = nsPrefix(root, WEBSQUARE_NS);
+	if (p === undefined) {
 		throw new Error('WebSquare 네임스페이스 선언을 찾지 못했습니다.');
 	}
-	return decl[0] === 'xmlns' ? '' : `${decl[0].slice(6)}:`;
+	return p;
 }
 
 /** group 셀의 HTML 속성(`<w2:attributes><w2:colspan>2</w2:colspan>`). value가 없으면 지운다 */
@@ -105,7 +105,7 @@ function setHtmlAttr(text: string, root: XmlNode, cell: XmlNode, name: string, v
 		return undefined;
 	}
 	const p = websquarePrefix(root), eol = eolOf(text), indent = lineIndent(text, cell.start);
-	const unit = indent.includes('\t') || !indent ? '\t' : '    ';
+	const unit = indentStep(indent);
 	const item = `<${p}${name}>${value}</${p}${name}>`;
 	// 줄바꿈 없이 이어 쓴 셀(`<td><a/></td>`)은 이어서, 줄을 나눠 쓴 셀은 줄을 나눠서 넣는다
 	const block = (node: XmlNode) => /^[ \t]*\r?\n/.test(text.slice(startTagEnd(text, node.start) + 1));
@@ -141,9 +141,7 @@ export function mergeCells(text: string, root: XmlNode, cells: XmlNode[]): TextE
 	const moved = grid ? [] : others.sort((a, b) => a.start - b.start).flatMap(o => o.children.filter(c => localName(c.tag) !== 'attributes'));
 	const edits: (TextEdit | undefined)[] = others.map(o => deleteNode(text, o));
 	if (moved.length) {
-		const lead = (n: XmlNode) => leadOf(text, n.start) ?? '', first = lead(moved[0]);
-		const snippet = first + moved.map(n => reindentLines(text.slice(n.start, n.end), lead(n), first)).join(eolOf(text) + first);
-		edits.push(insertNode(text, keep, 'inside', snippet));
+		edits.push(insertNode(text, keep, 'inside', joinSnippets(text, moved)));
 	}
 	const merged = applyEdits(text, edits);
 	// 2) 합친 칸 수. 하나 넣을 때마다 다시 읽는다(둘 다 새 attributes 요소를 만들지 않게). 지운 셀은 왼쪽 위 셀 뒤라 그 노드 번호는 그대로

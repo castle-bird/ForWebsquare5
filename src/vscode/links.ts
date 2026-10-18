@@ -332,7 +332,7 @@ export class LinkedFiles {
 	 * 편집기에 안 보이는 문서는 확장 호스트가 닫았다 다시 열 수 있다(버전이 1부터). 웹뷰가 아는 버전에 이어지게 offset을 맞추고,
 	 * 그사이 디스크 내용이 바뀌었으면 버전을 하나 올려(웹뷰의 옛 편집은 거부) 새 내용을 보낸다
 	 */
-	private async open(kind: string, link: Link): Promise<vscode.TextDocument | undefined> {
+	private async open(kind: string, link: Link, fromSend = false): Promise<vscode.TextDocument | undefined> {
 		if (link.doc && !link.doc.isClosed) {
 			return link.doc;
 		}
@@ -345,7 +345,7 @@ export class LinkedFiles {
 		const changedOnDisk = !!link.known && link.known.text !== doc.getText();
 		link.offset = link.known ? link.known.version - doc.version + (changedOnDisk ? 1 : 0) : 0;
 		link.doc = doc;
-		if (changedOnDisk) {
+		if (changedOnDisk && !fromSend) {
 			this.schedule(kind, 0);
 		}
 		return doc;
@@ -364,9 +364,13 @@ export class LinkedFiles {
 			return;
 		}
 		const shown = this.shown(link.uri.fsPath);
-		const doc = await this.open(kind, link);
+		const doc = await this.open(kind, link, true);
+		const missing = !doc || !doc.isDirty && !await isFile(link.uri);
+		if (this.links.get(kind) !== link) {
+			return;
+		}
 		// 지워진 파일: 저장 안 한 변경이 있으면 그 내용을 계속 보여 준다
-		if (!doc || !doc.isDirty && !await isFile(link.uri)) {
+		if (!doc || missing) {
 			await this.post({ type: 'linked', kind, path: shown });
 			return;
 		}

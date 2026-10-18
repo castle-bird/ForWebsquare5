@@ -145,7 +145,11 @@ async function formatDocument(document: vscode.TextDocument, builtIn = false): P
 	}
 	const extensions = !edits && noFormatter.get(lang) !== vscode.extensions.all.length ? languageExtensions(lang) : [];
 	if (extensions.length) {
-		edits = await waitFor(`'${lang}' 포매터 준비 중… (언어 서버 시작)`, run, (await serverReady(extensions))?.ready);
+		const hadInactive = extensions.some(ext => !ext.isActive);
+		const srv = await serverReady(extensions);
+		if (srv || hadInactive) {
+			edits = await waitFor(`'${lang}' 포매터 준비 중… (언어 서버 시작)`, run, srv?.ready);
+		}
 		if (!edits) {
 			noFormatter.set(lang, vscode.extensions.all.length);
 		}
