@@ -74,7 +74,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 - VS Code에 설치된 언어 확장(Java 등)의 자동완성·포맷·마우스 오버 설명(Javadoc)·정의로 이동(Ctrl+클릭·F12)·파라미터 힌트 사용
 - Java import 목록은 IntelliJ처럼 파일을 열면 `import …` 한 줄로 접혀 있고, 누르거나 왼쪽 접기 표시로 펼칩니다
 - Java 탭은 코드를 붙여 넣거나 포맷하면 빠진 import를 자동으로 넣습니다(Language Support for Java 사용). 안 쓰는 import는 지우지 않고, 후보가 여럿인 클래스는 건너뜁니다
-- MyBatis 매퍼의 SQL 색·키워드 자동완성. 설정 `for-websquare5.sqlDialect`로 DB 방언을 고릅니다(`standard`(기본)·`oracle`·`mysql`·`mariadb`·`postgresql`·`mssql`·`sqlite`)
+- MyBatis 매퍼의 SQL 색·키워드 자동완성. 설정 `for-websquare5.sqlDialect`로 DB 방언을 고릅니다(`standard`(기본)·`oracle`·`mysql`·`mariadb`·`postgresql`·`mssql`·`sqlite`). 방언마다 그 DB의 키워드·자료형·함수가 자동완성에 나옵니다
 
 ## 저장
 

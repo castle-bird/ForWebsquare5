@@ -30,6 +30,14 @@ export default async function ({ clickTab, reset, page, lastSent }) {
 		{ desc: '서버 날짜 반환', rows: ['fmt String:N — 날짜 포맷\ny Year', 'String — 현재날짜'], sample: 'now("<br/>");' }, 'JSDoc HTML·return 타입');
 	await page.mouse.move(0, 0);
 	await page.waitForFunction(() => !document.querySelector('.cm-tooltip .ws-hover'), { timeout: 3000 });
+	// JSDoc 문자 엔티티: 이름·숫자 참조를 모두 글자로(&amp;lt;는 한 번만 풀어 &lt;), &nbsp;는 공백
+	await reset('var b = 1; ent();\n/**\n * 가 &amp;lt; &copy; &#39;나&apos;&nbsp;다 &lt;b&gt;\n */\nfunction ent() {}');
+	const entAt = await page.evaluate(() => { const v = window.editor(), c = v.coordsAtPos(v.state.doc.toString().indexOf('ent()') + 1); return { x: c.left + 1, y: (c.top + c.bottom) / 2 }; });
+	await page.mouse.move(0, 0); await page.mouse.move(entAt.x, entAt.y);
+	await page.waitForSelector('.cm-tooltip .ws-hover .ws-doc-desc', {timeout: 3000}).catch(() => assert.fail('JSDoc 엔티티 hover'));
+	assert.equal(await page.evaluate(() => document.querySelector('.cm-tooltip .ws-hover .ws-doc-desc').textContent), "가 &lt; © '나' 다 <b>", 'JSDoc 문자 엔티티');
+	await page.mouse.move(0, 0);
+	await page.waitForFunction(() => !document.querySelector('.cm-tooltip .ws-hover'), { timeout: 3000 });
 	// Script 정의로 이동: 같은 Script면 그 이름 선택, 공통 JS면 확장에 그 파일·범위로 열기 요청, 없으면(API 등) 알림. 커서 추가는 Alt+클릭
 	const scriptAt = async (text, needle) => page.evaluate((text, needle) => { const v = window.editor(), c = v.coordsAtPos(text.indexOf(needle) + 1); return { x: c.left + 1, y: (c.top + c.bottom) / 2 }; }, text, needle);
 	const ctrlClickAt = async at => { await page.keyboard.down('Control'); await page.mouse.click(at.x, at.y); await page.keyboard.up('Control'); };

@@ -1,6 +1,9 @@
 import * as assert from 'assert';
 import { inSql, isMapper, sqlWords } from '../core/sqlCompletion';
 
+// lang-sql 타입은 DOM 타입을 끌어와(확장 tsconfig에는 DOM이 없다) 가져오지 않고 필요한 모양만 적어 읽는다
+const langSql = require('@codemirror/lang-sql') as Record<string, { spec: { keywords?: string; types?: string; builtin?: string } }>;
+
 const MAPPER = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="sample.UserMapper">
@@ -55,5 +58,23 @@ suite('MyBatis SQL 자동완성', () => {
 		assert.ok(pg.functions.includes('string_agg') && !pg.functions.includes('nvl'));
 		assert.ok(!std.functions.includes('nvl'));
 		assert.strictEqual(new Set(ora.functions).size, ora.functions.length, '중복 없음');
+	});
+
+	test('mysql·mssql·sqlite도 방언 단어: lang-sql 명세 + 자주 쓰는 함수, 다른 방언 함수는 안 섞임', () => {
+		const my = sqlWords('mysql'), ms = sqlWords('mssql'), lite = sqlWords('sqlite');
+		assert.ok(my.keywords.includes('auto_increment') && my.functions.includes('ifnull') && my.functions.includes('date_format'));
+		assert.ok(ms.keywords.includes('nvarchar') && ms.functions.includes('getdate') && ms.functions.includes('isnull'));
+		assert.ok(lite.functions.includes('strftime') && lite.keywords.includes('autoincrement'));
+		assert.ok(!my.functions.includes('nvl') && !ms.functions.includes('ifnull') && !lite.functions.includes('getdate'));
+	});
+
+	test('생성 파일(sqlDialectWords)이 lang-sql 명세를 빠짐없이 담음: 의존성을 올렸다면 npm run gen:sql-words', () => {
+		const specs = { oracle: 'PLSQL', mysql: 'MySQL', mariadb: 'MariaSQL', postgresql: 'PostgreSQL', mssql: 'MSSQL', sqlite: 'SQLite' } as const;
+		for (const [id, name] of Object.entries(specs)) {
+			const spec = langSql[name].spec, have = sqlWords(id as keyof typeof specs);
+			const split = (text?: string) => (text ?? '').split(/\s+/).map(w => w.toLowerCase()).filter(w => /^[a-z_][a-z0-9_$#]*$/.test(w));
+			assert.deepStrictEqual(split(`${spec.keywords ?? ''} ${spec.types ?? ''}`).filter(w => !have.keywords.includes(w)), [], `${id} 키워드가 빠짐`);
+			assert.deepStrictEqual(split(spec.builtin).filter(w => !have.functions.includes(w)), [], `${id} 함수가 빠짐`);
+		}
 	});
 });

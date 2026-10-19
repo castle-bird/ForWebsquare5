@@ -4,6 +4,7 @@ import { LanguageSupport, syntaxTree } from '@codemirror/language';
 import type { EditorState } from '@codemirror/state';
 import { completeFromList, ifNotIn, type Completion, type CompletionSource } from '@codemirror/autocomplete';
 import { styleTags, tags } from '@lezer/highlight';
+import { decodeHTML } from 'entities';
 import type { ComponentDef, ScriptApi, ScriptApiMethod, SignatureInfo } from '../../core/protocol';
 import { defOf, type XmlNode } from '../../core/xmlModel';
 import { docComments } from './docComment';
@@ -199,9 +200,8 @@ const jsDocDescription = (doc: string) => docText(doc.split(/\n\s*@\w/)[0]) || u
  * JSDoc 설명 글: HTML 태그를 글자로 두지 않는다(`<br/>`·`<p>`는 줄바꿈, 나머지 태그는 지움, 문자 엔티티는 글자로).
  * 줄마다 앞뒤 공백은 지운다(JSDoc 줄 이음). 코드 예(@example)에는 쓰지 않는다(코드 안 "<b>" 같은 글자는 그대로)
  */
-const docText = (text: string) => text
-	.replace(/<br\s*\/?>[ \t]*\n?/gi, '\n').replace(/<\/?(?:p|div)\b[^>]*>/gi, '\n').replace(/<\/?[a-zA-Z][^>]*>/g, '')
-	.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&')
+const docText = (text: string) => decodeHTML(text
+	.replace(/<br\s*\/?>[ \t]*\n?/gi, '\n').replace(/<\/?(?:p|div)\b[^>]*>/gi, '\n').replace(/<\/?[a-zA-Z][^>]*>/g, '').replace(/&nbsp;/g, ' '))
 	.split('\n').map(l => l.trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
 /** 이름이 이미 보이므로 숨기는 태그 */
