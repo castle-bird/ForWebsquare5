@@ -273,7 +273,8 @@ function App() {
 	const outline = useFold(n => n === body), data = useFold(n => dataRoots.includes(n));
 	// 구조 편집으로 노드 번호가 바뀌면 펼침 상태도 같은 노드로(번호 그대로 두면 엉뚱한 줄이 접히거나 펼쳐진다)
 	const remap = useEditorStore(s => s.remap);
-	useEffect(() => { if (remap) { outline.remap(remap.to); data.remap(remap.to); } }, [remap]); // outline·data 객체는 매 렌더 새로 만들어짐
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- outline·data 객체는 매 렌더 새로 만들어짐
+	useEffect(() => { if (remap) { outline.remap(remap.to); data.remap(remap.to); } }, [remap]);
 	const openEventHandler = useEventHandler({ doc, defs: defs?.defs, events, scriptRef, editAttr, showScript: () => setActiveTab('Script') });
 	const { openSubmissionEditor, openDataPopup, openDataEditor, openGridCells, openEditor, editors } = useEditorPopups(openEventHandler, () => {
 		const submissionRoot = dataRoots.find(n => n.index === -1);
@@ -301,6 +302,7 @@ function App() {
 		pendingDataCreate.current = undefined;
 		const created = dataCollection?.children.find(c => c.tag.endsWith(`:${pending.kind}`) && c.attrs.id && !pending.ids.has(c.attrs.id));
 		if (created) { openDataPopup(created.attrs.id); }
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- 문서 버전이 바뀔 때만 확인(openDataPopup은 매 렌더 새 함수)
 	}, [doc?.version, dataCollection]);
 	const bindRefTo = (index: number, value: string) => {
 		if (!doc || !root) { return; }

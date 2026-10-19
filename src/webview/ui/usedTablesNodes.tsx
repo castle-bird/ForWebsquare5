@@ -73,7 +73,8 @@ function useAutoFocus<T extends HTMLElement>(ref: RefObject<T | null>, done: Ref
 		};
 		focus();
 		return () => cancelAnimationFrame(frame);
-	}, []); // 열릴 때 한 번
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- 열릴 때 한 번(ref·done은 ref, onFocus는 그때의 것)
+	}, []);
 }
 
 /** 넓은 글자(한글 자모·CJK·한글 음절·전각) 범위 */
@@ -261,6 +262,7 @@ function ShapeBox({ id, data, selected }: NodeProps<ShapeNode>) {
 	const set = (patch: Partial<UsedShape>) => editItem(edit, 'shapes', id, x => ({ ...x, ...patch }));
 	// 모양이 바뀌면 연결점 자리가 바뀌니 React Flow가 다시 재야 선이 따라온다(크기는 % 자리라 그대로)
 	const updateInternals = useUpdateNodeInternals();
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- 모양이 바뀔 때만(id는 노드마다 고정)
 	useEffect(() => updateInternals(id), [s.kind]);
 	return <>
 		<NodeResizer isVisible={selected} minWidth={8} minHeight={8} onResizeEnd={(_, p) => set(boxOf(p))} />

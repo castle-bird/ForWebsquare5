@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/test/**/*.test.ts",
+    "scripts/**/*.{mjs,cjs}"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{mjs,cjs}"],
+  "ignoreDependencies": ["@vscode/test-electron"]
+}

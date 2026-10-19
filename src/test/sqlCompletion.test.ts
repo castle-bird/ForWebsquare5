@@ -68,7 +68,7 @@ suite('MyBatis SQL 자동완성', () => {
 		assert.ok(!my.functions.includes('nvl') && !ms.functions.includes('ifnull') && !lite.functions.includes('getdate'));
 	});
 
-	test('생성 파일(sqlDialectWords)이 lang-sql 명세를 빠짐없이 담음: 의존성을 올렸다면 npm run gen:sql-words', () => {
+	test('방언 단어가 lang-sql 명세를 빠짐없이 담음', () => {
 		const specs = { oracle: 'PLSQL', mysql: 'MySQL', mariadb: 'MariaSQL', postgresql: 'PostgreSQL', mssql: 'MSSQL', sqlite: 'SQLite' } as const;
 		for (const [id, name] of Object.entries(specs)) {
 			const spec = langSql[name].spec, have = sqlWords(id as keyof typeof specs);

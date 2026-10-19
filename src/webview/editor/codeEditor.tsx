@@ -454,7 +454,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 			stopRestoring();
 			editor.destroy();
 		};
-	}, []); // 편집기는 한 번만 만들고 아래 effect들로 갱신
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- 편집기는 한 번만 만들고 아래 effect들로 갱신
+	}, []);
 
 	useImperativeHandle(ref, () => ({
 		appendAndFocus(text, cursorOffset) {

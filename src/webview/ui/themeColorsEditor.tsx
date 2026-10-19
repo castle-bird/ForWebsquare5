@@ -46,8 +46,9 @@ export function ThemeColorsEditor({ onClose }: { onClose(): void }) {
 		const view = new EditorView({ parent: preview.current!, doc: SAMPLE, extensions: [javaSupport, editorBase, EditorView.editable.of(false), conf.of(themeOf(previewState))] });
 		previewView.current = { view, conf };
 		return () => view.destroy();
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- 미리보기 편집기는 한 번만 만들고 색은 아래 effect가 바꾼다
 	}, []);
-	useEffect(() => { previewView.current?.view.dispatch({ effects: previewView.current.conf.reconfigure(themeOf(previewState)) }); }, [theme, layers]);
+	useEffect(() => { previewView.current?.view.dispatch({ effects: previewView.current.conf.reconfigure(themeOf({ ...theme, ...layers })) }); }, [theme, layers]);
 
 	const update = (change: (o: ThemeOverlay) => ThemeOverlay) => setLayers(current => ({ ...current, [key]: change(current[key]) }));
 	const setColor = (name: ColorKey, value: string | undefined) => update(o => {

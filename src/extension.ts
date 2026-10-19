@@ -97,7 +97,7 @@ function watchScreenFiles(): vscode.Disposable {
 		const key = uri.toString();
 		clearTimeout(timers.get(key));
 		// 한 번 쓰기에 이벤트가 여러 번 올 수 있어 잠깐 모은다
-		timers.set(key, setTimeout(async () => {
+		timers.set(key, setTimeout(() => void (async () => {
 			timers.delete(key);
 			if (vscode.workspace.textDocuments.some(d => d.isDirty && d.uri.toString() === key)) {
 				return;
@@ -108,7 +108,7 @@ function watchScreenFiles(): vscode.Disposable {
 			} catch {
 				// 지워졌거나 아직 쓰는 중: 다음 변경 때 다시
 			}
-		}, 30));
+		})(), 30));
 	};
 	watcher.onDidChange(onDisk);
 	watcher.onDidCreate(onDisk);
@@ -364,7 +364,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			vscode.workspace.onDidChangeTextDocument(e => {
 				if (e.document === document) {
 					clearTimeout(timer);
-					timer = setTimeout(sendDocument, 300);
+					timer = setTimeout(() => void sendDocument(), 300);
 					xmlBlame.schedule();
 				}
 			}),

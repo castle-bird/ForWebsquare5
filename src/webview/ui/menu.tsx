@@ -14,14 +14,14 @@ export function Menu({ x = 0, y = 0, anchor, placement = 'bottom-start', onClose
 		if (placed) {
 			ref.current?.querySelector('button')?.focus();
 		}
-	}, [placed]);
+	}, [placed, ref]);
 	useEffect(() => {
 		const outside = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) { close.current(); } };
 		const escape = (e: KeyboardEvent) => { if (e.key === 'Escape') { close.current(); } };
 		document.addEventListener('pointerdown', outside);
 		document.addEventListener('keydown', escape);
 		return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
-	}, []);
+	}, [ref]);
 	return <div ref={ref} className="context-menu" role="menu" style={style}>{children}</div>;
 }
 
@@ -33,7 +33,7 @@ export function Submenu({ label, children }: { label: string; children: ReactNod
 	const { ref, style, placed } = useFloating<HTMLDivElement>(open ? trigger.current ?? undefined : undefined, 'right-start');
 	useEffect(() => {
 		if (placed && keyboard.current) { ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus(); }
-	}, [placed]);
+	}, [placed, ref]);
 	return <div onMouseEnter={() => { keyboard.current = false; setOpen(true); }} onMouseLeave={() => setOpen(false)} onKeyDown={e => {
 		if (e.key === 'ArrowLeft') { e.preventDefault(); setOpen(false); trigger.current?.focus(); }
 		if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {

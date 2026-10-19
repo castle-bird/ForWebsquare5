@@ -152,6 +152,7 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 			const index = wseIndex(el), draggable = !!onMove && index !== body.index && unitAt(index)?.index === index;
 			if (el.draggable !== draggable) { el.draggable = draggable; }
 		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- unitAt은 tree에서 나오는 매 렌더 새 함수
 	}, [body, tree, shadow, onMove]);
 	const moveDrop = (e: { target: EventTarget; clientX: number; clientY: number }) => {
 		const source = moving.current;

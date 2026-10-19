@@ -36,6 +36,7 @@ export function usePopupWindow(options: { initialOffset?: number; onClose?(): vo
 			});
 		}
 		// 처음 열 때만 배치: 다른 팝업이 닫혀 순번(initialOffset)이 바뀌어도 이 팝업이 가운데로 튀지 않게
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	const titleProps = {

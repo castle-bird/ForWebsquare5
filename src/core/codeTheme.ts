@@ -1,4 +1,6 @@
 // 코드 편집기(Script·Source·연결 탭) 테마: VS Code 테마 따라가기 + thememirror(MIT) 테마. 모든 화면 공통
+import { parse, printParseErrorCode, type ParseError } from 'jsonc-parser';
+
 export const CODE_THEMES = [
 	{ id: 'vscode', label: 'VS Code 테마 따라가기 (기본)' },
 	{ id: 'amy', label: 'Amy', dark: true },
@@ -112,10 +114,17 @@ export function withCustomizations(setting: unknown, id: string, label: string, 
 	return s;
 }
 
-/** VS Code 테마 JSON은 주석·끝 쉼표를 허용(JSONC). 문자열 밖의 것만 지운다 */
+/** VS Code 테마 JSON은 주석·끝 쉼표를 허용(JSONC). VS Code와 같은 파서로 읽고, 형식 오류는 첫 오류 위치와 함께 던진다 */
 export function parseJsonc(text: string): unknown {
-	const noComments = text.replace(/("(?:\\.|[^"\\])*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (_, str: string | undefined) => str ?? '');
-	return JSON.parse(noComments.replace(/("(?:\\.|[^"\\])*")|,(\s*[}\]])/g, (_, str: string | undefined, close: string | undefined) => str ?? close!));
+	text = text.replace(/^﻿/, '');
+	const errors: ParseError[] = [];
+	const value: unknown = parse(text, errors, { allowTrailingComma: true });
+	if (errors.length) {
+		const { error, offset } = errors[0], before = text.slice(0, offset);
+		const line = before.split('\n').length, ch = offset - before.lastIndexOf('\n');
+		throw new SyntaxError(`JSON 형식 오류입니다(${printParseErrorCode(error)}, ${line}줄 ${ch}칸).`);
+	}
+	return value;
 }
 
 /** VS Code 테마 .json(include는 따라가 합친 뒤) */

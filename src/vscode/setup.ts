@@ -141,22 +141,25 @@ function revalidate(root: string): void {
 		return;
 	}
 	revalidated.add(root);
-	setTimeout(async () => {
-		const found = await Promise.all(FILE_KEYS.map(async key => [key, await scan(key, root).catch(() => undefined)] as const));
-		const known = installs().files[root] ?? {};
-		const files = { ...known };
-		for (const [key, file] of found) {
-			if (file) {
-				files[key] = file;
-			} else {
-				delete files[key];
-			}
+	// 실패하면(설치 폴더를 못 읽음 등) 기억한 경로를 그대로 쓴다
+	setTimeout(() => void recheck(root).catch(() => undefined), 15_000);
+}
+
+async function recheck(root: string): Promise<void> {
+	const found = await Promise.all(FILE_KEYS.map(async key => [key, await scan(key, root).catch(() => undefined)] as const));
+	const known = installs().files[root] ?? {};
+	const files = { ...known };
+	for (const [key, file] of found) {
+		if (file) {
+			files[key] = file;
+		} else {
+			delete files[key];
 		}
-		if (FILE_KEYS.some(key => files[key] !== known[key])) {
-			await updateInstalls(i => ({ ...i, files: { ...i.files, [root]: files } }));
-			installChanged.fire();
-		}
-	}, 15_000);
+	}
+	if (FILE_KEYS.some(key => files[key] !== known[key])) {
+		await updateInstalls(i => ({ ...i, files: { ...i.files, [root]: files } }));
+		installChanged.fire();
+	}
 }
 
 const existing = async (roots: string[]) => (await Promise.all(roots.map(async root => await exists(root) ? root : undefined))).filter(root => root !== undefined);

@@ -131,7 +131,7 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 			document.removeEventListener('mousedown', onDown);
 			document.removeEventListener('keydown', onKey);
 		};
-	}, [help]);
+	}, [help, popup]);
 
 	return (
 		<div className="pane"

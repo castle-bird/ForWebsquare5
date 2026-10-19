@@ -40,23 +40,6 @@ const inlineCssPlugin = {
 	},
 };
 
-/**
- * htmlparser2·entities는 lib/esm/package.json({"type":"module"})이 상위의 sideEffects:false를 가려서
- * 웹뷰가 쓰지 않는 파서·엔티티 표(~80KB)가 번들에 남는다 → 부작용 없는 패키지로 표시
- */
-const pureDepsPlugin = {
-	name: 'pure-deps',
-	setup(build) {
-		build.onResolve({ filter: /^(htmlparser2|entities|domhandler|domutils|dom-serializer)$/ }, async (args) => {
-			if (args.pluginData === 'pure-deps') {
-				return undefined;
-			}
-			const result = await build.resolve(args.path, { kind: args.kind, resolveDir: args.resolveDir, importer: args.importer, pluginData: 'pure-deps' });
-			return { ...result, sideEffects: false };
-		});
-	},
-};
-
 async function main() {
 	const common = {
 		bundle: true,
@@ -75,6 +58,8 @@ async function main() {
 			platform: 'node',
 			outfile: 'dist/extension.js',
 			external: ['vscode'],
+			// jsonc-parser의 기본 진입점(UMD)은 동적 require('./impl/…')라 번들에서 못 찾는다 → ESM 진입점
+			alias: { 'jsonc-parser': 'jsonc-parser/lib/esm/main.js' },
 		}),
 		// wpack 상주 변환: 사용자 설치본의 node.exe(16)로 따로 실행된다
 		esbuild.context({
@@ -87,7 +72,7 @@ async function main() {
 		}),
 		esbuild.context({
 			...common,
-			plugins: [...common.plugins, inlineCssPlugin, pureDepsPlugin, cspPatchesPlugin],
+			plugins: [...common.plugins, inlineCssPlugin, cspPatchesPlugin],
 			entryPoints: ['src/webview/main.tsx'],
 			format: 'iife',
 			platform: 'browser',

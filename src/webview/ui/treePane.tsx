@@ -79,7 +79,8 @@ export function TreePane({ body, dataRoots, model, dataCollection, outline, data
 		if (path) {
 			outline.reveal(path.slice(0, -1));
 		}
-	}, [selected, body]); // outline 객체는 매 렌더 새로 만들어지므로 선택이 바뀔 때만 실행
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- outline 객체는 매 렌더 새로 만들어지므로 선택이 바뀔 때만 실행
+	}, [selected, body]);
 
 	/** Data 트리에서 끌어 캔버스에 바인딩할 값: dataList는 data:id, 컬럼·키는 data:id.컬럼 */
 	const refOf = (n: XmlNode) => {

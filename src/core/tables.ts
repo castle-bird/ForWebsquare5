@@ -2,7 +2,7 @@
 
 /** 등록·조회·수정·삭제(CRUD 매트릭스 순서) */
 export const CRUD = [['C', '등록'], ['R', '조회'], ['U', '수정'], ['D', '삭제']] as const;
-export type CrudKey = typeof CRUD[number][0];
+type CrudKey =typeof CRUD[number][0];
 /** 테이블·메모·그룹·도형 색(이름만 저장하고 실제 색은 VS Code 테마 색) */
 export const NOTE_COLORS = [['yellow', '노랑'], ['orange', '주황'], ['red', '빨강'], ['pink', '분홍'], ['purple', '보라'], ['blue', '파랑'], ['cyan', '청록'],
 	['green', '초록'], ['gray', '회색']] as const;

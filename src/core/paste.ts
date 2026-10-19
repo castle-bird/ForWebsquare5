@@ -20,7 +20,7 @@ export type DropPosition = 'before' | 'after' | 'inside';
 export type InsertPosition = DropPosition | 'first';
 
 /** 줄마다 들여쓰기 from → to. 속성값·주석·CDATA·처리 명령 안의 줄은 값이라 건드리지 않는다. s는 태그 바깥에서 시작 */
-export function reindentLines(s: string, from: string, to: string): string {
+function reindentLines(s: string, from: string, to: string): string {
 	const inValue = new Set<number>();
 	for (let i = 0, tag = false, quote = ''; i < s.length; i++) {
 		const c = s[i];

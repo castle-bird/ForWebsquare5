@@ -87,6 +87,7 @@ const TRIGGERS = ['.', '<', '@'];
 /**
  * VS Code 스니펫 → CodeMirror 스니펫. 둘 다 `${1:이름}`·`${0}`(마지막 자리)을 쓰고, 다른 점만 바꾼다:
  * `$1` → `${1}`, 선택지 `${1|a,b|}` → 첫 값, VS Code 이스케이프(`\$`·`\\`), CodeMirror가 자리로 읽는 `#{`
+ * @public 웹뷰 테스트 하네스가 직접 불러 쓴다
  */
 export const toSnippet = (vs: string) => vs.replace(/\\([$}\\])|\$\{(\d+)\|([^,|}]*)[^}]*\|\}|\$(\d+)|#\{/g,
 	(_m, escaped?: string, choice?: string, first?: string, tabstop?: string) =>

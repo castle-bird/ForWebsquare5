@@ -92,7 +92,7 @@ export async function eclipseUsage(root: string): Promise<{ lastUsed: number; wo
 }
 
 /** 훑을 곳: Windows는 로컬 고정 드라이브(C:·D: 등, 네트워크·이동식 제외), 그 밖에는 홈·/opt·/Applications */
-export async function searchRoots(): Promise<string[]> {
+async function searchRoots(): Promise<string[]> {
 	if (process.platform !== 'win32') {
 		const candidates = [os.homedir(), '/opt', '/Applications'];
 		return (await Promise.all(candidates.map(async dir => await exists(dir) ? dir : undefined))).filter(dir => dir !== undefined);

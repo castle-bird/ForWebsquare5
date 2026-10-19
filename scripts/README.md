@@ -19,6 +19,7 @@
 | 웹뷰 전체 회귀 | `npm run test:editors` |
 | VS Code 통합 | `npm run test:vscode` (필요 시 `-- --code-version 1.125.0`) |
 | 타입·lint | `npm run check-types` / `npm run lint` |
+| 안 쓰는 코드·의존성 | `npm run knip` |
 | 선택 실행기 자체 검사 | `node --test scripts/test-selection.test.mjs` |
 
 단위: `src/test/*.test.ts`. esbuild가 선택한 파일과 의존 코드만 `out/test`에 만들고 Node Mocha로 실행한다. Chrome·VS Code를 띄우거나 확장 전체를 tsc로 컴파일하지 않는다. 타입 검사는 별도다. 이름 오타나 없는 파일은 실패하며, 전체 실행으로 바꾸지 않는다.

@@ -26,7 +26,7 @@ export const post = (msg: ToExtension) => vscode.postMessage(msg);
 export type Doc = Extract<ToWebview, { type: 'document' }>;
 type Defs = Extract<ToWebview, { type: 'definitions' }>;
 type Styles = Extract<ToWebview, { type: 'styles' }>;
-export type ScriptApi = Extract<ToWebview, { type: 'scriptApi' }>;
+type ScriptApi = Extract<ToWebview, { type: 'scriptApi' }>;
 type Modules = Extract<ToWebview, { type: 'modules' }>;
 
 interface EditorState {

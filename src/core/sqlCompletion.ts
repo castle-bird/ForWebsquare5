@@ -1,6 +1,5 @@
 // MyBatis 매퍼 XML 안 SQL 자동완성: SQL 자리 판단, 키워드·함수 목록(방언별)
 import type { SqlDialect } from './codeOptions';
-import { SQL_DIALECT_WORDS } from './sqlDialectWords';
 
 /** 매퍼 XML인지(DOCTYPE mapper 또는 mapper 태그) */
 export const isMapper = (xml: string) => /<!DOCTYPE\s+mapper\b|<mapper[\s>]/.test(xml);
@@ -39,8 +38,20 @@ const KEYWORDS = 'select from where and or not in is null like between exists as
 	+ 'intersect except any some escape nulls first last';
 const FUNCTIONS = 'count sum avg min max coalesce nullif cast upper lower trim ltrim rtrim length replace substr round trunc abs mod '
 	+ 'lpad rpad concat greatest least row_number rank dense_rank lag lead current_date current_timestamp';
+/** 방언 → lang-sql 방언 이름. standard는 명세를 쓰지 않는다(기본 단어만) */
+const SPECS: Partial<Record<SqlDialect, string>> = { oracle: 'PLSQL', mysql: 'MySQL', mariadb: 'MariaSQL', postgresql: 'PostgreSQL', mssql: 'MSSQL', sqlite: 'SQLite' };
+
+type DialectSpec = { keywords?: string; types?: string; builtin?: string };
+
 /**
- * 방언 명세(SQL_DIALECT_WORDS, lang-sql에서 생성)에 없는 자주 쓰는 단어. lang-sql은 Oracle `nvl`·`decode`·`sysdate`,
+ * lang-sql 방언 명세(키워드·자료형·내장 함수). 처음 SQL 자동완성 때 불러온다.
+ * lang-sql 타입은 DOM 타입을 끌어와(확장 tsconfig에는 DOM이 없다) 필요한 모양만 적어 읽는다
+ */
+const dialectSpec = (name: string): DialectSpec | undefined =>
+	(require('@codemirror/lang-sql') as Record<string, { spec?: DialectSpec } | undefined>)[name]?.spec;
+
+/**
+ * 방언 명세(SPECS)에 없는 자주 쓰는 단어. lang-sql은 Oracle `nvl`·`decode`·`sysdate`,
  * PostgreSQL `now`·`to_char`, MySQL `ifnull`·`date_format`, SQLite `strftime` 같은 함수를 빼 두었다
  */
 const DIALECT_WORDS: Partial<Record<SqlDialect, { keywords?: string; functions: string }>> = {
@@ -66,13 +77,21 @@ const DIALECT_WORDS: Partial<Record<SqlDialect, { keywords?: string; functions: 
 	},
 };
 
-const words = (text: string) => text.split(' ').filter(Boolean);
+/** 공백으로 나눈 단어(소문자). 명세의 기호·따옴표 단어는 뺀다 */
+const words = (text: string) => text.split(/\s+/).map(w => w.toLowerCase()).filter(w => /^[a-z_][a-z0-9_$#]*$/.test(w));
+
+const cache = new Map<SqlDialect, { keywords: string[]; functions: string[] }>();
 
 /** 방언의 키워드·함수(소문자, 중복 없음): 기본 단어 + lang-sql 방언 명세 + 자주 쓰는 보충 단어 */
 export function sqlWords(dialect: SqlDialect): { keywords: string[]; functions: string[] } {
-	const spec = SQL_DIALECT_WORDS[dialect], extra = DIALECT_WORDS[dialect];
-	return {
-		keywords: [...new Set(words([KEYWORDS, spec?.keywords, extra?.keywords].filter(Boolean).join(' ')))],
-		functions: [...new Set(words([FUNCTIONS, spec?.functions, extra?.functions].filter(Boolean).join(' ')))],
-	};
+	let found = cache.get(dialect);
+	if (!found) {
+		const name = SPECS[dialect], spec = name ? dialectSpec(name) : undefined, extra = DIALECT_WORDS[dialect];
+		found = {
+			keywords: [...new Set(words([KEYWORDS, spec?.keywords, spec?.types, extra?.keywords].filter(Boolean).join(' ')))],
+			functions: [...new Set(words([FUNCTIONS, spec?.builtin, extra?.functions].filter(Boolean).join(' ')))],
+		};
+		cache.set(dialect, found);
+	}
+	return found;
 }

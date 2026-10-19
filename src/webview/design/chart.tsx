@@ -29,10 +29,10 @@ function chartData(collection: XmlNode | undefined, ref: string | undefined) {
 export function FusionChart({ node }: { node: XmlNode }) {
 	const ref = useRef<HTMLCanvasElement>(null);
 	const collection = useContext(DataCollection);
-	const { chartType = '', plotColor } = node.attrs;
-	const data = chartData(collection, node.attrs.ref);
-	const colors = plotColor ? plotColor.split(',').map(c => c.trim()) : PALETTE;
 	useEffect(() => {
+		const { chartType = '', plotColor } = node.attrs;
+		const data = chartData(collection, node.attrs.ref);
+		const colors = plotColor ? plotColor.split(',').map(c => c.trim()) : PALETTE;
 		const canvas = ref.current!;
 		const draw = () => {
 			const { width, height } = canvas.getBoundingClientRect();

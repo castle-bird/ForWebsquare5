@@ -7,6 +7,8 @@ import { DEFAULT_CODE_OPTIONS, readFontLigatures, readSqlDialect, readWordWrap, 
 suite('코드 편집기 테마', () => {
 	test('코드 편집기 테마 가져오기: VS Code 테마 .json(JSONC) → 색·문법 색', () => {
 		assert.deepStrictEqual(parseJsonc('{\n // 주석\n "a": "http://x/*y*/", /* 블록 */ "b": [1, 2,],\n}'), { a: 'http://x/*y*/', b: [1, 2] }, '문자열 안 // /* 는 그대로');
+		assert.deepStrictEqual(parseJsonc('﻿{"a": 1}'), { a: 1 }, 'BOM으로 시작하는 파일');
+		assert.throws(() => parseJsonc('{\n "a": 1\n "b": 2\n}'), /JSON 형식 오류입니다\(CommaExpected, 3줄 2칸\)/, '오류는 위치와 함께');
 		const theme = fromVsCodeTheme({
 			type: 'dark',
 			colors: { 'editor.background': '#101010', 'editor.foreground': '#eeeeee', 'editorLineNumber.foreground': '#555555', 'editor.selectionBackground': 'nope' },
