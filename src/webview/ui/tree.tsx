@@ -52,9 +52,10 @@ export interface Rename { index?: number; commit(node: XmlNode, id: string): voi
 /** 화면 점검(core/check): of 노드 → 문제들, inside 안쪽에 문제가 있는 노드 */
 export interface Problems { of: Map<number, string[]>; inside: Set<number> }
 
-export function TreeItem({ node, depth, selected, extra, onSelect, onContextMenu, onDoubleClick, fold, defs, interactive, bindRef, reorder, rename, problems, dropParent }: {
+export function TreeItem({ node, depth, selected, extra, onSelect, onRange, onContextMenu, onDoubleClick, fold, defs, interactive, bindRef, reorder, rename, problems, dropParent }: {
 	node: XmlNode; depth: number; selected?: number;
-	extra?: number[]; onSelect(i: number, additive?: boolean): void; onContextMenu?(e: MouseEvent<HTMLDivElement>, node: XmlNode): void; onDoubleClick?(node: XmlNode): void;
+	/** onRange: Shift+클릭(지금 고른 줄부터 이 줄까지). row는 누른 줄 */
+	extra?: number[]; onSelect(i: number, additive?: boolean): void; onRange?(i: number, row: HTMLElement): void; onContextMenu?(e: MouseEvent<HTMLDivElement>, node: XmlNode): void; onDoubleClick?(node: XmlNode): void;
 	fold: Fold; defs?: ComponentDef[]; interactive?: boolean;
 	bindRef?(node: XmlNode): string | undefined;
 	reorder?: Reorder;
@@ -92,7 +93,7 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onContextMenu
 			<div ref={setRow} role="treeitem" aria-expanded={hasChildren ? open : undefined}
 				data-index={node.index} data-depth={depth} data-container={container || undefined} data-open={open && hasChildren || undefined}
 				className={clsx('tree-row', { selected: isSelected || isExtra, dragging: drag.isDragging, 'drop-inside': dropHere && dropParent.inside, 'drop-parent': dropHere && !dropParent.inside }, nativeZone && `drop-${nativeZone}`)}
-				style={{ paddingLeft: 4 + depth * 14 }} onClick={e => onSelect(node.index, e.ctrlKey || e.metaKey)}
+				style={{ paddingLeft: 4 + depth * 14 }} onClick={e => e.shiftKey && onRange ? onRange(node.index, e.currentTarget) : onSelect(node.index, e.ctrlKey || e.metaKey)}
 				onContextMenu={e => onContextMenu?.(e, node)}
 				onDoubleClick={() => onDoubleClick?.(node)}
 				draggable={ref || movable ? true : undefined}
@@ -135,7 +136,7 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onContextMenu
 					: !open && problems && [node, ...children].some(c => problems.inside.has(c.index) || c !== node && problems.of.has(c.index)) && <span className="codicon codicon-warning tree-problem inside" role="img" aria-label="안쪽 점검 문제" title="안쪽에 점검 문제가 있습니다" />}
 				{!interactive && node.attrs.name && <span className="name">{node.attrs.name}</span>}
 			</div>
-			{open && children.map(c => <TreeItem key={c.index} node={c} depth={depth + 1} selected={selected} extra={extra} onSelect={onSelect} onContextMenu={onContextMenu} onDoubleClick={onDoubleClick} fold={fold} defs={defs} interactive={interactive} bindRef={bindRef} reorder={reorder} rename={rename} problems={problems} dropParent={dropParent} />)}
+			{open && children.map(c => <TreeItem key={c.index} node={c} depth={depth + 1} selected={selected} extra={extra} onSelect={onSelect} onRange={onRange} onContextMenu={onContextMenu} onDoubleClick={onDoubleClick} fold={fold} defs={defs} interactive={interactive} bindRef={bindRef} reorder={reorder} rename={rename} problems={problems} dropParent={dropParent} />)}
 		</>
 	);
 }

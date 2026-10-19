@@ -188,6 +188,15 @@ export default async function ({ page, pickProperty }) {
 		await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr' && m.name === 'disabled'));
 		const multiMsg = await page.evaluate(() => window.sent.find(m => m.type === 'setAttr'));
 		assert.deepEqual({ index: multiMsg.index, value: multiMsg.value, more: multiMsg.more }, { index: 3, value: 'true', more: [{ index: 2, value: 'true' }] }, '두 컴포넌트 한 요청');
+		// 확장이 고친 문서를 돌려줘도 다중 선택은 그대로여야 속성을 연달아 고칠 수 있다
+		await page.evaluate(() => {
+			const text = '<html xmlns:w2="urn:test"><body><w2:input id="m1" disabled="true" style="width:10px;top:1px;"/><w2:input id="m2" disabled="true" style="width:20px;top:2px;"/></body></html>';
+			const root = window.parseXml(text);
+			root.children[0].children.forEach(c => c.def = 0);
+			window.send({ type: 'document', version: 94, text, root, script: { text: '' } });
+		});
+		await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+		assert.equal(await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-frame.selected').length), 2, '속성 변경 뒤에도 다중 선택 유지');
 		await page.evaluate(() => { window.sent.length = 0; });
 		await page.click('.style-area .style-value');
 		await page.keyboard.down('Control'); await page.keyboard.press('a'); await page.keyboard.up('Control');

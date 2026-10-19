@@ -67,12 +67,12 @@ suite('데이터 id 바꾸기 (VS Code)', () => {
 		assert.strictEqual(doc.getText(), xml.replace('dataList id="dlt_a"', 'dataList id="dlt_b"').replace('bind="dlt_a"', 'bind="dlt_b"')
 			.replace('"id":"dlt_a"', '"id":"dlt_b"').replace('data:json,dlt_a"', 'data:json,dlt_b"').replace('dataList="data:dlt_a"', 'dataList="data:dlt_b"')
 			.replace('ref="data:dlt_a.dlt_a"', 'ref="data:dlt_b.dlt_a"'));
-		assert.deepStrictEqual(notes, ['바인딩 5곳도 함께 변경했습니다. `dlt_a` → `dlt_b`']);
+		assert.deepStrictEqual(notes, ['바인딩 5곳도 함께 변경했습니다.\n`dlt_a` → `dlt_b`']);
 		// DataList 팝업에서 id를 바꿔도 같이. 참조가 없으면 알림 없음
 		const two = findNode(parseXml(doc.getText())!, n => n.attrs.id === 'dlt_a2')!;
 		assert.ok(await applyNodeEdit(doc, { type: 'editDataFields', version: doc.version, index: two.index, popup: 'p', fields: [], id: 'dlt_c' }, m => notes.push(m)));
 		assert.ok(doc.getText().includes('nodeset="data:dlt_c"') && doc.getText().includes('ref="data:dlt_c.x"'), doc.getText());
-		assert.strictEqual(notes.at(-1), '바인딩 2곳도 함께 변경했습니다. `dlt_a2` → `dlt_c`');
+		assert.strictEqual(notes.at(-1), '바인딩 2곳도 함께 변경했습니다.\n`dlt_a2` → `dlt_c`');
 		const ldt = findNode(parseXml(doc.getText())!, n => n.attrs.id === 'ldt')!;
 		assert.ok(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: ldt.index, name: 'id', value: 'ldt2' }, m => notes.push(m)));
 		assert.strictEqual(notes.length, 2, '참조 없으면 알림 없음');
@@ -95,13 +95,13 @@ suite('데이터 id 바꾸기 (VS Code)', () => {
 		assert.strictEqual(doc.getText(), xml.replace('<w2:column id="testCol" dataType', '<w2:column id="testCol2x" dataType')
 			.replace('<w2:gBody><w2:row><w2:column id="testCol"/><w2:column id="testCol2"/>', '<w2:gBody><w2:row><w2:column id="testCol2x"/><w2:column id="testCol2"/>')
 			.replace('ref="data:dataList1.testCol"', 'ref="data:dataList1.testCol2x"').replace('<xf:value ref="testCol"/>', '<xf:value ref="testCol2x"/>'));
-		assert.deepStrictEqual(notes, ['바인딩 3곳도 함께 변경했습니다. `dataList1.testCol` → `testCol2x`']);
+		assert.deepStrictEqual(notes, ['바인딩 3곳도 함께 변경했습니다.\n`dataList1.testCol` → `testCol2x`']);
 		// 팝업: 데이터 id와 키를 한 번에(키 바꾸기)
 		const map = findNode(parseXml(doc.getText())!, n => n.attrs.id === 'dma')!;
 		const key = findNode(map, n => n.tag === 'w2:key')!;
 		assert.ok(await applyNodeEdit(doc, { type: 'editDataFields', version: doc.version, index: map.index, popup: 'p', id: 'dma2',
 			fields: [{ sourceIndex: key.index, id: 'k2', name: '', dataType: 'text', length: '', encYN: false }] }, m => notes.push(m)));
 		assert.ok(doc.getText().includes('ref="data:dma2.k2"'), doc.getText());
-		assert.strictEqual(notes.at(-1), '바인딩 1곳도 함께 변경했습니다. `dma` → `dma2`, `dma.k` → `k2`');
+		assert.strictEqual(notes.at(-1), '바인딩 1곳도 함께 변경했습니다.\n`dma` → `dma2`\n`dma.k` → `k2`');
 	});
 });

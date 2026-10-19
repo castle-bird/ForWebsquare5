@@ -187,8 +187,10 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 	target: CodeTarget; lang: LanguageSupport; complete: CompletionSource; hover?: HoverSource; definition?: DefinitionSource; signature?: LocalSignatureSource; lint?: LintMode; text: string; version: number;
 	/** VS Code 언어 확장의 자동완성을 먼저 쓴다(연결 탭). 없으면 complete */
 	remote?: boolean;
+	/** 붙여넣은 뒤 VS Code 언어 확장으로 빠진 import를 넣는다(Java 연결 탭) */
+	autoImport?: boolean;
 	readOnly?: boolean; notes?: (string | undefined)[]; post(msg: ToExtension): void;
-}>(function CodeEditor({ target, lang, complete, hover, definition, signature, lint, text, version, remote = false, readOnly = false, notes = [], post }, ref) {
+}>(function CodeEditor({ target, lang, complete, hover, definition, signature, lint, text, version, remote = false, autoImport = false, readOnly = false, notes = [], post }, ref) {
 	const host = useRef<HTMLDivElement>(null);
 	const view = useRef<EditorView>(null);
 	const source = useRef(complete);
@@ -198,7 +200,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 	const jumpFrom = useRef<EditorSelection>(undefined);
 	const signatureSource = useRef(signature);
 	const languageOf = useRef<(l: LanguageSupport) => Extension>(() => []);
-	const sync = useRef<{ base: number; inFlight: boolean; remote: boolean; conflict: boolean; queued?: [ChangeSet, Text]; formatting?: Text; formatAfter?: boolean }>(
+	const sync = useRef<{ base: number; inFlight: boolean; remote: boolean; conflict: boolean; queued?: [ChangeSet, Text]; formatting?: Text; formatAfter?: boolean; importsAfter?: boolean }>(
 		{ base: version, inFlight: false, remote: false, conflict: false });
 	const [conflict, setConflict] = useState(false);
 	/** VS Code가 낸 문제(연결 탭)와 그 연결 파일 버전 */
@@ -246,7 +248,18 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 		s.formatAfter = s.inFlight;
 		if (!s.inFlight && !s.conflict && !editor.state.readOnly) {
 			s.formatting = editor.state.doc;
+			s.importsAfter = false; // 포맷에 import 추가가 들어 있다
 			post({ type: 'format', target, version: s.base });
+		}
+	};
+
+	/** 붙여넣은 글이 반영된 뒤 빠진 import만 넣는다(포맷은 안 함). 그사이 문서가 바뀌면 결과를 버린다 */
+	const addImports = (editor: EditorView) => {
+		const s = sync.current;
+		s.importsAfter = s.inFlight;
+		if (!s.inFlight && !s.conflict && !editor.state.readOnly) {
+			s.formatting = editor.state.doc;
+			post({ type: 'format', target, version: s.base, imports: true });
 		}
 	};
 
@@ -358,6 +371,9 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 					} else {
 						send(u.changes, u.startState.doc);
 					}
+					if (autoImport && u.transactions.some(tr => tr.isUserEvent('input.paste'))) {
+						s.importsAfter = true; // 보낸 편집이 반영(codeAck)되면 넣는다
+					}
 				}),
 			],
 		});
@@ -415,6 +431,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 				s.conflict = true;
 				s.queued = undefined;
 				s.formatAfter = false;
+				s.importsAfter = false;
 				setConflict(true);
 				return;
 			}
@@ -425,6 +442,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 				send(changes, doc);
 			} else if (s.formatAfter) {
 				format(editor);
+			} else if (s.importsAfter) {
+				addImports(editor);
 			}
 		};
 		window.addEventListener('message', onMessage);

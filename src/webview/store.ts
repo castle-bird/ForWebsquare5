@@ -167,12 +167,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 			const reshaped = !moved && doc?.root && data.root && !sameShape(doc.root, data.root);
 			const edit = reshaped ? change ?? tagChange(doc!.text, data.text) : undefined;
 			const to = moved ? (i: number) => moved.get(i) : reshaped ? (i: number) => selectionIndex(doc!, data, i, edit) : undefined;
-			set({ doc: data, selected: doc ? selectionIndex(doc, data, selected, change) : undefined, extra: [],
+			set({ doc: data, selected: doc ? selectionIndex(doc, data, selected, change) : undefined,
+					// 다중 선택도 같은 규칙으로 따라간다(속성을 연달아 고칠 수 있게). 못 찾은 항목은 뺀다
+					extra: get().extra.flatMap(i => (moved ? moved.get(i) : doc ? selectionIndex(doc, data, i, change) : undefined) ?? []),
 				...pendingPaste && data.version !== pendingPaste.version && { pendingPaste: undefined },
 				...pendingMove && data.version !== pendingMove.version && { pendingMove: undefined },
 				...moved && { selected: selected === undefined ? undefined : moved.get(selected) },
 				...to && { remap: { to, key: Date.now() } },
-				...added && { selected: added.index, pendingSelect: undefined } });
+				...added && { selected: added.index, extra: [], pendingSelect: undefined } });
 		} else if (data.type === 'select') {
 			set({ pendingSelect: data.id });
 		} else if (data.type === 'definitions') {

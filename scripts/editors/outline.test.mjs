@@ -100,5 +100,66 @@ export default async function ({ page }) {
 		}
 	}
 	console.log('Outline·Data: 긴 id·class, 좌·중간·우 가로 스크롤에서 hover·선택 배경 전체 폭 passed');
+	// 방향키: 줄을 클릭한 뒤 ↑↓는 스크롤이 아니라 선택 이동, →는 펼치기·첫 자식, ←는 접기·부모, Home·End는 처음·끝
+	{
+		const text = '<html xmlns:t="urn:test"><head/><body><t:group id="k_a"><t:wframe id="k_a1"/></t:group><t:group id="k_b"/></body></html>';
+		await page.evaluate(text => window.send({ type: 'document', version: 300000, text, root: window.parseXml(text), script: { text: '' } }), text);
+		await page.evaluate(() => window.tab('Outline', '.pane').click());
+		await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row .id')].some(s => s.textContent === 'k_b'));
+		const row = id => page.evaluate(id => { const r = [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.id')?.textContent === id).getBoundingClientRect(); return { x: r.x + 40, y: r.y + r.height / 2 }; }, id);
+		const picked = () => page.evaluate(() => { const r = document.querySelector('.pane .tree-row.selected'); return r && (r.querySelector('.id')?.textContent ?? r.querySelector('.tag').textContent); });
+		const expanded = id => page.evaluate(id => [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.id')?.textContent === id)?.getAttribute('aria-expanded'), id);
+		const press = async key => { await page.keyboard.press(key); await new Promise(r => setTimeout(r, 30)); };
+		const at = await row('k_a');
+		await page.mouse.click(at.x, at.y);
+		assert.equal(await picked(), 'k_a');
+		// 앞 시나리오에서 모두 펼치기를 눌러 k_a는 펼쳐진 채로 시작한다
+		await press('ArrowDown');
+		assert.equal(await picked(), 'k_a1', '↓: 펼친 k_a의 첫 자식');
+		await press('ArrowUp');
+		assert.equal(await picked(), 'k_a', '↑');
+		await press('ArrowLeft');
+		assert.deepEqual([await expanded('k_a'), await picked()], ['false', 'k_a'], '←: 펼친 줄은 접음');
+		await press('ArrowDown');
+		assert.equal(await picked(), 'k_b', '↓: 접힌 k_a의 다음 줄');
+		await press('ArrowUp');
+		assert.equal(await picked(), 'k_a');
+		await press('ArrowRight');
+		assert.deepEqual([await expanded('k_a'), await picked()], ['true', 'k_a'], '→: 접힌 줄은 펼침(선택 그대로)');
+		await press('ArrowRight');
+		assert.equal(await picked(), 'k_a1', '→: 펼친 줄은 첫 자식');
+		await press('ArrowLeft');
+		assert.equal(await picked(), 'k_a', '←: 자식 없는 줄은 부모');
+		await press('End');
+		assert.equal(await picked(), 'k_b', 'End');
+		await press('Home');
+		assert.equal(await picked(), 'body', 'Home: 맨 위 줄(끌기 속성이 없는 줄)에서도 이어서 이동');
+		await press('ArrowDown');
+		assert.equal(await picked(), 'k_a', '맨 위 줄에서 ↓');
+		// Enter·Space는 펼치기·접기(키보드로는 옮기지 않는다)
+		await page.evaluate(() => { window.sent.length = 0; });
+		await press('Enter');
+		assert.equal(await expanded('k_a'), 'false', 'Enter: 접기');
+		await press(' ');
+		assert.equal(await expanded('k_a'), 'true', 'Space: 펼치기');
+		await press('ArrowDown');
+		assert.equal(await picked(), 'k_a1', 'Space 뒤 ↓는 끌기가 아니라 선택 이동');
+		await press('Enter');
+		assert.equal(await picked(), 'k_a1', '자식 없는 줄의 Enter는 아무 일 없음');
+		assert.ok(!await page.evaluate(() => window.sent.some(m => m.type === 'move')), '키보드로는 컴포넌트가 옮겨지지 않음');
+		console.log('Outline: 방향키 선택 이동·펼치기·접기 passed');
+		// Shift+클릭: 지금 고른 줄(기준)부터 누른 줄까지 보이는 줄을 모두 고른다(기준은 그대로 주 선택)
+		const selectedIds = () => page.evaluate(() => [...document.querySelectorAll('.pane .tree-row.selected')].map(r => r.querySelector('.id')?.textContent ?? r.querySelector('.tag').textContent));
+		const shiftClick = async id => { const p = await row(id); await page.keyboard.down('Shift'); await page.mouse.click(p.x, p.y); await page.keyboard.up('Shift'); };
+		const plain = await row('k_a');
+		await page.mouse.click(plain.x, plain.y);
+		await shiftClick('k_b');
+		assert.deepEqual(await selectedIds(), ['k_a', 'k_a1', 'k_b'], 'Shift+클릭: 사이의 줄 모두');
+		await shiftClick('k_a1');
+		assert.deepEqual(await selectedIds(), ['k_a', 'k_a1'], '기준(k_a)은 그대로, 범위만 바뀜');
+		await page.mouse.click(plain.x, plain.y);
+		assert.deepEqual(await selectedIds(), ['k_a'], '그냥 클릭은 하나만');
+		console.log('Outline: Shift+클릭 범위 선택 passed');
+	}
 
 }

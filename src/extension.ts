@@ -77,7 +77,10 @@ let warnedNoWpack = false, warnedNoDefs = false;
  * 변환 대상이 아닌 곳: 의존성·Git·Eclipse 배포본(.metadata, 우리가 XML을 복사해 넣는다)·빌드 산출물(Maven target, Gradle build, Eclipse Java 출력 bin)·WEB-INF·META-INF.
  * Java 빌드는 이런 곳에 XML을 한꺼번에 많이 복사하므로 파일을 읽기 전에 거른다(저장 시 변환은 이 목록과 상관없다)
  */
-const NOT_SCREEN_DIR = /[\\/](node_modules|\.git|\.metadata|target|build|bin|WEB-INF|META-INF)[\\/]/i;
+const GENERATED_DIRS = ['node_modules', '.git', '.metadata', 'target', 'build', 'bin', 'WEB-INF', 'META-INF'].map(name => name.replace('.', '\\.')).join('|');
+const NOT_SCREEN_DIR = new RegExp(`[\\\\/](${GENERATED_DIRS})[\\\\/]`, 'i');
+/** 웹 루트 바로 아래의 이 폴더(과 변환 산출물 `_wpack…`)에서 바뀐 .js·config.xml은 공통 JS 다시 읽기에서 제외 */
+const NOT_MODULE_DIR = new RegExp(`^[\\\\/]?(${GENERATED_DIRS}|_wpack)[\\\\/_]`, 'i');
 
 /**
  * 작업 폴더의 XML이 디스크에서 바뀌면(AI·다른 프로그램·Git) 저장 이벤트가 없으므로 디스크 내용으로 변환한다.
@@ -110,6 +113,7 @@ function watchScreenFiles(): vscode.Disposable {
 	watcher.onDidChange(onDisk);
 	watcher.onDidCreate(onDisk);
 	// 첫 변환도 바로 되게, 시작이 끝난 뒤 작업 폴더의 웹 루트 변환기를 미리 띄운다
+	// 제외 폴더를 위 목록보다 적게 둔다: 개발팩 웹 루트는 `bin` 아래(…\bin\websquare)에 있다
 	const warm = setTimeout(() => void Promise.resolve(vscode.workspace.findFiles('**/websquare/config.xml', '**/{node_modules,.metadata,WEB-INF}/**', 1)).then(async ([config]) => {
 		const webRoot = config && path.dirname(path.dirname(config.fsPath));
 		if (webRoot && await readWpackConfig(webRoot).catch(() => undefined)) {
@@ -211,7 +215,11 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		} catch {
 		}
 		if (!webRoot || !parsed || !isScreen(parsed)) {
-			await vscode.commands.executeCommand('vscode.openWith', document.uri, 'default');
+			// 화면이 아니면 같은 자리에서 텍스트로 바꾼다. 탐색기 한 번 클릭처럼 미리보기로 열린 경우는 포커스를 탐색기에 남긴다(F2 이름 바꾸기 등)
+			const tab = vscode.window.tabGroups.all.flatMap(g => g.tabs.map(t => ({ g, t })))
+				.find(({ g, t }) => g.viewColumn === panel.viewColumn && t.input instanceof vscode.TabInputCustom && t.input.viewType === VIEW_TYPE && t.input.uri.toString() === document.uri.toString());
+			await vscode.commands.executeCommand('vscode.openWith', document.uri, 'default',
+				tab ? { viewColumn: tab.g.viewColumn, preview: tab.t.isPreview, preserveFocus: tab.t.isPreview } : undefined);
 			panel.dispose();
 			return;
 		}
@@ -250,7 +258,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		const moduleWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(webRoot), '{**/*.js,websquare/config.xml}'));
 		let moduleTimer: NodeJS.Timeout | undefined;
 		const reloadModules = (uri: vscode.Uri) => {
-			if (/^[\\/]?(node_modules|\.git|\.metadata|target|build|bin|WEB-INF|META-INF|_wpack)[\\/_]/i.test(path.relative(webRoot, uri.fsPath))) {
+			if (NOT_MODULE_DIR.test(path.relative(webRoot, uri.fsPath))) {
 				return;
 			}
 			clearTimeout(moduleTimer);
@@ -482,11 +490,12 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 				} else if (msg.type === 'format') {
 					void queue(msg.target, async () => {
 						const linkId = linkIdOf(msg.target);
-						const text = linkId !== undefined ? await links.format(linkId, msg.version)
-							: msg.version === document.version ? await formatCode(document, msg.target) : undefined;
+						const text = linkId !== undefined ? await (msg.imports ? links.addImports(linkId, msg.version) : links.format(linkId, msg.version))
+							: msg.version === document.version && !msg.imports ? await formatCode(document, msg.target) : undefined;
 						await post({ type: 'formatted', target: msg.target, text });
 					}).catch(e => {
 						void post({ type: 'formatted', target: msg.target });
+						if (msg.imports) { return; }
 						const reason = errorMessage(e).split('\n')[0];
 						void vscode.window.showErrorMessage(`포맷 실패: ${reason}`);
 					});

@@ -5,6 +5,8 @@ import * as path from 'node:path';
 import type { CodeChange, CodeTarget } from '../core/protocol';
 import { applyEdits, editableScript, encodeScript, applyLineChanges, sourceChange, type TextEdit } from '../core/edit';
 import { prepareNodeEdit, type NodeEdit } from '../core/nodeEdit';
+import { formatWithInsert } from '../core/javaImports';
+import { missingImports } from './javaImports';
 
 /** 문서 적용에 성공했을 때만 연관 바인딩 변경을 알린다. */
 export async function applyNodeEdit(document: vscode.TextDocument, msg: NodeEdit, notify?: (message: string) => void): Promise<boolean> {
@@ -159,5 +161,9 @@ async function formatDocument(document: vscode.TextDocument, builtIn = false): P
 			.then(pick => pick && vscode.commands.executeCommand('workbench.extensions.search', `category:formatters ${lang}`));
 		return undefined;
 	}
-	return applyEdits(document.getText(), edits.map(e => ({ start: document.offsetAt(e.range.start), end: document.offsetAt(e.range.end), replacement: e.newText })));
+	const text = document.getText();
+	const formatEdits = edits.map(e => ({ start: document.offsetAt(e.range.start), end: document.offsetAt(e.range.end), replacement: e.newText }));
+	// Java는 포맷할 때 빠진 import도 넣는다(언어 서버 결과가 없으면 포맷만)
+	const insert = await missingImports(document).catch(() => undefined);
+	return insert ? formatWithInsert(text, formatEdits, insert) : applyEdits(text, formatEdits);
 }

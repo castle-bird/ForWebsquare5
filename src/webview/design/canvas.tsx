@@ -175,7 +175,7 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 				<div ref={page} className="wse-page"
 					onClick={e => {
 						const el = target(e);
-						if (el && !cellRange.takeClick()) {
+						if (el && !cellRange.takeClick() && !(e.shiftKey && cellRange.rangeTo(e.target, selected))) {
 							onSelect(wseIndex(el), e.ctrlKey || e.metaKey);
 						}
 					}}
@@ -349,6 +349,18 @@ function useCellRange(body: XmlNode, page: RefObject<HTMLDivElement | null>, onS
 		const el = pick(t as Element), path = el ? pathTo(body, wseIndex(el)) : undefined, grid = path?.find(n => localName(n.tag) === 'gridView');
 		return path && grid && localName(path.at(-1)!.tag) === 'column' && path.length > 3 ? { path, grid } : undefined;
 	};
+	/** 두 칸(anchor·index, 같은 owner=header·gBody 등 안)을 모서리로 하는 직사각형 안의 칸 번호들. 못 재면 undefined */
+	const between = (anchor: number, index: number, ownerIndex: number) => {
+		const rect = (i: number) => page.current?.querySelector(`[data-wse="${i}"]`)?.getBoundingClientRect();
+		const a = rect(anchor), b = rect(index), owner = nodeAt(body, ownerIndex);
+		if (!a || !b || !owner) { return undefined; }
+		const box = { left: Math.min(a.left, b.left), right: Math.max(a.right, b.right), top: Math.min(a.top, b.top), bottom: Math.max(a.bottom, b.bottom) };
+		// 칸 가운데가 상자 안이면 고름(병합 칸처럼 여러 줄·칸을 차지해도). 스크롤에 가려진 칸도 좌표는 있다
+		return owner.children.flatMap(row => row.children).filter(c => localName(c.tag) === 'column').flatMap(c => {
+			const r = rect(c.index), cx = r && (r.left + r.right) / 2, cy = r && (r.top + r.bottom) / 2;
+			return r && cx! >= box.left && cx! <= box.right && cy! >= box.top && cy! <= box.bottom ? [c.index] : [];
+		});
+	};
 	/** 포인터 자리(그리드 밖이면 그리드 안 가장자리로 당겨서)의 칸까지 고른다. 새로 골랐으면 true */
 	const select = (d: NonNullable<typeof drag.current>) => {
 		let { x, y } = d;
@@ -363,15 +375,8 @@ function useCellRange(body: XmlNode, page: RefObject<HTMLDivElement | null>, onS
 		const index = cell?.path.at(-1)!.index;
 		if (!cell || index === undefined || cell.path.at(-3)!.index !== d.owner || index === d.last) { return false; }
 		d.last = index;
-		const rect = (i: number) => page.current?.querySelector(`[data-wse="${i}"]`)?.getBoundingClientRect();
-		const a = rect(d.anchor), b = rect(index), owner = nodeAt(body, d.owner);
-		if (!a || !b || !owner) { return false; }
-		const box = { left: Math.min(a.left, b.left), right: Math.max(a.right, b.right), top: Math.min(a.top, b.top), bottom: Math.max(a.bottom, b.bottom) };
-		// 칸 가운데가 상자 안이면 고름(병합 칸처럼 여러 줄·칸을 차지해도). 스크롤에 가려진 칸도 좌표는 있다
-		const cells = owner.children.flatMap(row => row.children).filter(c => localName(c.tag) === 'column').flatMap(c => {
-			const r = rect(c.index), cx = r && (r.left + r.right) / 2, cy = r && (r.top + r.bottom) / 2;
-			return r && cx! >= box.left && cx! <= box.right && cy! >= box.top && cy! <= box.bottom ? [c.index] : [];
-		});
+		const cells = between(d.anchor, index, d.owner);
+		if (!cells) { return false; }
 		onSelectCells!(d.anchor, cells);
 		return true;
 	};
@@ -399,8 +404,20 @@ function useCellRange(body: XmlNode, page: RefObject<HTMLDivElement | null>, onS
 		active: () => !!drag.current,
 		/** 방금 끌어서 골랐으면 이번 click은 건너뛴다 */
 		takeClick: () => { const swallow = swallowClick.current; swallowClick.current = false; return swallow; },
+		/** Shift+클릭: 지금 고른 칸(anchor)부터 누른 칸까지 직사각형으로 고른다. 같은 header·gBody 안의 칸일 때만 하고 했으면 true */
+		rangeTo: (target: EventTarget, anchor: number | undefined) => {
+			const cell = onSelectCells && anchor !== undefined ? cellAt(target) : undefined, from = anchor !== undefined ? pathTo(body, anchor) : undefined;
+			const index = cell?.path.at(-1)!.index, owner = cell?.path.at(-3)!.index;
+			if (!cell || index === undefined || !from || localName(from.at(-1)!.tag) !== 'column' || from.at(-3)?.index !== owner) { return false; }
+			const cells = between(anchor!, index, owner!);
+			if (!cells) { return false; }
+			onSelectCells!(anchor!, cells);
+			return true;
+		},
 		onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => {
 			swallowClick.current = false;
+			// Shift+클릭은 글자 선택이 번지지 않게(범위 고르기는 click에서)
+			if (e.shiftKey && !e.defaultPrevented && e.button === 0 && onSelectCells && cellAt(e.target)) { e.preventDefault(); }
 			const cell = !e.defaultPrevented && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && onSelectCells ? cellAt(e.target) : undefined;
 			if (!cell) { return; }
 			// 글자 선택·그리드 끌기가 시작되지 않게(click·dblclick은 그대로 온다)

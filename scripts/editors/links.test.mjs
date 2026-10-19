@@ -145,6 +145,23 @@ export default async function ({ page, modifiedKey, reset, checkIndentUnit, cont
 	await page.evaluate(() => { window.pendingDetails.forEach(reply => reply()); window.pendingDetails = undefined; });
 	await page.waitForFunction(text => window.editor().state.doc.toString() === text, {timeout: 3000}, 'import java.math.BigDecimal;\n' + javaText + 'BigDecimal').catch(() => assert.fail('늦게 온 자동 import'));
 	await page.evaluate(() => { window.remoteDetails = undefined; });
+	// Java 탭 붙여넣기: 편집이 반영된 뒤 빠진 import만 묻고(포맷 아님), 돌아온 글(import 추가)을 반영한다. 그냥 입력은 묻지 않는다
+	await reset(javaText); await page.evaluate(() => { window.sent.length = 0; });
+	await page.keyboard.type('x', {delay: 25});
+	await new Promise(resolve => setTimeout(resolve, 150));
+	assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'format')), false, '입력만으로는 import를 묻지 않음');
+	const pasted = javaText + 'x' + 'BigDecimal v;';
+	await page.evaluate(text => {
+		window.formatResult = 'import java.math.BigDecimal;\n' + text;
+		const data = new DataTransfer();
+		data.setData('text/plain', 'BigDecimal v;');
+		window.editor().contentDOM.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }));
+	}, pasted);
+	await page.waitForFunction(() => window.sent.some(m => m.type === 'format'), {timeout: 3000}).catch(() => assert.fail('붙여넣기 → import 요청'));
+	const importAsked = await lastSent('format');
+	assert.deepEqual({ target: importAsked.target, imports: importAsked.imports }, { target: 'link:controller', imports: true }, '연결 탭·import만 요청');
+	await page.waitForFunction(text => window.editor().state.doc.toString() === 'import java.math.BigDecimal;\n' + text, {timeout: 3000}, pasted).catch(async () => assert.fail(`붙여넣은 뒤 import 반영: ${await content()}`));
+	await page.evaluate(() => { window.formatResult = undefined; });
 	// 설명은 마크다운으로(언어 서버 MarkdownString): 굵게·인라인 코드·코드 블록·목록·이스케이프, HTML은 글자로
 	await page.evaluate(() => {
 		const fence = '`'.repeat(3);

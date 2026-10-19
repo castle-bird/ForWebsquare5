@@ -8,6 +8,7 @@ import type { CodeChange, CodeTarget, ToExtension, ToWebview } from '../core/pro
 import { closeAutoTabs, isOpenByUser, registerAutoTabs } from './autoTabs';
 import { RESOLVE, remoteCompletions, remoteDefinition, remoteHover, remoteSignature } from './completion';
 import { applyCodeEdit, formatCode } from './documentEdit';
+import { addMissingImports } from './javaImports';
 import { blameFeed, blameText, stagedText } from './gitBase';
 import { blameOn } from './viewSettings';
 import { xmlSchemaOf } from './xmlSchema';
@@ -429,6 +430,12 @@ export class LinkedFiles {
 	async format(kind: string, version: number): Promise<string | undefined> {
 		const doc = await this.docAt(kind, version);
 		return doc && formatCode(doc, linkTarget(kind));
+	}
+
+	/** 붙여넣기 뒤: 포맷 없이 빠진 import만 넣은 글(Java). 넣을 게 없으면 undefined */
+	async addImports(kind: string, version: number): Promise<string | undefined> {
+		const doc = await this.docAt(kind, version);
+		return doc && addMissingImports(doc);
 	}
 
 	/**

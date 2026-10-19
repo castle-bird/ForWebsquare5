@@ -150,7 +150,7 @@ export type ToExtension =
 	| { type: 'saveThemeCustomizations'; common?: ThemeOverlay; own?: ThemeOverlay }
 	| { type: 'insertComponent'; version: number; index?: number; component: Pick<ComponentDef, 'id' | 'ns' | 'realType'>; position?: InsertPosition }
 	| { type: 'setCode'; target: CodeTarget; version: number; changes: CodeChange[] }
-	| { type: 'format'; target: CodeTarget; version: number }
+	| { type: 'format'; target: CodeTarget; version: number; imports?: boolean } // imports: 포맷 없이 빠진 import만 넣기(Java 붙여넣기 뒤)
 	// more: 함께 바꿀 다른 노드(여러 개 선택)와 그 노드에 넣을 값
 	// also: 같은 노드의 다른 속성도 함께(한 번에 반영해야 버전이 엇갈리지 않는다)
 	| { type: 'setAttr'; version: number; index: number; name: string; value?: string; more?: { index: number; value?: string }[]; also?: { name: string; value?: string }[] }

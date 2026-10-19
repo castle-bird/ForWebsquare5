@@ -8,7 +8,7 @@
 
 - **Design 탭**: 프로젝트 CSS를 적용한 화면 미리보기, 컴포넌트 선택·크기 조절, 복사·붙여넣기·삭제, 그리드 열 너비 조절. fusionchart는 바인딩한 dataList 값으로 차트(선·막대·원·영역)를 그립니다(엔진 모양과 다른 미리보기)
 - **Property / Event 패널**: 속성·이벤트 검색과 편집, 여러 컴포넌트 동시 편집. 정해진 값이 있는 속성도 입력칸 + 목록이라 직접 입력할 수 있습니다
-- **Outline / Data 패널**: 컴포넌트 트리, DataCollection·Submission 트리, 드래그 앤 드롭 이동·바인딩, F2로 id 바꾸기
+- **Outline / Data 패널**: 컴포넌트 트리, DataCollection·Submission 트리, 드래그 앤 드롭 이동·바인딩, F2로 id 바꾸기, 방향키 이동(↑↓ 선택, →← 펼치기·접기·부모·첫 자식, Enter·Space 펼치기·접기, Home·End). 컴포넌트 이동은 마우스 끌기만 됩니다. 여러 개 선택은 Ctrl+클릭(추가)·Shift+클릭(지금 고른 줄부터 누른 줄까지)이고, Design의 그리드 칸은 끌거나 Shift+클릭하면 직사각형 범위가 골라집니다
 - **더블클릭 편집**(캔버스·Outline): 글자 바로 고치기(버튼·textbox·output 등), 그리드 칸 속성, 선택 항목(selectbox·checkcombobox·multiselect·radio·checkbox), DataList·DataMap·Submission(ref·target은 `데이터 선택`으로 DataMap·DataList와 동작을 골라 채움, 처리 중 메시지 `processMsg`), multiupload 파라미터. 팝업 안의 입력칸은 Enter로 나오고, 확인은 버튼으로 합니다
 - **Design 이동**: 이미 배치된 컴포넌트를 끌어 순서·부모 그룹을 바꿉니다. 그룹 중앙은 안쪽 맨 뒤, 가장자리는 앞·뒤로 이동하며 놓을 위치를 표시합니다. 그리드는 칸에 마우스를 올리면 왼쪽 위에 나오는 이동 손잡이나, 칸이 아닌 빈 곳을 끌어 옮깁니다. Outline과 같은 XML 이동·Undo를 사용합니다
 - **팔레트**: 탭 줄 왼쪽 버튼으로 Design 왼쪽 팔레트를 열고 닫습니다. 설치본 정의의 묶음별 목록·아이콘·검색, 즐겨찾기(별, ⠿ 손잡이로 순서 변경)를 지원합니다. 클릭하면 삽입 위치를 고르고, 캔버스로 끌어다 놓으면 그룹 중앙은 안쪽, 위·아래 가장자리는 앞·뒤에 삽입합니다
@@ -73,6 +73,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 - 작업 폴더 안 파일을 이름으로 검색해 연결
 - VS Code에 설치된 언어 확장(Java 등)의 자동완성·포맷·마우스 오버 설명(Javadoc)·정의로 이동(Ctrl+클릭·F12)·파라미터 힌트 사용
 - Java import 목록은 IntelliJ처럼 파일을 열면 `import …` 한 줄로 접혀 있고, 누르거나 왼쪽 접기 표시로 펼칩니다
+- Java 탭은 코드를 붙여 넣거나 포맷하면 빠진 import를 자동으로 넣습니다(Language Support for Java 사용). 안 쓰는 import는 지우지 않고, 후보가 여럿인 클래스는 건너뜁니다
 - MyBatis 매퍼의 SQL 색·키워드 자동완성. 설정 `for-websquare5.sqlDialect`로 DB 방언을 고릅니다(`standard`(기본)·`oracle`·`mysql`·`mariadb`·`postgresql`·`mssql`·`sqlite`)
 
 ## 저장

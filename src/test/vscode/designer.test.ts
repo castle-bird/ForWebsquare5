@@ -62,6 +62,14 @@ suite('designer', () => {
 		await new Promise(r => setTimeout(r, 1000));
 		assert.ok(activeInput() instanceof vscode.TabInputText, '다른 XML은 텍스트 편집기');
 		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+
+		// 탐색기 한 번 클릭처럼 미리보기로 연 화면 아닌 XML: 같은 자리의 미리보기 텍스트 탭 하나로 남는다
+		await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(other), { preview: true, preserveFocus: true });
+		await waitFor(() => activeInput() instanceof vscode.TabInputText);
+		await new Promise(r => setTimeout(r, 1000));
+		const tabs = vscode.window.tabGroups.all.flatMap(g => g.tabs).filter(t => (t.input instanceof vscode.TabInputText || t.input instanceof vscode.TabInputCustom) && t.input.uri.toString() === vscode.Uri.file(other).toString());
+		assert.deepStrictEqual(tabs.map(t => [t.input instanceof vscode.TabInputText, t.isPreview]), [[true, true]], '텍스트 미리보기 탭 하나');
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 	});
 
 	test('파일 검색의 텍스트 열기 경로도 디자이너로 전환하고 수동 텍스트 열기는 유지', async function () {

@@ -41,7 +41,7 @@ export function prepareNodeEdit(text: string, msg: NodeEdit): { changes: TextEdi
 	if (rename && refs.length) {
 		const { from, to, columns = new Map<string, string>() } = rename;
 		const what = [...from !== to ? [`\`${from}\` → \`${to}\``] : [], ...[...columns].map(([a, b]) => `\`${from}.${a}\` → \`${b}\``)];
-		notice = `바인딩 ${refs.length}곳도 함께 변경했습니다. ${what.join(', ')}`;
+		notice = `바인딩 ${refs.length}곳도 함께 변경했습니다.\n${what.join('\n')}`;
 	}
 	return { changes: [...changes, ...refs], notice };
 }

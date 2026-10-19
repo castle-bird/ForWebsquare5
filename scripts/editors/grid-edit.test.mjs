@@ -59,6 +59,18 @@ export default async function ({ clickTab, page }) {
 	// 끌지 않은 클릭은 그 칸 하나만
 	await (await (await cell('c2')).asElement()).click();
 	await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-frame.selected').length === 1, { timeout: 3000 });
+	// Shift+클릭: 지금 고른 칸(기준, 그대로 유지)부터 누른 칸까지 직사각형으로 고른다
+	const shiftClick = async id => { await page.keyboard.down('Shift'); await (await (await cell(id)).asElement()).click(); await page.keyboard.up('Shift'); };
+	const pickedIs = n => page.waitForFunction(n => document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.wse-frame.selected').length === n, { timeout: 3000 }, n)
+		.catch(async () => assert.fail(`Shift+클릭으로 고른 칸 수(기대 ${n}): ${await picked()}`));
+	await (await (await cell('c1')).asElement()).click();
+	await shiftClick('c3');
+	await pickedIs(3);
+	await shiftClick('c2');
+	await pickedIs(2);
+	await (await (await cell('c2')).asElement()).click();
+	await pickedIs(1);
+	console.log('Design: 그리드 칸 Shift+클릭 범위 선택 passed');
 	// 가로 스크롤 그리드: 오른쪽 가장자리 밖으로 끌고 있으면 굴러가며 가려진 칸까지 고름
 	const edge = await page.evaluate(i => {
 		const c1 = document.querySelector('.canvas-host').shadowRoot.querySelector(`[data-wse="${i}"]`);

@@ -75,7 +75,7 @@ function LinkedFile({ tab, state, active }: { tab: LinkTab; state: LinkState; ac
 		return () => window.removeEventListener('keydown', onKey, true);
 	}, [active, linked, kind]);
 	return linked && language && state.version !== undefined
-		? <CodeEditor key={state.path} target={linkTarget(kind)} {...language} remote text={state.text!} version={state.version} post={post} />
+		? <CodeEditor key={state.path} target={linkTarget(kind)} {...language} remote autoImport={/\.java$/i.test(state.path ?? '')} text={state.text!} version={state.version} post={post} />
 		: <LinkPicker tab={tab} missing={state.path} />;
 }
 

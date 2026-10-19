@@ -1,5 +1,9 @@
 import { findNode, localName, nodeAt, pathTo, type XmlNode } from './xmlModel';
 import { applyEdits, type TextEdit } from './edit';
+import { GRID_CELL_PARTS } from './grid';
+
+/** 같은 ID·속성이어도 그리드 안 어느 구역(header·gBody 등)·데이터 영역에 있는지로 구분하는 조상 태그 */
+const SCOPE_TAGS: readonly string[] = ['gridView', ...GRID_CELL_PARTS, 'columnInfo', 'keyInfo'];
 
 /** 구조 편집 후 번호 대신 ID와 그리드·데이터 범위로 현재 선택을 찾는다. */
 export function selectionIndex(before: { root?: XmlNode; text: string }, after: { root?: XmlNode; text: string }, index?: number, change?: TextEdit): number | undefined {
@@ -14,9 +18,7 @@ export function selectionIndex(before: { root?: XmlNode; text: string }, after: 
 		&& (a.index === index || a.attrs.id === b.attrs.id) && a.children.length === b.children.length
 		&& a.children.every((c, i) => sameStructure(c, b.children[i]));
 	if (sameStructure(before.root, after.root)) { return index; }
-	const scope = (path: XmlNode[]) => JSON.stringify(path.slice(0, -1).filter(n =>
-		['gridView', 'header', 'gBody', 'footer', 'subTotal', 'columnInfo', 'keyInfo'].includes(localName(n.tag))
-	).map(n => [n.ns, localName(n.tag), n.attrs.id ?? '']));
+	const scope = (path: XmlNode[]) => JSON.stringify(path.slice(0, -1).filter(n => SCOPE_TAGS.includes(localName(n.tag))).map(n => [n.ns, localName(n.tag), n.attrs.id ?? '']));
 	const ownScope = scope(path);
 	// ID 없는 요소는 자식 변경과 무관한 속성으로 식별하고, 중복되면 선택을 해제한다.
 	const attrs = Object.entries(node.attrs);

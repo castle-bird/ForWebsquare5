@@ -384,6 +384,8 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 /* Outline 끌기: 놓일 곳의 부모 그릇(점선), 줄 사이 선(놓일 깊이만큼 들여씀, 앞 점) */
 .tree-row.drop-parent { outline: 1px dashed var(--vscode-focusBorder); outline-offset: -1px; }
 [role="tree"] { position: relative; width: max-content; min-width: 100%; }
+[role="tree"]:focus { outline: none; }
+.tree-row:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 .tree-drop-line { position: absolute; right: 4px; height: 2px; background: var(--vscode-focusBorder); pointer-events: none; }
 .tree-drop-line::before { content: ''; position: absolute; left: -4px; top: -2px; width: 6px; height: 6px; box-sizing: border-box; border: 2px solid var(--vscode-focusBorder); border-radius: 50%; background: var(--vscode-sideBar-background, var(--vscode-editor-background)); }
 .tree-row.drop-before { box-shadow: inset 0 2px 0 0 var(--vscode-focusBorder); }

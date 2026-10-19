@@ -1,7 +1,7 @@
 // 오른쪽 아래 Outline·Data 트리 창: 트리, 펼치기·접기, 화면 점검 경고 이동, Outline 끌어 옮기기
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragMoveEvent, type DragStartEvent } from '@dnd-kit/core';
-import { pathTo, type XmlNode } from '../../core/xmlModel';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { DndContext, PointerSensor, useSensor, useSensors, type DragMoveEvent, type DragStartEvent } from '@dnd-kit/core';
+import { findNode, pathTo, type XmlNode } from '../../core/xmlModel';
 import { isDataNode } from '../../core/data';
 import { problemAncestors, screenProblems } from '../../core/check';
 import { useEditorStore } from '../store';
@@ -15,7 +15,7 @@ import { TreeItem, useDataReorder, useTreeRename, type DragData, type Fold, type
  */
 /**
  * Outline 끌어 옮기기: 놓을 자리는 dnd-kit 충돌 판정이 아니라 포인터와 보이는 줄로 직접 계산(projectDrop). 끄는 동안 자리를 보여 주고(선·부모 강조, 트리를 가리지 않게 따라다니는 안내는 없음), 놓으면 move.
- * 키보드 끌기(dnd-kit KeyboardSensor)는 포인터가 없어 끄는 줄의 가운데로 잰다
+ * 마우스 끌기만 지원한다(키보드는 Enter·Space가 펼치기·접기라 끌기 센서를 두지 않는다)
  */
 function useOutlineDrag(move: (dragged: number, target: number, position: OutlineDrop['position']) => void) {
 	const treeRef = useRef<HTMLDivElement>(null);
@@ -40,13 +40,14 @@ function useOutlineDrag(move: (dragged: number, target: number, position: Outlin
 	const clear = () => { dragged.current = undefined; setDrop(undefined); };
 	return {
 		treeRef, drop,
+		/** 끄는 중 */
+		active: () => !!dragged.current,
 		start: (e: DragStartEvent) => { dragged.current = e.active.data.current as DragData | undefined; },
 		moveTo: (e: DragMoveEvent) => {
 			const d = dragged.current, tree = treeRef.current;
 			if (!d || !tree) { return; }
-			const start = e.activatorEvent as PointerEvent, rect = e.active.rect.current.translated;
-			const y = 'clientY' in start ? start.clientY + e.delta.y : rect ? rect.top + rect.height / 2 : undefined;
-			setDrop(y === undefined ? undefined : projectDrop(rows(), y - tree.getBoundingClientRect().top, e.delta.x, d.depth));
+			const y = (e.activatorEvent as PointerEvent).clientY + e.delta.y;
+			setDrop(projectDrop(rows(), y - tree.getBoundingClientRect().top, e.delta.x, d.depth));
 		},
 		end: () => {
 			const d = dragged.current;
@@ -97,9 +98,49 @@ export function TreePane({ body, dataRoots, model, dataCollection, outline, data
 		return { of, inside: problemAncestors(root, of) };
 	}, [root, scriptText]);
 	const outlineDrag = useOutlineDrag(move);
+	/** Shift+클릭: 지금 고른 줄(기준, 그대로 주 선택)부터 누른 줄까지 보이는 줄을 모두 고른다. 기준이 안 보이면(접힘) 그 줄만 */
+	const selectRange = (index: number, row: HTMLElement) => {
+		const shown = [...row.closest('[role="tree"]')!.querySelectorAll<HTMLElement>('.tree-row[data-index]')].map(r => Number(r.dataset.index));
+		const from = selected === undefined ? -2 : shown.indexOf(selected), to = shown.indexOf(index);
+		if (from < 0 || to < 0) { setSelected(index); return; }
+		useEditorStore.setState({ pendingSelect: undefined, extra: shown.slice(Math.min(from, to), Math.max(from, to) + 1).filter(i => i !== selected && i !== -1) });
+	};
+	/** VS Code 트리처럼: ↑↓ 보이는 줄 이동, Home·End 처음·끝, → 펼치기(이미 펼쳤으면 첫 자식), ← 접기(이미 접었으면 부모), Enter·Space 펼치기·접기 */
+	const navigate = (e: KeyboardEvent<HTMLDivElement>, fold: Fold, tops: XmlNode[]) => {
+		if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || outlineDrag.active() || (e.target as HTMLElement).closest('input, textarea, [contenteditable]')
+			|| !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' '].includes(e.key)) { return; }
+		const rows = [...e.currentTarget.querySelectorAll<HTMLElement>('.tree-row[data-index]')];
+		const at = rows.findIndex(r => Number(r.dataset.index) === selected), row = rows[at];
+		const go = (to?: HTMLElement) => {
+			if (!to) { return; }
+			setSelected(Number(to.dataset.index));
+			// 끌기용 속성이 없는 줄(맨 위)은 포커스를 못 받으니 트리가 받는다
+			(to.tabIndex >= 0 ? to : e.currentTarget).focus({ preventScroll: true });
+		};
+		const node = row && tops.map(t => findNode(t, n => n.index === selected)).find(Boolean);
+		e.preventDefault();
+		if (e.key === 'Enter' || e.key === ' ') {
+			const open = row?.getAttribute('aria-expanded');
+			if (node && open) { fold.toggle(node, open === 'false'); }
+		} else if (e.key === 'Home' || e.key === 'End') {
+			go(e.key === 'Home' ? rows[0] : rows.at(-1));
+		} else if (!row) {
+			go(e.key === 'ArrowUp' ? rows.at(-1) : rows[0]);
+		} else if (e.key === 'ArrowDown') {
+			go(rows[at + 1]);
+		} else if (e.key === 'ArrowUp') {
+			go(rows[at - 1]);
+		} else if (e.key === 'ArrowRight') {
+			if (row.getAttribute('aria-expanded') === 'false' && node) { fold.toggle(node, true); } else if (row.getAttribute('aria-expanded') === 'true') { go(rows[at + 1]); }
+		} else if (row.getAttribute('aria-expanded') === 'true' && node) {
+			fold.toggle(node, false);
+		} else {
+			go(rows.slice(0, at).reverse().find(r => Number(r.dataset.depth) < Number(row.dataset.depth)));
+		}
+	};
 	const tree = (tops: XmlNode[], fold: Fold, interactive?: boolean) => tops.length
-		? <div role="tree" ref={interactive ? outlineDrag.treeRef : undefined}>
-			{tops.map(top => <TreeItem key={top.index} node={top} depth={0} selected={selected} extra={extra} onSelect={setSelected} onContextMenu={interactive ? onOutlineContext : onDataContext} onDoubleClick={interactive ? (n => onOpenEditor(n.index)) : onOpenDataEditor} fold={fold} defs={defs?.defs} interactive={interactive} bindRef={interactive ? undefined : refOf} reorder={interactive ? undefined : dataReorder} rename={rename} problems={problems}
+		? <div role="tree" tabIndex={-1} onKeyDown={e => navigate(e, fold, tops)} ref={interactive ? outlineDrag.treeRef : undefined}>
+			{tops.map(top => <TreeItem key={top.index} node={top} depth={0} selected={selected} extra={extra} onSelect={setSelected} onRange={selectRange} onContextMenu={interactive ? onOutlineContext : onDataContext} onDoubleClick={interactive ? (n => onOpenEditor(n.index)) : onOpenDataEditor} fold={fold} defs={defs?.defs} interactive={interactive} bindRef={interactive ? undefined : refOf} reorder={interactive ? undefined : dataReorder} rename={rename} problems={problems}
 				dropParent={interactive && outlineDrag.drop ? { index: outlineDrag.drop.parent, inside: !outlineDrag.drop.line } : undefined} />)}
 			{interactive && outlineDrag.drop?.line && <div className="tree-drop-line" style={{ top: outlineDrag.drop.line.y - 1, left: 4 + outlineDrag.drop.line.depth * INDENT + 16 }} />}
 		</div>
@@ -131,7 +172,7 @@ export function TreePane({ body, dataRoots, model, dataCollection, outline, data
 		</>;
 	};
 
-	const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor));
+	const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
 	const outlineTops = body ? [body] : [];
 	return (
