@@ -657,10 +657,10 @@ export default async function ({ page, pickProperty }) {
 			const def = (id, ns, realType) => ({ id, ns, realType, parents: [], bases: [], properties: [], events: [] });
 			window.send({ type: 'definitions', defs: [...window.testDefs, def('checkcombobox', XF, 'checkcombobox'), def('select', XF, 'multiselect'), def('spinner', WS, 'spinner'),
 				def('searchbox', WS, 'searchbox'), def('output', XF, 'output'), def('calendar', WS, 'calendar'), def('multiupload', WS, 'multiupload'), def('output', XF, 'output'),
-				def('button', WS, 'button'), def('iframe', WS, 'iframe'), def('upload', WS, 'upload')] });
+				def('button', WS, 'button'), def('iframe', WS, 'iframe'), def('upload', WS, 'upload'), def('button', WS, 'button')] });
 			const text = `<html xmlns:w2="${WS}" xmlns:xf="${XF}"><body><xf:checkcombobox id="k1" style="width:148px;height:21px;"/><xf:select id="m1"><xf:choices><xf:item><xf:label>가</xf:label><xf:value>a</xf:value></xf:item><xf:item><xf:label>나</xf:label><xf:value>b</xf:value></xf:item></xf:choices></xf:select>`
 				+ '<w2:spinner id="s1" value="3"/><w2:searchbox id="q1"/><xf:output id="o1" label="출력"/><w2:calendar id="cal1"/><w2:multiupload id="mu1"/><xf:output id="o2"/>'
-				+ '<w2:button id="bt1" label="저장" style="width:80px;height:23px;"><w2:iframe id="in1" src="x.xml"/></w2:button><w2:iframe id="if1" src="/ui/a.xml" style="width:200px;height:100px;"/><w2:upload id="up1" style="width:250px;height:23px;"/></body></html>';
+				+ '<w2:button id="bt1" label="저장" style="width:80px;height:23px;"><w2:iframe id="in1" src="x.xml"/></w2:button><w2:iframe id="if1" src="/ui/a.xml" style="width:200px;height:100px;"/><w2:upload id="up1" style="width:250px;height:23px;"/><w2:button id="bt2"/></body></html>';
 			const root = window.parseXml(text);
 			root.children[0].children.forEach((n, i) => { n.def = window.testDefs.length + i; });
 			window.send({ type: 'document', version: 98, text, root, script: { text: '' } });
@@ -675,6 +675,8 @@ export default async function ({ page, pickProperty }) {
 			const s = document.querySelector('.canvas-host').shadowRoot, r = id => s.querySelector(id);
 			return [r('#bt1').tagName, r('#bt1 .w2button_label').textContent, r('#bt1').offsetWidth, !!s.querySelector('#in1'), r('#if1').dataset.src, r('#if1').offsetWidth, r('#if1').offsetHeight, !!s.querySelector('iframe'), !!r('#up1 .w2upload_input')];
 		}), ['BUTTON', '저장', 80, false, '/ui/a.xml', 200, 100, false, true]);
+		// 크기·label 없는 button도 눌러 고를 수 있는 크기
+		assert.deepEqual(await page.evaluate(() => { const b = document.querySelector('.canvas-host').shadowRoot.querySelector('#bt2'); return [b.offsetWidth, b.offsetHeight]; }), [80, 23]);
 		assert.deepEqual(await page.evaluate(() => {
 			const s = document.querySelector('.canvas-host').shadowRoot;
 			return [s.querySelector('#m1').textContent, s.querySelector('#s1 input').value, s.querySelector('#o1').textContent, s.querySelectorAll('#cal1 tbody td').length, s.querySelector('#k1').offsetWidth];

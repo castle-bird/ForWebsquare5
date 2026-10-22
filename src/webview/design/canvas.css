@@ -43,6 +43,9 @@
 .wse-image-empty { display: inline-block; vertical-align: baseline; overflow: hidden; box-sizing: border-box; background: #ebebeb; color: #888; font: 600 13px sans-serif; }
 .wse-image-empty > span { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 100%; }
 .wse-image-empty img { width: 40%; max-width: 48px; opacity: .45; }
+/* 정의에 기본 크기가 없는 button: 크기·label이 없으면 0에 가까워 고를 수 없으니 style에 width·height가 없을 때만 기본 크기를 준다 */
+.wse-page button.w2button:not([style*="width"]) { min-width: 80px; }
+.wse-page button.w2button:not([style*="height"]) { min-height: 23px; }
 .wse-iframe { display: inline-block; vertical-align: top; width: 300px; height: 150px; box-sizing: border-box; overflow: hidden; outline: 1px dashed #999; outline-offset: -1px; }
 .wse-iframe::before { content: attr(data-src); display: block; padding: 2px; font: 11px monospace; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wse-multiupload { width: 400px; height: 50px; font-size: 12px; }
