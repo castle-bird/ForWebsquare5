@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { clsx } from 'clsx';
 import { useDraggable } from '@dnd-kit/core';
+import { INDENT } from '../../core/outlineDrop';
 import { isContainer, type DropPosition } from '../../core/paste';
 import type { ComponentDef } from '../../core/protocol';
 import { defOf, findNode, isXf, nodeAt, VALID_ID, type XmlNode } from '../../core/xmlModel';
@@ -93,7 +94,7 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onRange, onCo
 			<div ref={setRow} role="treeitem" aria-expanded={hasChildren ? open : undefined}
 				data-index={node.index} data-depth={depth} data-container={container || undefined} data-open={open && hasChildren || undefined}
 				className={clsx('tree-row', { selected: isSelected || isExtra, dragging: drag.isDragging, 'drop-inside': dropHere && dropParent.inside, 'drop-parent': dropHere && !dropParent.inside }, nativeZone && `drop-${nativeZone}`)}
-				style={{ paddingLeft: 4 + depth * 14 }} onClick={e => e.shiftKey && onRange ? onRange(node.index, e.currentTarget) : onSelect(node.index, e.ctrlKey || e.metaKey)}
+				style={{ paddingLeft: 4 + depth * INDENT }} onClick={e => e.shiftKey && onRange ? onRange(node.index, e.currentTarget) : onSelect(node.index, e.ctrlKey || e.metaKey)}
 				onContextMenu={e => onContextMenu?.(e, node)}
 				onDoubleClick={() => onDoubleClick?.(node)}
 				draggable={ref || movable ? true : undefined}

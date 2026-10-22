@@ -345,7 +345,7 @@ function App() {
 		setDataMenu({ x, y, index, mergeOnly: true, pasteAt, wrap });
 		return true;
 	};
-	const canvasContext = (index: number, x: number, y: number, cssRules: number[]) => {
+	const canvasContext = (index: number, x: number, y: number, cssRules?: number[]) => {
 		const path = body && pathTo(body, index);
 		const grid = path?.filter(n => isWs(n, 'gridView')).at(-1), clicked = path?.at(-1);
 		const cell = clicked && isMergeCell(clicked) ? clicked : undefined;
@@ -366,14 +366,14 @@ function App() {
 					left: canMoveGridColumn(grid, column.index, 'left'), right: canMoveGridColumn(grid, column.index, 'right') } } } });
 	};
 	const outlineContext = (e: MouseEvent<HTMLDivElement>, n: XmlNode) => {
-		if (!isMergeCell(n)) {
-			if (pasteMenu(n.index, e.clientX, e.clientY)) { e.preventDefault(); }
+		// 그리드(gridView) 안의 노드와 병합 칸은 캔버스와 같은 메뉴(칸 병합·그리드 부품·열 이동)
+		const inGrid = !!body && !!pathTo(body, n.index)?.some(a => isWs(a, 'gridView'));
+		if (inGrid || isMergeCell(n)) {
+			e.preventDefault();
+			canvasContext(n.index, e.clientX, e.clientY);
 			return;
 		}
-		e.preventDefault();
-		const unmerge = keepsSelection(n.index) ? targets(useEditorStore.getState()).map(t => t.index) : [n.index];
-		if (!keepsSelection(n.index)) { setSelected(n.index); }
-		setDataMenu({ x: e.clientX, y: e.clientY, index: n.index, merge: canMerge(), unmerge, mergeOnly: true, pasteAt: pasteTarget(n.index) });
+		if (pasteMenu(n.index, e.clientX, e.clientY)) { e.preventDefault(); }
 	};
 
 	return (<>

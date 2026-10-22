@@ -2,7 +2,7 @@
 import type { DropPosition } from './paste';
 
 /** 트리 한 단계 들여쓰기(px). style의 paddingLeft와 같아야 한다 */
-export const INDENT = 14;
+export const INDENT = 10;
 
 /** Outline 끌어 놓기 계산용 줄(보이는 순서, 끄는 것과 그 자손 제외). top·bottom: 트리 기준 y, open: 펼쳐져 자식 줄이 보임 */
 export interface FlatRow { index: number; depth: number; container: boolean; open: boolean; top: number; bottom: number }

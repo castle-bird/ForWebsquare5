@@ -61,6 +61,19 @@ export default async function ({ page }) {
 		const widthMsg = await page.evaluate(() => window.sent.find(m => m.type === 'setAttr' && m.name === 'width'));
 		assert.ok(widthMsg && widthMsg.index === 5 && widthMsg.value === '100', `기본 70 + 30 = 100: ${JSON.stringify(widthMsg)}`);
 		console.log('Design: 그리드 우클릭 subTotal·footer 추가·표시 passed');
+		// Outline의 gridView·그 안 노드 우클릭도 캔버스와 같은 그리드 메뉴(CSS 보기는 캔버스 요소가 없어 제외)
+		await page.evaluate(() => { window.sent.length = 0; window.tab('Outline', '.pane').click(); });
+		await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row')].some(r => r.textContent.includes('grd'))
+			|| (document.querySelector('.pane .tree-row[aria-expanded="false"] .chevron')?.click(), false));
+		await page.evaluate(() => [...document.querySelectorAll('.pane .tree-row')].find(r => r.textContent.includes('grd'))
+			.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 50, clientY: 50 })));
+		await page.waitForSelector('.context-menu');
+		assert.deepEqual(await page.$$eval('.context-menu button', bs => bs.map(b => b.textContent)), ['그룹으로 감싸기', 'Column 추가', 'Row 추가', 'Header 추가', 'subTotal 추가', 'footer 추가', '칸 속성 표…']);
+		await page.$$eval('.context-menu button', bs => bs.find(b => b.textContent === 'Header 추가').click());
+		const outlineAdd = await page.evaluate(() => window.sent.find(m => m.type === 'addGridPart'));
+		assert.equal(outlineAdd?.part, 'header');
+		await page.evaluate(() => window.tab('Data', '.pane').click());
+		console.log('Outline: 그리드 우클릭 메뉴 passed');
 		// 칸 속성 표: 우클릭 메뉴로 열고, Head(subTotal·footer)·Body 칸 속성을 고쳐 한 번에 보냄(비우면 지움)
 		await page.evaluate(() => {
 			window.sent.length = 0;
