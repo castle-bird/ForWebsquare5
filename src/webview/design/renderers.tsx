@@ -304,23 +304,37 @@ function TabControl({ node, className, defs }: { node: XmlNode; className: strin
 	</>);
 }
 
-/** 엔진은 만든 뒤 input 높이를 컨테이너 높이에서 테두리·안쪽 여백(스킨 기준 위아래 2px씩)을 뺀 값으로 넣는다(스킨의 height:0 때문). 실행하지 않으니 px 높이일 때 같게 맞춘다 */
-const UPLOAD_INPUT_CHROME = 4;
-
-function upload(n: XmlNode, className: string) {
-	const box = style(n.attrs.style), inputStyle = style(n.attrs.inputStyle);
+function upload(node: XmlNode, className: string) {
+	const box = style(node.attrs.style), inputStyle = style(node.attrs.inputStyle);
 	const height = typeof box?.height === 'string' && /^\d+(\.\d+)?px$/.test(box.height) ? parseFloat(box.height) : undefined;
-	return el(n, 'div', className, (
+	return el(node, 'div', className, (
 		<form><fieldset>
-			<input className="w2upload_input" type="text" readOnly tabIndex={-1}
-				style={{ width: 'calc(100% - 49px)', ...height !== undefined && !inputStyle?.height && { height: Math.max(0, height - UPLOAD_INPUT_CHROME) }, ...inputStyle }} />
-			<span className="w2upload_image" style={style(n.attrs.imageStyle)}>
+			<input className="w2upload_input" type="text" readOnly tabIndex={-1} style={{ width: 'calc(100% - 49px)', ...inputStyle }}
+				data-wse-fit-height={height !== undefined && !inputStyle?.height ? height : undefined} />
+			<span className="w2upload_image" style={style(node.attrs.imageStyle)}>
 				{/* 파일 선택 입력은 자리만 차지한다. 눌려 보이는 "No file chosen" 툴팁·손가락 커서가 안 생기게 포인터를 받지 않고, 줄 바닥 여백이 생기지 않게 block */}
 				<input className="w2upload_fakeInput" type="file" disabled tabIndex={-1}
 					style={{ display: 'block', margin: 0, padding: 0, opacity: 0.01, width: 16, pointerEvents: 'none', ...height !== undefined && { height } }} />
 			</span>
 		</fieldset></form>
 	), { style: { position: 'relative', ...box } });
+}
+
+const UPLOAD_CHROME = ['borderTopWidth', 'borderBottomWidth', 'paddingTop', 'paddingBottom'] as const;
+
+/**
+ * upload input 높이: 엔진은 만든 뒤, 테마 CSS가 input 높이를 주지 않으면(스킨은 height:0) 컨테이너 높이에서 input의 실제 테두리·안쪽 여백을 뺀 값을 넣는다.
+ * 엔진을 실행하지 않으므로 캔버스가 문서·CSS가 바뀔 때 같은 규칙으로 맞춘다. 테두리·여백은 테마마다 달라 적용된 CSS에서 잰다.
+ * 지난번 넣은 높이를 먼저 지워야 테마 CSS의 높이만 보인다
+ */
+export function fitUploadInputs(root: ParentNode) {
+	root.querySelectorAll<HTMLInputElement>('input[data-wse-fit-height]').forEach(input => {
+		input.style.height = '';
+		const s = getComputedStyle(input);
+		if (parseFloat(s.height) > 0) { return; }
+		const chrome = UPLOAD_CHROME.reduce((sum, k) => sum + (parseFloat(s[k]) || 0), 0);
+		input.style.height = `${Math.max(0, Number(input.dataset.wseFitHeight) - chrome)}px`;
+	});
 }
 
 function treeNodes(nodes: XmlNode[], depth: number): ReactNode {

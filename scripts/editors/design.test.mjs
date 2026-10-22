@@ -675,11 +675,18 @@ export default async function ({ page, pickProperty }) {
 			const s = document.querySelector('.canvas-host').shadowRoot, r = id => s.querySelector(id);
 			return [r('#bt1').tagName, r('#bt1 .w2button_label').textContent, r('#bt1').offsetWidth, !!s.querySelector('#in1'), r('#if1').dataset.src, r('#if1').offsetWidth, r('#if1').offsetHeight, !!s.querySelector('iframe'), !!r('#up1 .w2upload_input')];
 		}), ['BUTTON', '저장', 80, false, '/ui/a.xml', 200, 100, false, true]);
-		// upload: 엔진처럼 input이 컨테이너 높이를 채우고(테두리·여백 4px 제외), 파일 입력은 포인터를 받지 않음(툴팁·커서 없음)
-		assert.deepEqual(await page.evaluate(() => {
-			const s = document.querySelector('.canvas-host').shadowRoot, f = s.querySelector('#up1 .w2upload_fakeInput');
-			return [s.querySelector('#up1 .w2upload_input').style.height, f.style.height, getComputedStyle(f).pointerEvents];
-		}), ['19px', '23px', 'none']);
+		// upload: 엔진처럼 테마 CSS가 input 높이를 안 주면(height:0) 컨테이너 높이 - 그 테마의 테두리·안쪽 여백, 주면 그대로.
+		// CSS가 나중에 와도 다시 잼. 파일 입력은 포인터를 받지 않음(툴팁·커서 없음)
+		const uploadInput = theme => page.evaluate(async css => {
+			window.send({ type: 'styles', css: [css] });
+			await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+			const s = document.querySelector('.canvas-host').shadowRoot;
+			return [s.querySelector('#up1 .w2upload_input').style.height, getComputedStyle(s.querySelector('#up1 .w2upload_fakeInput')).pointerEvents];
+		}, theme);
+		assert.deepEqual(await uploadInput('.w2upload .w2upload_input { border: 1px solid; padding: 3px; height: 0; }'), ['15px', 'none'], '23 - (1+3)*2');
+		assert.deepEqual(await uploadInput('.w2upload .w2upload_input { border: 2px solid; padding: 0; height: 0; }'), ['19px', 'none'], '테마가 바뀌면 다시 잼');
+		assert.deepEqual(await uploadInput('.w2upload .w2upload_input { height: 20px; }'), ['', 'none'], '테마가 높이를 주면 그대로');
+		await page.evaluate(() => window.send({ type: 'styles', css: [] }));
 		// 크기·label 없는 button도 눌러 고를 수 있는 크기
 		assert.deepEqual(await page.evaluate(() => { const b = document.querySelector('.canvas-host').shadowRoot.querySelector('#bt2'); return [b.offsetWidth, b.offsetHeight]; }), [80, 23]);
 		assert.deepEqual(await page.evaluate(() => {

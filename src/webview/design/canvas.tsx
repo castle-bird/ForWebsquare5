@@ -9,7 +9,7 @@ import { EditBox } from '../ui/editBox';
 import { cellForm, FORM_HEIGHT, FORM_WIDTH, formAttrs, FormFields, FormHeader, type Form } from './cellForm';
 import { matchingCssRules } from './cssRules';
 import { distanceLines, type DistanceLine } from './distance';
-import { render, textTarget, outlineIcon, breaksToNewlines, newlinesToBreaks, type TextTarget } from './renderers';
+import { render, textTarget, outlineIcon, breaksToNewlines, newlinesToBreaks, fitUploadInputs, type TextTarget } from './renderers';
 import { classLabel, REF_MIME, setDragGhost } from '../ui/tree';
 import { PALETTE_MIME, readPaletteDrag, type PaletteDrag } from '../ui/palette';
 import { edgeSpeed } from '../ui/edgeScroll';
@@ -127,6 +127,8 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 		}));
 		return () => cancelAnimationFrame(frame);
 	}, [tree, shadow, sheets]);
+	// 엔진이 JS로 크기를 정하는 부분: 스타일시트를 붙인 위 effect 뒤에 돌아 그 CSS로 잰다
+	useEffect(() => { if (page.current) { fitUploadInputs(page.current); } }, [tree, shadow, sheets]);
 	const target = (e: { target: EventTarget }) => pick(e.target as Element);
 	/** 화면 배치 방향으로 판정하되 XML에는 기존 before/after/inside를 보낸다. */
 	const dropAt = (e: { target: EventTarget; clientX: number; clientY: number }) => {
