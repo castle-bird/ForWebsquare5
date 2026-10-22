@@ -656,9 +656,11 @@ export default async function ({ page, pickProperty }) {
 			const WS = 'http://www.inswave.com/websquare', XF = 'http://www.w3.org/2002/xforms';
 			const def = (id, ns, realType) => ({ id, ns, realType, parents: [], bases: [], properties: [], events: [] });
 			window.send({ type: 'definitions', defs: [...window.testDefs, def('checkcombobox', XF, 'checkcombobox'), def('select', XF, 'multiselect'), def('spinner', WS, 'spinner'),
-				def('searchbox', WS, 'searchbox'), def('output', XF, 'output'), def('calendar', WS, 'calendar'), def('multiupload', WS, 'multiupload'), def('output', XF, 'output')] });
+				def('searchbox', WS, 'searchbox'), def('output', XF, 'output'), def('calendar', WS, 'calendar'), def('multiupload', WS, 'multiupload'), def('output', XF, 'output'),
+				def('button', WS, 'button'), def('iframe', WS, 'iframe'), def('upload', WS, 'upload')] });
 			const text = `<html xmlns:w2="${WS}" xmlns:xf="${XF}"><body><xf:checkcombobox id="k1" style="width:148px;height:21px;"/><xf:select id="m1"><xf:choices><xf:item><xf:label>가</xf:label><xf:value>a</xf:value></xf:item><xf:item><xf:label>나</xf:label><xf:value>b</xf:value></xf:item></xf:choices></xf:select>`
-				+ '<w2:spinner id="s1" value="3"/><w2:searchbox id="q1"/><xf:output id="o1" label="출력"/><w2:calendar id="cal1"/><w2:multiupload id="mu1"/><xf:output id="o2"/></body></html>';
+				+ '<w2:spinner id="s1" value="3"/><w2:searchbox id="q1"/><xf:output id="o1" label="출력"/><w2:calendar id="cal1"/><w2:multiupload id="mu1"/><xf:output id="o2"/>'
+				+ '<w2:button id="bt1" label="저장" style="width:80px;height:23px;"><w2:iframe id="in1" src="x.xml"/></w2:button><w2:iframe id="if1" src="/ui/a.xml" style="width:200px;height:100px;"/><w2:upload id="up1" style="width:250px;height:23px;"/></body></html>';
 			const root = window.parseXml(text);
 			root.children[0].children.forEach((n, i) => { n.def = window.testDefs.length + i; });
 			window.send({ type: 'document', version: 98, text, root, script: { text: '' } });
@@ -666,8 +668,13 @@ export default async function ({ page, pickProperty }) {
 		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('#mu1'));
 		assert.deepEqual(await page.evaluate(() => {
 			const s = document.querySelector('.canvas-host').shadowRoot;
-			return ['#k1', '#m1', '#s1', '#q1', '#o1', '#cal1', '#mu1'].map(id => s.querySelector(id).matches('.wse-todo'));
-		}), [false, false, false, false, false, false, false], '자리 표시 아님');
+			return ['#k1', '#m1', '#s1', '#q1', '#o1', '#cal1', '#mu1', '#bt1', '#if1', '#up1'].map(id => s.querySelector(id).matches('.wse-todo'));
+		}), [false, false, false, false, false, false, false, false, false, false], '자리 표시 아님');
+		// button·iframe·upload: 엔진 모양(w2button·테두리 없는 w2iframe·w2upload), button 안 iframe은 그리지 않음, iframe src는 불러오지 않고 글자로만
+		assert.deepEqual(await page.evaluate(() => {
+			const s = document.querySelector('.canvas-host').shadowRoot, r = id => s.querySelector(id);
+			return [r('#bt1').tagName, r('#bt1 .w2button_label').textContent, r('#bt1').offsetWidth, !!s.querySelector('#in1'), r('#if1').dataset.src, r('#if1').offsetWidth, r('#if1').offsetHeight, !!s.querySelector('iframe'), !!r('#up1 .w2upload_input')];
+		}), ['BUTTON', '저장', 80, false, '/ui/a.xml', 200, 100, false, true]);
 		assert.deepEqual(await page.evaluate(() => {
 			const s = document.querySelector('.canvas-host').shadowRoot;
 			return [s.querySelector('#m1').textContent, s.querySelector('#s1 input').value, s.querySelector('#o1').textContent, s.querySelectorAll('#cal1 tbody td').length, s.querySelector('#k1').offsetWidth];

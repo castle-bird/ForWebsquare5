@@ -47,6 +47,10 @@ const text = (tag: string): Renderer => (n, c) => el(n, tag, c, withBreaks(label
 const RENDERERS: Record<string, Renderer> = {
 	body: (n, c, d) => el(n, 'div', c, children(n, d)),
 	trigger: (n, c) => el(n, 'input', c, undefined, { type: 'button', value: labelOf(n) ?? '', readOnly: true, tabIndex: -1 }),
+	// 정의에서 숨긴(visible=false) 컴포넌트지만 이미 쓴 화면은 그린다. 자식(iframe 등)은 엔진이 쓰지 않으므로 그리지 않는다
+	button: (n, c) => el(n, 'button', clsx(c, { w2button_disabled: n.attrs.disabled === 'true' }), <span className="w2button_label">{withBreaks(labelOf(n))}</span>, { type: 'button', tabIndex: -1 }),
+	// 엔진은 테두리 없는 iframe: 크기·자리만 보이도록 점선 자리 상자에 src를 적는다. src 화면은 불러오지 않는다
+	iframe: (n, c) => el(n, 'div', clsx(c, 'wse-iframe'), undefined, { 'data-src': n.attrs.src || undefined }),
 	input: (n, c) => el(n, 'input', c, undefined, { type: 'text', value: n.attrs.value ?? '', readOnly: true, tabIndex: -1 }),
 	secret: (n, c) => el(n, 'input', c, undefined, { type: 'password', value: '', readOnly: true, tabIndex: -1 }),
 	textarea: (n, c) => el(n, 'textarea', c, undefined, { value: '', readOnly: true, tabIndex: -1 }),
@@ -424,7 +428,7 @@ function style(text?: string): CSSProperties | undefined {
 
 export interface TextTarget { index: number; attr?: string; value?: string }
 
-const LABELED = new Set(['textbox', 'span', 'anchor', 'tabs', 'output']);
+const LABELED = new Set(['textbox', 'span', 'anchor', 'tabs', 'output', 'button']);
 
 export function textTarget(node: XmlNode, def?: ComponentDef): TextTarget | undefined {
 	const type = def?.realType;
