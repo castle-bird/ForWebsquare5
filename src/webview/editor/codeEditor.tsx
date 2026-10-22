@@ -144,12 +144,17 @@ function restoreOnReturn(editor: EditorView): () => void {
 		if (!editor.dom.contains(e.target as Node)) {
 			return;
 		}
-		window.addEventListener('pointerup', () => requestAnimationFrame(() => {
-			if (!editor.hasFocus && nowhere() && editor.dom.offsetParent) {
-				window.focus();
-				editor.focus();
-			}
-		}), { once: true, capture: true, signal });
+		window.addEventListener('pointerup', () => {
+			// 눌러 끄는 사이 blur(웹뷰가 포커스를 넘겨받는 중)가 오면 그때 커서(드래그 시작점)가 저장된다.
+			// 끌기가 끝난 뒤 첫 키(Ctrl 등)가 그 커서로 되돌려 선택이 풀리므로, 클릭·끌기가 끝나면 버린다
+			saved = undefined;
+			requestAnimationFrame(() => {
+				if (!editor.hasFocus && nowhere() && editor.dom.offsetParent) {
+					window.focus();
+					editor.focus();
+				}
+			});
+		}, { once: true, capture: true, signal });
 	};
 	const onKey = () => {
 		const s = saved;

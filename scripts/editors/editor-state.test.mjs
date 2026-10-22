@@ -123,6 +123,18 @@ export default async function ({ page, clickTab }) {
 		await page.evaluate(() => document.activeElement.blur());
 		await page.keyboard.press('Space');
 		assert.equal((await atLine()).top, 0, 'body에서 Space: 스크롤 없음');
+		// 5) 다른 창에 있다 돌아와 드래그하는 중에 blur가 오면(웹뷰가 포커스를 넘겨받는 중) 그때의 커서(드래그 시작점)가 저장돼,
+		// 드래그가 끝난 뒤 Ctrl(복사 준비)을 누르면 선택이 그 커서로 되돌아가 풀렸다
+		await page.evaluate(() => { const v = window.editor(); v.dispatch({ selection: { anchor: 0 } }); v.scrollDOM.scrollTop = 0; v.focus(); window.dispatchEvent(new Event('blur')); });
+		const from = await lineEnd('var v4 = 4; '), to = await lineEnd('var v6 = 6;');
+		await page.mouse.move(from.x, from.y); await page.mouse.down();
+		await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+		await page.mouse.move(to.x, to.y, { steps: 4 }); await page.mouse.up();
+		const picked = () => page.evaluate(() => { const r = window.editor().state.selection.main; return { from: r.from, to: r.to }; });
+		const dragged = await picked();
+		assert.notEqual(dragged.from, dragged.to, '드래그로 범위 선택');
+		await page.keyboard.down('Control'); await page.keyboard.up('Control');
+		assert.deepEqual(await picked(), dragged, 'Ctrl을 눌러도 드래그한 선택 유지');
 		console.log('Script: 웹뷰로 돌아온 뒤 첫 Space 커서·스크롤 유지 passed');
 	}
 	// 코드 미니맵(막대형): 기본 켬, 설정(톱니바퀴)에서 켜고 끔(모든 화면 공통으로 저장), 클릭하면 그 줄로, 오류 줄 표시
