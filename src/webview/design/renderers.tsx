@@ -304,15 +304,23 @@ function TabControl({ node, className, defs }: { node: XmlNode; className: strin
 	</>);
 }
 
+/** 엔진은 만든 뒤 input 높이를 컨테이너 높이에서 테두리·안쪽 여백(스킨 기준 위아래 2px씩)을 뺀 값으로 넣는다(스킨의 height:0 때문). 실행하지 않으니 px 높이일 때 같게 맞춘다 */
+const UPLOAD_INPUT_CHROME = 4;
+
 function upload(n: XmlNode, className: string) {
+	const box = style(n.attrs.style), inputStyle = style(n.attrs.inputStyle);
+	const height = typeof box?.height === 'string' && /^\d+(\.\d+)?px$/.test(box.height) ? parseFloat(box.height) : undefined;
 	return el(n, 'div', className, (
 		<form><fieldset>
-			<input className="w2upload_input" type="text" readOnly tabIndex={-1} style={{ width: 'calc(100% - 49px)', ...style(n.attrs.inputStyle) }} />
+			<input className="w2upload_input" type="text" readOnly tabIndex={-1}
+				style={{ width: 'calc(100% - 49px)', ...height !== undefined && !inputStyle?.height && { height: Math.max(0, height - UPLOAD_INPUT_CHROME) }, ...inputStyle }} />
 			<span className="w2upload_image" style={style(n.attrs.imageStyle)}>
-				<input className="w2upload_fakeInput" type="file" disabled tabIndex={-1} style={{ margin: 0, padding: 0, opacity: 0.01, width: 16 }} />
+				{/* 파일 선택 입력은 자리만 차지한다. 눌려 보이는 "No file chosen" 툴팁·손가락 커서가 안 생기게 포인터를 받지 않고, 줄 바닥 여백이 생기지 않게 block */}
+				<input className="w2upload_fakeInput" type="file" disabled tabIndex={-1}
+					style={{ display: 'block', margin: 0, padding: 0, opacity: 0.01, width: 16, pointerEvents: 'none', ...height !== undefined && { height } }} />
 			</span>
 		</fieldset></form>
-	), { style: { position: 'relative', ...style(n.attrs.style) } });
+	), { style: { position: 'relative', ...box } });
 }
 
 function treeNodes(nodes: XmlNode[], depth: number): ReactNode {

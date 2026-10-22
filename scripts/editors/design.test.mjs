@@ -675,6 +675,11 @@ export default async function ({ page, pickProperty }) {
 			const s = document.querySelector('.canvas-host').shadowRoot, r = id => s.querySelector(id);
 			return [r('#bt1').tagName, r('#bt1 .w2button_label').textContent, r('#bt1').offsetWidth, !!s.querySelector('#in1'), r('#if1').dataset.src, r('#if1').offsetWidth, r('#if1').offsetHeight, !!s.querySelector('iframe'), !!r('#up1 .w2upload_input')];
 		}), ['BUTTON', '저장', 80, false, '/ui/a.xml', 200, 100, false, true]);
+		// upload: 엔진처럼 input이 컨테이너 높이를 채우고(테두리·여백 4px 제외), 파일 입력은 포인터를 받지 않음(툴팁·커서 없음)
+		assert.deepEqual(await page.evaluate(() => {
+			const s = document.querySelector('.canvas-host').shadowRoot, f = s.querySelector('#up1 .w2upload_fakeInput');
+			return [s.querySelector('#up1 .w2upload_input').style.height, f.style.height, getComputedStyle(f).pointerEvents];
+		}), ['19px', '23px', 'none']);
 		// 크기·label 없는 button도 눌러 고를 수 있는 크기
 		assert.deepEqual(await page.evaluate(() => { const b = document.querySelector('.canvas-host').shadowRoot.querySelector('#bt2'); return [b.offsetWidth, b.offsetHeight]; }), [80, 23]);
 		assert.deepEqual(await page.evaluate(() => {
