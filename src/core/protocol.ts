@@ -30,6 +30,8 @@ export type ToWebview =
 	| { type: 'tabPosition'; position: TabPosition }
 	| { type: 'panelFont'; font: PanelFont }
 	| { type: 'minimap'; on: boolean } // 코드 편집기 미니맵 켜기·끄기(모든 화면 공통)
+	| { type: 'animation'; on: boolean } // 애니메이션(탭 배경 이동·메뉴·팝업 열림) 켜기·끄기(모든 화면 공통)
+	| { type: 'browserPreview'; on: boolean } // 이 화면의 브라우저 미리보기가 열림·닫힘(열려 있는 동안 웹뷰가 화면이 바뀔 때마다 스냅샷을 보낸다)
 	| { type: 'codeBlame'; on: boolean } // 코드 편집기 Git blame 켜기·끄기(모든 화면 공통)
 	| { type: 'blame'; target: CodeTarget; version: number; data?: Blame } // 그 문서 버전의 줄별 blame. 없으면 표시 안 함(Git 밖 등)
 	| { type: 'linkTabs'; tabs: LinkTab[]; exts: string[]; select?: string } // select: 이 탭으로 넘어간다(방금 추가한 탭). exts: 연결할 수 있는 확장자
@@ -76,6 +78,9 @@ export interface SignatureInfo {
 
 /** Design·Script·Source·연결 탭 줄 위치 */
 export type TabPosition = 'top' | 'bottom';
+
+/** 브라우저 미리보기용 Design 캔버스 스냅샷: `.wse-page` HTML(편집용 속성 제거), 쓰는 CSS(프로젝트 + 캔버스 기본), 외부 폰트 @import */
+export interface BrowserPage { html: string; css: string[]; imports: string[] }
 
 /** VS Code 언어 확장의 자동완성(연결 탭). 위치는 0부터 줄·글자 */
 export interface RemoteCompletions {
@@ -192,6 +197,9 @@ export type ToExtension =
 	| { type: 'setTabPosition'; position: TabPosition }
 	| { type: 'setPanelFont'; font: PanelFont }
 	| { type: 'setMinimap'; on: boolean }
+	| { type: 'setAnimation'; on: boolean }
+	| ({ type: 'openInBrowser' } & BrowserPage) // 현재 Design 캔버스 스냅샷을 로컬 미리보기 서버로 내보내 브라우저로 연다
+	| ({ type: 'updateBrowserPreview' } & Pick<BrowserPage, 'html'> & Partial<BrowserPage>) // 미리보기가 열려 있는 동안 화면이 바뀌면 새 스냅샷을 보낸다. CSS가 그대로면 css·imports를 뺀다
 	| { type: 'setCodeBlame'; on: boolean }
 	| { type: 'navigate'; back: boolean } // 마우스 뒤로·앞으로 버튼: VS Code 이동 기록(Go Back·Go Forward). 웹뷰 위에서 누른 버튼은 VS Code에 안 가서 넘겨준다
 	| { type: 'loadUsedTables' }

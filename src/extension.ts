@@ -6,6 +6,7 @@ import { editableScript, scriptBody } from './core/edit';
 import { errorMessage } from './core/errors';
 import type { CodeTarget, CssRuleSource, SettingsMenuItem, ToExtension, ToWebview } from './core/protocol';
 import { ENGINE_PAGE, findWebRoot, fromWebPath, serial } from './project/paths';
+import { BrowserPreview, disposeBrowserPreviews } from './vscode/browserPreview';
 import { scopeCss, stylesheetFiles } from './project/styles';
 import { openCss } from './vscode/css';
 import { attachFrames, resolveSrc } from './project/frames';
@@ -18,7 +19,7 @@ import { applyCodeEdit, applyNodeEdit, formatCode } from './vscode/documentEdit'
 import { LinkedFiles, registerLinks } from './vscode/links';
 import { UsedTablesStore } from './vscode/tables';
 import { saveTabOrder, tabOrder } from './vscode/linkTabs';
-import { blameOn, minimapOn, onBlameToggled, panelFont, registerViewSettings, saveBlame, saveMinimap, savePanelFont, saveTabPosition, tabPosition } from './vscode/viewSettings';
+import { blameOn, minimapOn, onBlameToggled, panelFont, registerViewSettings, saveBlame, saveMinimap, savePanelFont, saveAnimation, saveTabPosition, animationOn, tabPosition } from './vscode/viewSettings';
 import { linkIdOf } from './core/links';
 import { findPaletteDef } from './core/palette';
 import { codeTheme, registerCodeTheme, saveCustomizations } from './vscode/codeTheme';
@@ -242,6 +243,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			}
 		};
 		const toast = (message: string) => void post({ type: 'toast', message });
+		const browserPreview = new BrowserPreview(document, panel.webview, webRoot, on => void post({ type: 'browserPreview', on }));
 		// defsNow: 마지막으로 다 읽은 정의(아직이면 undefined). 문서는 이것으로 보내고, 첫 정의를 기다리다 먼저 보냈으면(earlySent) 빈 목록으로 보낸다
 		let defsNow: ComponentDef[] | undefined, earlySent = false;
 		const trackDefinitions = () => {
@@ -375,6 +377,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 					void post({ type: 'tabPosition', position: tabPosition() });
 					void post({ type: 'panelFont', font: panelFont() });
 					void post({ type: 'minimap', on: minimapOn() });
+					void post({ type: 'animation', on: animationOn() });
 					void post({ type: 'codeBlame', on: blameOn() });
 					xmlBlame.schedule(0);
 					void post({ type: 'paletteFavorites', keys: paletteFavorites(this.globalState) });
@@ -449,6 +452,10 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 					void vscode.window.showWarningMessage(msg.message);
 				} else if (msg.type === 'openCss') {
 					void styles.then(s => openCss(s.rules ?? [], msg.rules)).catch(e => vscode.window.showErrorMessage(`CSS 이동 실패: ${errorMessage(e)}`));
+				} else if (msg.type === 'openInBrowser') {
+					void browserPreview.open(msg).catch(e => vscode.window.showErrorMessage(`브라우저로 열기 실패: ${errorMessage(e)}`));
+				} else if (msg.type === 'updateBrowserPreview') {
+					browserPreview.update(msg);
 				} else if (msg.type === 'openFrame') {
 					void openFrame(document, msg.index, webRoot);
 				} else if (msg.type === 'openModule') {
@@ -481,6 +488,9 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 				} else if (msg.type === 'setMinimap') {
 					void saveMinimap(msg.on);
 					broadcast(panel, { type: 'minimap', on: msg.on });
+				} else if (msg.type === 'setAnimation') {
+					void saveAnimation(msg.on);
+					broadcast(panel, { type: 'animation', on: msg.on });
 				} else if (msg.type === 'editDataFields' || msg.type === 'addSubmission' || msg.type === 'editSubmission' || msg.type === 'editChoices' || msg.type === 'editGridCells') {
 					void queue('source', async () => {
 						const ok = msg.version === document.version && await applyNodeEdit(document, msg, toast);
@@ -515,6 +525,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			clearTimeout(gitTimer);
 			clearTimeout(moduleTimer);
 			xmlBlame.dispose();
+			browserPreview.dispose();
 			subs.forEach(s => s.dispose());
 			void links.dispose();
 			usedTables.dispose();
@@ -606,4 +617,5 @@ function html(webview: vscode.Webview, dist: vscode.Uri): string {
 
 export function deactivate() {
 	disposeWpack();
+	disposeBrowserPreviews();
 }

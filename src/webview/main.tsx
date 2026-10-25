@@ -6,6 +6,7 @@ import { defOf, isWs, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
 import { DATA_KINDS, modelParts, type DataKind } from '../core/data';
 
 import { Canvas } from './design/canvas';
+import { pageSnapshot } from './design/pageSnapshot';
 import { PropertyPane } from './ui/properties';
 
 
@@ -187,6 +188,9 @@ function App() {
 	const setTabOrder = useEditorStore(s => s.setTabOrder);
 	const tabPosition = useEditorStore(s => s.tabPosition);
 	const minimapOn = useEditorStore(s => s.minimap);
+	const animationOn = useEditorStore(s => s.animation);
+	// 끄면 style.css의 애니메이션·전환(탭 알약·메뉴·팝업)이 root 속성으로 모두 꺼진다
+	useEffect(() => { document.documentElement.dataset.animation = animationOn ? 'on' : 'off'; }, [animationOn]);
 	const panelFont = useEditorStore(s => s.panelFont);
 	const blameOn = useEditorStore(s => s.codeBlame);
 	const setTabPosition = useEditorStore(s => s.setTabPosition);
@@ -264,6 +268,24 @@ function App() {
 	const head = root?.children.find(c => c.tag === 'head');
 	// 매 렌더 새 배열이면 아래 dataRoots useMemo가 매번 깨져 Data 트리가 다시 그려진다
 	const { model, dataCollection, submissions } = useMemo(() => modelParts(root), [root]);
+	// 브라우저 미리보기가 열려 있으면 Design 화면이 바뀔 때마다(잠깐 모아서) 새 스냅샷을 보낸다. 캔버스는 Design 탭에서만 있다
+	const previewOpen = useEditorStore(s => s.browserPreview);
+	// 마지막으로 보낸 CSS(styles 메시지). 그대로면 화면 HTML만 보낸다(큰 프로젝트 CSS를 매번 보내지 않게)
+	const previewStyles = useRef<typeof styles>(undefined);
+	useEffect(() => {
+		if (!previewOpen || shownTab !== 'Design') { return; }
+		const timer = setTimeout(() => {
+			const page = pageSnapshot(styles?.css, styles?.imports);
+			if (!page) { return; }
+			if (previewStyles.current === styles) {
+				post({ type: 'updateBrowserPreview', html: page.html });
+			} else {
+				previewStyles.current = styles;
+				post({ type: 'updateBrowserPreview', ...page });
+			}
+		}, 250);
+		return () => clearTimeout(timer);
+	}, [previewOpen, shownTab, root, defs, styles]);
 	const dataRoots = useMemo(() => [
 		...dataCollection ? [dataCollection] : [],
 		...model ? [{ index: -1, tag: 'Submission', ns: '', attrs: {}, start: -1, end: -1, children: submissions }] : [],
@@ -389,7 +411,8 @@ function App() {
 						onClick={() => { if (rightPanel.current?.isCollapsed()) { rightPanel.current.expand(); } else { rightPanel.current?.collapse(); } }} /></>} start={<><button className={`tab-palette codicon codicon-layout-sidebar-left${paletteOpen ? ' active' : ''}`}
 						title={paletteOpen ? '팔레트 접기' : '팔레트 펼치기'} aria-label="팔레트" aria-expanded={paletteOpen} draggable={false} disabled={shownTab !== 'Design'} onClick={() => setPaletteOpen(open => !open)} />
 						<button draggable={false} className={`tab-move codicon codicon-arrow-${otherSide === 'top' ? 'up' : 'down'}`}
-						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} /></>} pinned={[ERD_TAB]} keepMounted={['Script', 'Source', ERD_TAB, ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={showTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
+						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} /></>} beforePinned={<button className="tab-run codicon codicon-play" title="현재 화면 브라우저로 보기" aria-label="현재 화면 브라우저로 보기" draggable={false} disabled={shownTab !== 'Design' || !body}
+							onClick={() => { const page = pageSnapshot(styles?.css, styles?.imports); if (page) { previewStyles.current = styles; post({ type: 'openInBrowser', ...page }); } }} />} pinned={[ERD_TAB]} keepMounted={['Script', 'Source', ERD_TAB, ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={showTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
 						Design: doc?.error ? <p className="error">{doc.error}</p>
 							: body && defs ? <Group orientation="horizontal" className="design-layout">
 								{paletteOpen && <Panel key="palette" id="palette" defaultSize={220} minSize={150} maxSize={360}><PalettePane /></Panel>}
@@ -490,6 +513,8 @@ function App() {
 			{/* 웹뷰 안 설정: 바로 바꾸고 메뉴는 닫는다 */}
 			<button role="menuitemcheckbox" aria-checked={minimapOn} onClick={() => { setSettingsMenu(undefined); useEditorStore.getState().setMinimap(!minimapOn); }}>
 				<span className="menu-label"><span className={`codicon codicon-${minimapOn ? 'check' : 'blank'}`} />코드 미니맵</span></button>
+			<button role="menuitemcheckbox" aria-checked={animationOn} onClick={() => { setSettingsMenu(undefined); useEditorStore.getState().setAnimation(!animationOn); }}>
+				<span className="menu-label"><span className={`codicon codicon-${animationOn ? 'check' : 'blank'}`} />애니메이션</span></button>
 			<button role="menuitemcheckbox" aria-checked={blameOn} onClick={() => { setSettingsMenu(undefined); useEditorStore.getState().setCodeBlame(!blameOn); }}>
 				<span className="menu-label"><span className={`codicon codicon-${blameOn ? 'check' : 'blank'}`} />코드 Git blame</span></button>
 		</Menu>}

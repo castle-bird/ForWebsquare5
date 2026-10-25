@@ -50,6 +50,10 @@ interface EditorState {
 	tabPosition: TabPosition;
 	/** 코드 편집기 미니맵(모든 화면 공통) */
 	minimap: boolean;
+	/** 애니메이션: 탭 배경 이동·메뉴·팝업 열림(모든 화면 공통) */
+	animation: boolean;
+	/** 이 화면의 브라우저 미리보기가 열려 있음(열려 있는 동안 화면이 바뀔 때마다 스냅샷을 보낸다) */
+	browserPreview: boolean;
 	panelFont: PanelFont;
 	/** 코드 편집기 커서 줄 끝 Git blame(모든 화면 공통) */
 	codeBlame: boolean;
@@ -100,6 +104,7 @@ interface EditorState {
 	setTabOrder: (order: string[]) => void;
 	setTabPosition: (position: TabPosition) => void;
 	setMinimap: (on: boolean) => void;
+	setAnimation: (on: boolean) => void;
 	setPanelFont: (font: PanelFont) => void;
 	setCodeBlame: (on: boolean) => void;
 	togglePaletteFavorite: (component: ComponentDef) => void;
@@ -144,6 +149,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	gitBases: {},
 	tabPosition: 'top',
 	minimap: true,
+	animation: true,
+	browserPreview: false,
 	panelFont: 'editor',
 	codeBlame: true,
 	blames: {},
@@ -216,6 +223,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 			set({ panelFont: data.font });
 		} else if (data.type === 'minimap') {
 			set({ minimap: data.on });
+		} else if (data.type === 'animation') {
+			set({ animation: data.on });
+		} else if (data.type === 'browserPreview') {
+			set({ browserPreview: data.on });
 		} else if (data.type === 'codeBlame') {
 			set({ codeBlame: data.on });
 		} else if (data.type === 'blame') {
@@ -441,6 +452,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	setMinimap: (on) => {
 		set({ minimap: on });
 		post({ type: 'setMinimap', on });
+	},
+	setAnimation: (on) => {
+		set({ animation: on });
+		post({ type: 'setAnimation', on });
 	},
 
 	setCodeBlame: (on) => {

@@ -1,16 +1,38 @@
-import { useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { clsx } from 'clsx';
 import { DndContext, PointerSensor, useDraggable, useSensor, useSensors, type DragEndEvent, type DragMoveEvent } from '@dnd-kit/core';
 import { moveTab, orderTabs } from '../../core/links';
-
 export interface TabHint { title?: string; dirty?: boolean }
 
 type Drop = { target: string; after: boolean };
 
-export function Tabs({ items, actions, start, end, pinned = [], position = 'top', keepMounted = [], active: activeProp, onActive, order, onReorder, hints, onTabMenu, onAdd, keys = {} }: {
+/** 배경 알약을 탭 버튼 자리로 옮긴다(탭 줄 기준 좌표). 버튼이 없으면 숨긴다. snap이면 이동 애니메이션 없이 바로 */
+function place(pill: HTMLElement, button: HTMLElement | null | undefined, snap: boolean) {
+	if (!button) {
+		pill.style.opacity = '0';
+		return;
+	}
+	const transform = `translate(${button.offsetLeft}px, ${button.offsetTop}px)`, width = `${button.offsetWidth}px`, height = `${button.offsetHeight}px`;
+	// 탭 줄은 문서가 바뀔 때마다 다시 그려진다: 자리가 같으면 스타일을 건드리지 않는다
+	if (pill.style.opacity === '1' && pill.style.transform === transform && pill.style.width === width && pill.style.height === height) {
+		return;
+	}
+	if (snap) {
+		pill.style.transition = 'none';
+	}
+	Object.assign(pill.style, { transform, width, height, opacity: '1' });
+	if (snap) {
+		void pill.offsetWidth;
+		pill.style.transition = '';
+	}
+}
+
+export function Tabs({ items, actions, start, end, beforePinned, pinned = [], position = 'top', keepMounted = [], active: activeProp, onActive, order, onReorder, hints, onTabMenu, onAdd, keys = {} }: {
 	items: Record<string, ReactNode>; actions?: Record<string, ReactNode>;
 	/** 탭 줄 맨 앞(탭 앞)에 둘 것 */
-	start?: ReactNode; end?: ReactNode; position?: 'top' | 'bottom'; keepMounted?: string[];
+	start?: ReactNode; end?: ReactNode;
+	/** 고정 탭 바로 앞(탭 줄 오른쪽 묶음의 맨 앞)에 둘 것 */
+	beforePinned?: ReactNode; position?: 'top' | 'bottom'; keepMounted?: string[];
 	/** 탭 줄 오른쪽(end 앞)에 고정할 탭(ERD 등). 끌어 순서 바꾸기·저장 순서에서 빠진다 */
 	pinned?: string[];
 	active?: string; onActive?(name: string): void;
@@ -53,6 +75,32 @@ export function Tabs({ items, actions, start, end, pinned = [], position = 'top'
 		// 제자리면 표시도 바꾸기도 하지 않는다
 		return moveTab(names, String(e.active.id), d.target, d.after).join() === names.join() ? undefined : d;
 	};
+	// 탭 뒤 배경: 고른 탭 알약(current)과 마우스가 올라간 탭 알약(hover)이 탭 사이를 미끄러져 따라다닌다
+	const barRef = useRef<HTMLElement>(null);
+	const currentPill = useRef<HTMLSpanElement>(null);
+	const hoverPill = useRef<HTMLSpanElement>(null);
+	const hovered = useRef<HTMLElement | null>(null);
+	const refresh = (snap = false) => {
+		const current = barRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+		const hover = hovered.current?.isConnected ? hovered.current : null;
+		place(currentPill.current!, current, snap || currentPill.current!.style.opacity !== '1');
+		place(hoverPill.current!, hover, snap || hoverPill.current!.style.opacity !== '1');
+	};
+	const hover = (button: HTMLElement | null) => {
+		if (button !== hovered.current) {
+			hovered.current = button;
+			refresh();
+		}
+	};
+	useLayoutEffect(() => refresh());
+	const tabList = all.join();
+	useEffect(() => {
+		// 창·글꼴 크기로 탭 자리가 바뀌면 애니메이션 없이 따라붙는다
+		const observer = new ResizeObserver(() => refresh(true));
+		observer.observe(barRef.current!);
+		barRef.current!.querySelectorAll('[role="tab"]').forEach(tab => observer.observe(tab));
+		return () => observer.disconnect();
+	}, [tabList]);
 	const onDragEnd = (e: DragEndEvent) => {
 		const d = dropOf(e);
 		setDrop(undefined);
@@ -61,15 +109,18 @@ export function Tabs({ items, actions, start, end, pinned = [], position = 'top'
 		}
 	};
 	const bar = (
-		<nav className="tab-bar" role="tablist">
+		<nav ref={barRef} className="tab-bar" role="tablist" onPointerOver={e => e.target !== e.currentTarget && hover((e.target as HTMLElement).closest<HTMLElement>('[role="tab"]'))} onPointerLeave={() => hover(null)}>
 			{start}
-			<DndContext sensors={sensors} onDragMove={e => setDrop(dropOf(e))} onDragEnd={onDragEnd} onDragCancel={() => setDrop(undefined)}>
+			<span ref={hoverPill} className="tab-pill hover" aria-hidden />
+			<span ref={currentPill} className="tab-pill current" aria-hidden />
+			<DndContext sensors={sensors} onDragStart={() => hover(null)} onDragMove={e => setDrop(dropOf(e))} onDragEnd={onDragEnd} onDragCancel={() => setDrop(undefined)}>
 				{names.map(n => <Tab key={n} name={n} active={n === active} hint={hints?.[n]} draggable={!!onReorder} buttons={buttons.current}
 					drop={drop?.target === n ? drop.after ? 'after' : 'before' : undefined}
 					onClick={() => setActive(n)} onContextMenu={onTabMenu && (e => onTabMenu(n, e))} />)}
 			</DndContext>
 			{onAdd && <button className="tab-add codicon codicon-add" title="탭 추가" aria-label="탭 추가" onClick={onAdd} />}
 			<span className="tab-actions">{actions?.[active]}</span>
+			{beforePinned}
 			{all.slice(names.length).map(n => <button key={n} role="tab" aria-selected={n === active} className={clsx('tab-pinned', { active: n === active })} onClick={() => setActive(n)}>{n}</button>)}
 			{end}
 		</nav>

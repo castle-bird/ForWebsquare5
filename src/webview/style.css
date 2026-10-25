@@ -100,7 +100,15 @@ input[type="search"]::-webkit-search-cancel-button:hover { opacity: 1; }
 .tab-bar button:hover { opacity: 1; background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent); }
 .tab-bar button.active { opacity: 1; background: color-mix(in srgb, var(--vscode-foreground) 14%, transparent); }
 .tab-bar button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
-/* 저장 안 함 표시(Codicon circle-filled, VS Code 탭과 같음)는 오른쪽 위 모서리에 띄운다(글자와 떨어지게): 자리를 따로 잡지 않아 좌우 여백이 같고, 표시가 생겨도 탭 너비 그대로 */
+/* 탭 배경은 버튼이 아니라 탭 사이를 미끄러지는 알약(ui/tabs.tsx)이 그린다. 알약은 탭 줄 안에서 버튼 뒤(z-index -1)에 깔린다 */
+.tab-bar { position: relative; isolation: isolate; }
+.tab-bar button[role="tab"]:is(:hover, .active) { background: none; }
+.tab-pill {
+	position: absolute; left: 0; top: 0; z-index: -1; width: 0; height: 0; border-radius: 6px; pointer-events: none; opacity: 0;
+	transition: transform .22s cubic-bezier(.3, .7, .3, 1), width .22s cubic-bezier(.3, .7, .3, 1), height .22s cubic-bezier(.3, .7, .3, 1), opacity .15s ease;
+}
+.tab-pill.hover { background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent); }
+.tab-pill.current { background: color-mix(in srgb, var(--vscode-foreground) 14%, transparent); }/* 저장 안 함 표시(Codicon circle-filled, VS Code 탭과 같음)는 오른쪽 위 모서리에 띄운다(글자와 떨어지게): 자리를 따로 잡지 않아 좌우 여백이 같고, 표시가 생겨도 탭 너비 그대로 */
 .tab-bar button.markable { position: relative; }
 .tab-bar button.markable::after { content: '\ea71'; position: absolute; right: 2px; top: 2px; font: 8px/1 codicon; visibility: hidden; }
 .tab-bar button.dirty::after { visibility: visible; }
@@ -117,7 +125,8 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .design-layout { height: 100%; }
 .design-canvas { height: 100%; box-sizing: border-box; padding: 12px; display: flex; flex-direction: column; }
 .design-canvas > div { flex: 1; min-height: 0; }
-.tab-bar .tab-panel-right, .tab-bar .tab-palette, .tab-bar .tab-settings { padding: 4px 8px; }
+.tab-bar .tab-panel-right, .tab-bar .tab-palette, .tab-bar .tab-settings, .tab-bar .tab-run { padding: 4px 8px; }
+.tab-bar .tab-run:disabled { opacity: .35; cursor: default; }
 .tab-bar .tab-palette:disabled { opacity: .35; cursor: default; }
 .palette-pane { display: flex; flex-direction: column; height: 100%; background: var(--vscode-sideBar-background); }
 .palette-pane header { padding: 10px 12px; font-weight: 600; font-size: 12px; }
@@ -407,6 +416,13 @@ button.icon.tree-problems { display: inline-flex; align-items: center; gap: 3px;
 .tree-row .name::before { content: '· '; }
 .context-menu { position: fixed; z-index: 200; min-width: 170px; padding: 4px; border-radius: 5px; background: var(--vscode-menu-background, var(--vscode-dropdown-background)); color: var(--vscode-menu-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border)); box-shadow: 0 4px 16px var(--vscode-widget-shadow, rgba(0, 0, 0, .25)); }
 .context-menu button { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; padding: 5px 8px; border-radius: 3px; font-size: 12px; text-align: left; color: inherit; background: none; border: 0; cursor: pointer; }
+/* 설정 메뉴의 "애니메이션"이 root의 data-animation으로 끈다(아래 [data-animation="off"] 규칙) */
+/* 투명도만 바꾼다: transform을 쓰면 열리는 동안 메뉴 위치·팝업 크기를 재는 코드(하위 메뉴 자리, 팝업 맞춤 크기)가 어긋난다 */
+.context-menu { animation: menu-in .12s ease-out; }
+@keyframes menu-in { from { opacity: 0; } }
+.popup[open] { animation: popup-in .15s ease-out; }
+@keyframes popup-in { from { opacity: 0; } }
+[data-animation="off"] :is(.tab-pill, .context-menu, .popup[open]) { animation: none; transition: none; }
 .context-menu button:hover, .context-menu button:focus { outline: none; background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground)); color: var(--vscode-menu-selectionForeground, inherit); }
 .context-menu button:disabled { opacity: .45; cursor: default; background: none; }
 .context-menu kbd { font: inherit; opacity: .7; }
