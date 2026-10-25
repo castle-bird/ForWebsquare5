@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { resizeBox, resizeEdges, type Box, type ResizeEdge } from './resizeBox';
 import { isUndoRedo } from '../keys';
 import { capturePointer } from './pointerCapture';
@@ -17,7 +17,8 @@ export function usePopupWindow(options: { initialOffset?: number; onClose?(): vo
 		setZIndex(++globalPopupZIndex);
 	};
 
-	useEffect(() => {
+	// 그리기 전에 자리를 잡는다(useEffect면 창 가운데에 한 프레임 그려졌다가 캔버스 가운데로 옮겨져 깜빡인다)
+	useLayoutEffect(() => {
 		const popup = dialog.current;
 		if (popup && !popup.open) {
 			popup.show?.();

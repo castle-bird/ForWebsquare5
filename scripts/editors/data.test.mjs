@@ -30,8 +30,27 @@ export default async function ({ page }) {
 	await submissionRoot.click({ button: 'right' });
 	await page.waitForSelector('.context-menu');
 	assert.deepEqual(await page.$$eval('.context-menu button', buttons => buttons.map(b => b.textContent)), ['Submission 추가']);
+	// 애니메이션을 꺼도 팝업이 처음 그려질 때부터 제자리(창 가운데에 한 번 그려졌다 캔버스 가운데로 옮겨지는 깜빡임 없음)
+	await page.evaluate(() => {
+		window.send({ type: 'animation', on: false });
+		window.firstPaint = undefined;
+		const watch = new MutationObserver(() => {
+			const popup = document.querySelector('.submission-editor[open]');
+			if (popup && !window.firstPaint) {
+				watch.disconnect();
+				window.firstPaint = 'waiting';
+				requestAnimationFrame(() => { window.firstPaint = popup.getBoundingClientRect().left; });
+			}
+		});
+		watch.observe(document.body, { childList: true, subtree: true, attributes: true });
+	});
 	await page.$eval('.context-menu button', button => button.click());
 	await page.waitForSelector('.submission-editor[open]');
+	await page.waitForFunction(() => typeof window.firstPaint === 'number');
+	await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 200)));
+	const [firstLeft, settledLeft] = await page.evaluate(() => [window.firstPaint, document.querySelector('.submission-editor').getBoundingClientRect().left]);
+	assert.ok(Math.abs(firstLeft - settledLeft) < 1, `팝업 첫 프레임부터 제자리: ${firstLeft} → ${settledLeft}`);
+	await page.evaluate(() => window.send({ type: 'animation', on: true }));
 	assert.equal(await page.$eval('#submission-id', input => input.value), 'submission1');
 	assert.equal(await page.$eval('#submission-method', input => input.value), 'post');
 	assert.equal(await page.$eval('#submission-mode', input => input.value), 'asynchronous');
