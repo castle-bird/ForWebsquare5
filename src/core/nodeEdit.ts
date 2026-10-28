@@ -1,4 +1,4 @@
-import { nodeAt, parseXml, pathTo, type XmlNode } from './xmlModel';
+import { isWs, nodeAt, parseXml, pathTo, type XmlNode } from './xmlModel';
 import { applyEdits, deleteNode, setAttribute, setAttributes, setText, type TextEdit } from './edit';
 import { pasteNode } from './paste';
 import { wrapComponents } from './wrap';
@@ -72,7 +72,8 @@ function dataRename(root: XmlNode, msg: NodeEdit): DataRename | undefined {
 	}
 	// 데이터 > columnInfo·keyInfo > column·key
 	const owner = path.at(-3), id = owner?.attrs.id;
-	return owner && id && isDataKind(owner) && /:(columnInfo|keyInfo)$/.test(path.at(-2)!.tag) ? { from: id, to: id, columns: new Map([[old, msg.value]]) } : undefined;
+	const info = path.at(-2);
+	return owner && id && isDataKind(owner) && (isWs(info, 'columnInfo') || isWs(info, 'keyInfo')) ? { from: id, to: id, columns: new Map([[old, msg.value]]) } : undefined;
 }
 
 function nodeChanges(text: string, root: XmlNode, msg: NodeEdit): TextEdit[] | undefined {

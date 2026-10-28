@@ -11,8 +11,21 @@ import { engineModules, udcNames } from '../project/modules';
 import { attachFrames } from '../project/frames';
 import { cleanSample, loadApiDocs, parseApiEvents, parseApiMethods } from '../project/apiDocs';
 import { SCREEN, DEFS } from './helpers';
-import { fromWebPath } from '../project/paths';
+import { cached, fromWebPath } from '../project/paths';
 import { eclipseUsage, findInstalls, isInside, unescapeProperty } from '../project/discover';
+
+suite('비동기 캐시', () => {
+	test('이전 요청 실패가 교체된 캐시를 지우지 않는다', async () => {
+		const cache = new Map<string, Promise<string>>();
+		let rejectOld!: (error: Error) => void;
+		const old = cached(cache, 'key', () => new Promise<string>((_resolve, reject) => { rejectOld = reject; }));
+		cache.clear();
+		const current = cached(cache, 'key', () => Promise.resolve('new'));
+		rejectOld(new Error('old'));
+		await assert.rejects(old);
+		assert.strictEqual(cache.get('key'), current);
+	});
+});
 
 suite('웹 경로 경계', () => {
 	test('인코딩된 상위 경로는 거부하고 정상 상대·루트·유니코드 경로는 유지', () => {
@@ -312,6 +325,23 @@ suite('frames', () => {
 });
 
 suite('wpack', () => {
+	test('변환 산출물 경로가 웹 루트를 벗어나면 거부한다', async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ws5-wpack-boundary-'));
+		const webRoot = path.join(root, 'web');
+		fs.mkdirSync(webRoot);
+		await assert.rejects(publish(webRoot, { destRoot: '../outside' }, 'screen.xml', '<html/>', 'js'));
+		await assert.rejects(publish(webRoot, { destRoot: 'out' }, '../../outside.xml', '<html/>', 'js'));
+	});
+	test('destRoot 앞의 / · \\는 웹 루트 기준으로 읽어 산출물을 웹 루트 안에 쓴다', async () => {
+		for (const [value, destRoot] of [['/_out_', '_out_'], ['\\_out_', '_out_'], ['/', '.']]) {
+			const webRoot = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ws5-wpack-dest-')), 'web');
+			fs.mkdirSync(path.join(webRoot, 'websquare'), { recursive: true });
+			fs.writeFileSync(path.join(webRoot, 'websquare', 'config.xml'), `<WebSquare><wpack use="true"><destRoot value="${value}"/></wpack></WebSquare>`);
+			const config = await readWpackConfig(webRoot);
+			assert.strictEqual(config?.destRoot, destRoot, value);
+			assert.deepStrictEqual(await publish(webRoot, config!, 'screen.xml', '<html/>', 'js'), [path.join(webRoot, destRoot, 'screen.js')], value);
+		}
+	});
 	// 임시 Eclipse 워크스페이스: <ws>/PRJ/WebContent (웹 루트) + <ws>/.metadata/.../tmp0/wtpwebapps/PRJ (배포본)
 	const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'ws5-wpack-'));
 	const webRoot = path.join(ws, 'PRJ', 'WebContent');

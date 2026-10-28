@@ -1,4 +1,4 @@
-import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { autoUpdate, getOverflowAncestors } from '@floating-ui/dom';
@@ -44,6 +44,7 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 	const host = useRef<HTMLDivElement>(null);
 	const page = useRef<HTMLDivElement>(null);
 	const [shadow, setShadow] = useState<ShadowRoot>();
+	const { zoom, view, scroller, zoomBy, reset } = useCanvasZoom(host);
 	const [hover, setHover] = useState<number>();
 	const [measuring, setMeasuring] = useState(false);
 	useEffect(() => {
@@ -173,8 +174,12 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 	const selectedNode = nodeAt(body, selected);
 	const commitStyle = (props: Record<string, string>) => onEditAttr('style', setStyle(selectedNode?.attrs.style, props));
 	return (
+		<div className="design-zoomable">
 		<div className="canvas-host" ref={host} style={{ height: '100%' }}>
 			{shadow && createPortal(<div className="wse-view">
+				<div ref={scroller} className={clsx('wse-zoom-scroll', { zoomed: zoom !== 1 })}>
+				<div className="wse-zoom-size" style={zoom !== 1 ? { width: view.width * zoom, height: view.height * zoom } : undefined}>
+				<div className="wse-zoom" style={zoom !== 1 ? { width: view.width, height: view.height, transform: `scale(${zoom})` } : undefined}>
 				<div ref={page} className="wse-page"
 					onClick={e => {
 						const el = target(e);
@@ -285,6 +290,7 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 							onCommit={v => onEditText(editing.target, editing.form ? v : newlinesToBreaks(v), editing.form && formAttrs(editing.form, draft))} onClose={() => setEditing(undefined)} />
 					)}
 				</div>
+				</div>
 				{/* 글자 편집 중에는 선택 테두리·손잡이·표시 점이 편집 상자를 덮지 않게 숨긴다(겹침 층이 페이지 위라 z-index로는 못 내림) */}
 				<div className="wse-overlay" hidden={!!editing}>
 					<Badges page={page} body={body} tree={tree} />
@@ -302,12 +308,142 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 						onSelect={() => onSelect(handleGrid.index)} onDragStart={e => startMove(e, handleGrid)} />}
 					{!drop && !dragging.length && measuring && hover !== undefined && hover !== selected && !extra.includes(hover) && <Distances page={page} from={selected} extra={extra} to={hover} tree={tree} sheets={sheets} />}
 				</div>
+				</div>
+			</div>
 			</div>, shadow)}
+		</div>
+		{zoom !== 1 && <div className="design-zoom-controls" role="group" aria-label="화면 확대·축소">
+			<button type="button" title="확대" aria-label="확대" onClick={() => zoomBy(ZOOM_STEP)}>+</button>
+			<button type="button" className="zoom-level" title="100%로" aria-label={`배율 ${Math.round(zoom * 100)}%, 누르면 100%로`} onClick={reset}>{Math.round(zoom * 100)}%</button>
+			<button type="button" title="축소" aria-label="축소" onClick={() => zoomBy(1 / ZOOM_STEP)}>−</button>
+		</div>}
 		</div>
 	);
 }
 
-/** flex 방향을 우선하고, 그 밖에는 실제 이웃 배치(같은 줄/열)를 본다. */
+/** 화면 배치가 바뀐 것을 겹침 층에 바로 알리는 이벤트(watchLayout이 기다리지 않고 즉시 다시 잰다) */
+const RELAYOUT = 'wse-relayout';
+const MIN_ZOOM = 0.25, MAX_ZOOM = 4, ZOOM_STEP = 1.25;
+
+/** 화면이 .wse-page 레이아웃 크기 대비 몇 배로 그려지는지(Design 확대·축소, 1 = 100%) */
+const scaleOf = (el: Element) => (el as HTMLElement).offsetWidth ? el.getBoundingClientRect().width / (el as HTMLElement).offsetWidth : 1;
+
+/**
+ * Design 확대·축소(피그마·포토샵처럼): Ctrl+휠은 마우스 자리를 기준으로 화면을 키우고 줄인다. 확대 중에는 가운데 버튼이나 Space+끌기로 이동한다.
+ * 화면 배치는 100% 때 크기(view)로 그대로 두고 transform으로만 키우므로 다시 배치되지 않는다. 100%를 지나갈 때는 100%에 멈춘다.
+ */
+function useCanvasZoom(host: RefObject<HTMLDivElement | null>) {
+	const scroller = useRef<HTMLDivElement>(null);
+	const [zoom, setZoom] = useState(1);
+	const [view, setView] = useState({ width: 0, height: 0 });
+	const current = useRef(1);
+	// 확대 뒤 마우스 아래에 있어야 할 화면 위치(배율 1 기준 px)와 마우스 자리. 다시 그린 뒤 스크롤에 반영한다
+	const anchor = useRef<{ x: number; y: number; cx: number; cy: number }>(undefined);
+	useLayoutEffect(() => {
+		const sc = scroller.current, a = anchor.current;
+		anchor.current = undefined;
+		if (sc && a) {
+			sc.scrollLeft = a.x * zoom - a.cx;
+			sc.scrollTop = a.y * zoom - a.cy;
+		}
+		// 겹침 층(선택 테두리·hover·배지)이 다음 프레임이 아니라 이 확대와 같은 프레임에 새 자리로 가게 바로 다시 재도록 알린다
+		sc?.querySelector('.wse-page')?.dispatchEvent(new Event(RELAYOUT));
+	}, [zoom]);
+	/** at: 고정할 자리(스크롤 칸 기준 px), 없으면 보이는 영역 가운데 */
+	const zoomTo = useCallback((target: number, at?: { cx: number; cy: number }) => {
+		const sc = scroller.current, el = host.current;
+		if (!sc || !el) { return; }
+		const old = current.current;
+		let next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, target));
+		if ((old - 1) * (next - 1) < 0) { next = 1; }
+		if (next === old) { return; }
+		const cx = at?.cx ?? sc.clientWidth / 2, cy = at?.cy ?? sc.clientHeight / 2;
+		anchor.current = { x: anchor.current?.x ?? (sc.scrollLeft + cx) / old, y: anchor.current?.y ?? (sc.scrollTop + cy) / old, cx, cy };
+		if (old === 1) { setView({ width: el.clientWidth, height: el.clientHeight }); }
+		current.current = next;
+		setZoom(next);
+	}, [host]);
+	useEffect(() => {
+		const el = host.current!;
+		const wheel = (e: WheelEvent) => {
+			const sc = scroller.current;
+			if (!e.ctrlKey || !e.deltaY || !sc) { return; }
+			e.preventDefault();
+			const r = sc.getBoundingClientRect();
+			zoomTo(current.current * Math.exp(-e.deltaY * 0.002), { cx: e.clientX - r.left, cy: e.clientY - r.top });
+		};
+		// Space를 누르고 있는 동안(마우스가 캔버스 위)은 100%에서도 끌기가 선택·컴포넌트 이동 대신 화면 이동(손 도구). 가운데 버튼 끌기도 이동
+		let hovered = false, space = false, panning = false;
+		const setSpace = (on: boolean) => {
+			space = on;
+			if (on) { scroller.current?.setAttribute('data-pan', ''); } else { scroller.current?.removeAttribute('data-pan'); }
+		};
+		// 글자 입력칸과 배율 단추는 Space를 제 용도로 쓴다. 탭 단추처럼 캔버스 밖 단추에 포커스가 남아 있는 것(탭을 누른 직후)은 상관없다
+		const typing = (e: Event) => !!(e.composedPath()[0] as HTMLElement | undefined)?.closest?.('input, textarea, select, dialog, [contenteditable], .design-zoom-controls');
+		const key = (e: KeyboardEvent) => {
+			if (e.code !== 'Space') { return; }
+			if (e.type === 'keyup') { setSpace(false); return; }
+			if (hovered && !typing(e)) { e.preventDefault(); setSpace(true); }
+		};
+		const pan = (e: PointerEvent) => {
+			const sc = scroller.current;
+			if (!sc || !(e.button === 1 || (e.button === 0 && space))) { return; }
+			e.preventDefault();
+			e.stopPropagation();
+			panning = true;
+			sc.setAttribute('data-pan', 'active');
+			let x = e.clientX, y = e.clientY;
+			const move = (ev: PointerEvent) => { sc.scrollLeft -= ev.clientX - x; sc.scrollTop -= ev.clientY - y; x = ev.clientX; y = ev.clientY; };
+			const up = () => {
+				window.removeEventListener('pointermove', move);
+				window.removeEventListener('pointerup', up);
+				panning = false;
+				if (space) { sc.setAttribute('data-pan', ''); } else { sc.removeAttribute('data-pan'); }
+			};
+			window.addEventListener('pointermove', move);
+			window.addEventListener('pointerup', up);
+		};
+		// 이동 끝에 따라오는 mouseup 뒤 click이 화면 선택으로 번지지 않게 Space 중에는 click도 막는다
+		const swallow = (e: Event) => { if (space) { e.stopPropagation(); e.preventDefault(); } };
+		// 컴포넌트 끌어 옮기기(HTML 끌기)는 이동 중이나 Space를 누른 동안에는 시작하지 않는다: 화면을 옮기다 컴포넌트가 따라 옮겨지지 않게
+		const noDrag = (e: Event) => { if (space || panning) { e.stopPropagation(); e.preventDefault(); } };
+		const enter = () => { hovered = true; };
+		const leave = () => { hovered = false; setSpace(false); };
+		const off = () => setSpace(false);
+		el.addEventListener('wheel', wheel, { passive: false });
+		el.addEventListener('pointerdown', pan, true);
+		el.addEventListener('click', swallow, true);
+		el.addEventListener('dragstart', noDrag, true);
+		el.addEventListener('mouseenter', enter);
+		el.addEventListener('mouseleave', leave);
+		window.addEventListener('keydown', key);
+		window.addEventListener('keyup', key);
+		window.addEventListener('blur', off);
+		return () => {
+			el.removeEventListener('wheel', wheel);
+			el.removeEventListener('pointerdown', pan, true);
+			el.removeEventListener('click', swallow, true);
+			el.removeEventListener('dragstart', noDrag, true);
+			el.removeEventListener('mouseenter', enter);
+			el.removeEventListener('mouseleave', leave);
+			window.removeEventListener('keydown', key);
+			window.removeEventListener('keyup', key);
+			window.removeEventListener('blur', off);
+		};
+	}, [host, zoomTo]);
+	// 확대 중에 창 크기가 바뀌면 100% 때 크기(view)를 따라간다
+	const zoomed = zoom !== 1;
+	useEffect(() => {
+		const el = host.current;
+		if (!zoomed || !el) { return; }
+		const observer = new ResizeObserver(() => setView(v => v.width === el.clientWidth && v.height === el.clientHeight ? v : { width: el.clientWidth, height: el.clientHeight }));
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, [host, zoomed]);
+	return { zoom, view, scroller, zoomBy: (factor: number) => zoomTo(current.current * factor), reset: () => zoomTo(1) };
+}
+
+/** flex 방향을 우선하고,그 밖에는 실제 이웃 배치(같은 줄/열)를 본다. */
 function dropAxis(el: HTMLElement): { horizontal: boolean; reverse: boolean } {
 	const parent = el.parentElement, style = getComputedStyle(el), layout = parent && getComputedStyle(parent);
 	if (layout?.display.includes('flex')) {
@@ -558,6 +694,7 @@ function watchLayout<T>(elements: Element[], page: HTMLElement, measure: () => T
 		}
 	};
 	const schedule = () => { pending ||= requestAnimationFrame(() => { pending = 0; update(); }); };
+	page.addEventListener(RELAYOUT, update);
 	// 같은 page와 스크롤 조상에 요소 수만큼 observer/listener를 붙이지 않는다.
 	// 스크롤 조상은 부모부터 찾으므로 부모가 같은 형제는 한 번만 찾는다(배지는 문서가 바뀔 때마다 요소 수백~수천 개를 다시 감시한다)
 	const byParent = new Map<Node | null, Element>();
@@ -574,6 +711,7 @@ function watchLayout<T>(elements: Element[], page: HTMLElement, measure: () => T
 		observer.disconnect();
 		ancestors.forEach(el => { el.removeEventListener('scroll', schedule); el.removeEventListener('resize', schedule); });
 		cancelAnimationFrame(pending);
+		page.removeEventListener(RELAYOUT, update);
 	};
 }
 
@@ -593,7 +731,8 @@ function HoverSpacing({ page, index, tree, sheets }: {
 				Math.max(0, parseFloat(style.getPropertyValue(prefix + '-' + side + (prefix === 'border' ? '-width' : ''))) || 0) * (i % 2 ? scaleX : scaleY));
 			const [pt, pr, pb, pl] = sides('padding'), [mt, mr, mb, ml] = sides('margin'), [bt, br, bb, bl] = sides('border');
 			if (!(pt || pr || pb || pl || mt || mr || mb || ml)) { return undefined; }
-			let left = b.left + p.clientLeft, top = b.top + p.clientTop, right = left + p.clientWidth, bottom = top + p.clientHeight;
+			const zoom = scaleOf(p);
+				let left = b.left + p.clientLeft, top = b.top + p.clientTop, right = left + p.clientWidth * zoom, bottom = top + p.clientHeight * zoom;
 			for (let parent = el.parentElement; parent && parent !== p; parent = parent.parentElement) {
 				const css = getComputedStyle(parent), r = parent.getBoundingClientRect();
 				if (css.overflowX !== 'visible') { left = Math.max(left, r.left + parent.clientLeft); right = Math.min(right, r.left + parent.clientLeft + parent.clientWidth); }
@@ -620,7 +759,7 @@ function HoverSpacing({ page, index, tree, sheets }: {
 function Distances({ page, from, extra, to, tree, sheets }: {
 	page: RefObject<HTMLDivElement | null>; from?: number; extra: number[]; to?: number; tree: ReactNode; sheets?: string[];
 }) {
-	const [measurement, setMeasurement] = useState<{ lines: DistanceLine[]; width: number; height: number }>();
+	const [measurement, setMeasurement] = useState<{ lines: DistanceLine[]; width: number; height: number; scale: number }>();
 	useLayoutEffect(() => {
 		const p = page.current, b = to === undefined ? undefined : p?.querySelector(node(to));
 		const selected = from === undefined ? [] : [from, ...extra].flatMap(i => p?.querySelector(node(i)) ?? []);
@@ -634,12 +773,12 @@ function Distances({ page, from, extra, to, tree, sheets }: {
 				return { left: r.left - origin.left, top: r.top - origin.top, right: r.right - origin.left, bottom: r.bottom - origin.top };
 			};
 			const group = selected.filter(el => el.getClientRects().length).map(bounds).reduce((a, r) => ({ left: Math.min(a.left, r.left), top: Math.min(a.top, r.top), right: Math.max(a.right, r.right), bottom: Math.max(a.bottom, r.bottom) }));
-			return { lines: distanceLines(group, bounds(b)), width: p.clientWidth, height: p.clientHeight };
+			return { lines: distanceLines(group, bounds(b)), width: p.clientWidth * scaleOf(p), height: p.clientHeight * scaleOf(p), scale: scaleOf(p) };
 		}, setMeasurement);
 	}, [page, from, extra, to, tree, sheets]);
 	return measurement && <svg className="wse-measure" aria-hidden="true">{measurement.lines.map((line, i) => {
 		const { x1, y1, x2, y2, horizontal, guide } = line;
-		const text = `${Math.round(Math.abs(horizontal ? x2 - x1 : y2 - y1) * 10) / 10}px`, width = text.length * 7 + 8;
+		const text = `${Math.round(Math.abs(horizontal ? x2 - x1 : y2 - y1) / measurement.scale * 10) / 10}px`, width = text.length * 7 + 8;
 		const x = Math.max(width / 2, Math.min(measurement.width - width / 2, horizontal ? (x1 + x2) / 2 : x1 + width / 2 + 5));
 		const y = Math.max(9, Math.min(measurement.height - 9, horizontal ? y1 - 12 : (y1 + y2) / 2));
 		return <g key={i}>
@@ -696,10 +835,10 @@ function Chip({ page, rect, text }: { page: RefObject<HTMLDivElement | null>; re
 	useLayoutEffect(() => {
 		const el = ref.current, p = page.current;
 		if (!el || !p) { return; }
-		const h = el.offsetHeight, gap = 3;
+		const h = el.offsetHeight, gap = 3, zoom = scaleOf(p);
 		const above = rect.top - gap - h, below = rect.top + rect.height + gap;
-		const top = above >= 0 ? above : below + h <= p.clientHeight ? below : rect.top;
-		setPos({ left: Math.max(0, Math.min(rect.left, p.clientWidth - el.offsetWidth)), top });
+		const top = above >= 0 ? above : below + h <= p.clientHeight * zoom ? below : rect.top;
+		setPos({ left: Math.max(0, Math.min(rect.left, p.clientWidth * zoom - el.offsetWidth)), top });
 	}, [page, rect, text]);
 	useEffect(() => {
 		const move = (e: PointerEvent) => {
@@ -716,11 +855,11 @@ const resizable = (el: Element) => !getComputedStyle(el).display.startsWith('tab
 
 function resize(e: ReactPointerEvent, el: HTMLElement, dir: string, commit: (props: Record<string, string>) => void) {
 	e.stopPropagation();
-	const cs = getComputedStyle(el);
+	const cs = getComputedStyle(el), scale = scaleOf(el.closest('.wse-page') ?? el);
 	const s = { x: e.clientX, y: e.clientY, width: parseFloat(cs.width), height: parseFloat(cs.height) };
 	let next: Record<string, number> | undefined;
 	const move = (ev: PointerEvent) => {
-		const dx = ev.clientX - s.x, dy = ev.clientY - s.y;
+		const dx = (ev.clientX - s.x) / scale, dy = (ev.clientY - s.y) / scale;
 		if (!next && Math.hypot(dx, dy) < 3) {
 			return;
 		}
@@ -779,8 +918,8 @@ function pick(t: Element) {
 }
 
 function relRect(el: Element, page: HTMLElement) {
-	const a = el.getBoundingClientRect(), b = page.getBoundingClientRect();
-	return { left: a.left - b.left + page.scrollLeft, top: a.top - b.top + page.scrollTop, width: a.width, height: a.height };
+	const a = el.getBoundingClientRect(), b = page.getBoundingClientRect(), scale = scaleOf(page);
+	return { left: (a.left - b.left) / scale + page.scrollLeft, top: (a.top - b.top) / scale + page.scrollTop, width: a.width / scale, height: a.height / scale };
 }
 
 interface Rect { left: number; top: number; width: number; height: number }
@@ -797,7 +936,8 @@ function visibleRect(el: Element, page: HTMLElement): Rect | undefined {
 	};
 	const b = page.getBoundingClientRect();
 	const x = b.left + page.clientLeft, y = b.top + page.clientTop;
-	clip({ left: x, top: y, right: x + page.clientWidth, bottom: y + page.clientHeight });
+	const zoom = scaleOf(page);
+	clip({ left: x, top: y, right: x + page.clientWidth * zoom, bottom: y + page.clientHeight * zoom });
 	if (right <= left || bottom <= top) { return undefined; }
 	for (let p = el.parentElement; p && p !== page; p = p.parentElement) {
 		if (getComputedStyle(p).overflow !== 'visible') {

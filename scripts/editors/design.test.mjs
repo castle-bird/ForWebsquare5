@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 
-export default async function ({ page, pickProperty }) {
+export default async function ({ page, pickProperty, clickTab }) {
 		// CSS 클래스의 여백을 실제 픽셀로 표시하고 선택·클릭·스크롤을 방해하지 않는다.
 		await page.evaluate(() => {
 			const text = '<html xmlns:w2="urn:test"><body><w2:group id="spacing" class="spacing"><w2:input id="spacedInput" class="spaced-input"/><w2:input id="plainInput" style="padding:0;margin:0;border:0;"/></w2:group></body></html>';
@@ -14,6 +14,93 @@ export default async function ({ page, pickProperty }) {
 			window.send({ type: 'document', version: 2, text, root, script: { text: '' } });
 		});
 		await page.waitForFunction(() => document.querySelector('.canvas-host')?.shadowRoot?.querySelector('#spacing'));
+		// 확대·축소: Ctrl+휠은 화면을 마우스 자리 기준으로 키우되 배치(레이아웃 크기)는 그대로이고, 선택 테두리도 화면과 맞는다. 100%를 지나면 원래대로
+		const zoomState = () => page.evaluate(() => {
+			const s = document.querySelector('.canvas-host').shadowRoot, el = s.querySelector('#spacing'), zoom = s.querySelector('.wse-zoom');
+			const frame = s.querySelector('.wse-frame.selected')?.getBoundingClientRect(), r = el.getBoundingClientRect();
+			return { layout: el.offsetWidth, screen: r.width, transform: zoom.style.transform, host: document.querySelector('.canvas-host').getBoundingClientRect().width,
+				frame: frame && { left: frame.left - r.left, top: frame.top - r.top, width: frame.width, height: frame.height } };
+		});
+		const wheelAt = async deltaY => { await page.keyboard.down('Control'); await page.mouse.wheel({ deltaY }); await page.keyboard.up('Control'); };
+		const original = await zoomState();
+		assert.equal(original.transform, '', '100%에서는 변형 없음');
+		const zoomPoint = await page.evaluate(() => { const r = document.querySelector('.canvas-host').shadowRoot.querySelector('#spacing').getBoundingClientRect(); return [r.left + 20, r.top + 20]; });
+		await page.mouse.click(...zoomPoint);
+		await page.mouse.move(...zoomPoint);
+		await wheelAt(-300);
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-zoom').style.transform);
+		await new Promise(resolve => setTimeout(resolve, 200));
+		const zoomed = await zoomState();
+		assert.equal(zoomed.layout, original.layout, '배치 크기는 그대로(다시 배치하지 않음)');
+		assert.ok(zoomed.screen > original.screen * 1.5, `화면은 커짐: ${zoomed.screen}`);
+		assert.equal(zoomed.host, original.host, '패널 크기는 그대로');
+		assert.ok(zoomed.frame && Math.abs(zoomed.frame.width - zoomed.screen) < 3 && Math.abs(zoomed.frame.left) < 3, `선택 테두리가 확대된 화면과 맞음: ${JSON.stringify(zoomed.frame)}`);
+		// 확대 직후 첫 그리기 전에 선택 테두리가 새 자리로 가 있다(다음 프레임에 늦게 따라가며 움직이지 않음)
+		const lag = await page.evaluate(async () => {
+			const s = document.querySelector('.canvas-host').shadowRoot, host = document.querySelector('.canvas-host'), r0 = s.querySelector('#spacing').getBoundingClientRect();
+			// requestAnimationFrame을 멈춰 두면 다음 프레임에 재는 경로는 못 움직인다: 확대 때 바로 재는 경로만 테두리를 맞출 수 있다
+			const raf = window.requestAnimationFrame;
+			window.requestAnimationFrame = () => 0;
+			try {
+				host.dispatchEvent(new WheelEvent('wheel', { ctrlKey: true, deltaY: -100, clientX: r0.left + 20, clientY: r0.top + 20, bubbles: true, cancelable: true }));
+				await new Promise(resolve => setTimeout(resolve, 100));
+			} finally {
+				window.requestAnimationFrame = raf;
+			}
+			const r = s.querySelector('#spacing').getBoundingClientRect(), f = s.querySelector('.wse-frame.selected').getBoundingClientRect();
+			return { gap: Math.abs(f.left - r.left) + Math.abs(f.top - r.top) + Math.abs(f.width - r.width) + Math.abs(f.height - r.height), grown: r.width > r0.width };
+		});
+		assert.ok(lag.grown && lag.gap < 3, `확대와 같은 프레임에 테두리가 따라감: ${JSON.stringify(lag)}`);
+		// 확대 중에만 왼쪽 아래에 배율 조절이 보이고, Space+끌기로 이동한다(선택은 바뀌지 않음)
+		const percent = () => page.evaluate(() => document.querySelector('.design-zoom-controls .zoom-level')?.textContent ?? null);
+		assert.match(await percent(), /^\d+%$/, '확대하면 배율 표시');
+		const scrollOf = () => page.evaluate(() => { const sc = document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-zoom-scroll'); return { left: sc.scrollLeft, top: sc.scrollTop, max: sc.scrollHeight - sc.clientHeight }; });
+		const beforePan = await scrollOf();
+		await page.keyboard.down('Space');
+		await page.mouse.move(...zoomPoint);
+		await page.mouse.down(); await page.mouse.move(zoomPoint[0] - 5, zoomPoint[1] - 40, { steps: 4 }); await page.mouse.up();
+		await page.keyboard.up('Space');
+		const afterPan = await scrollOf();
+		assert.ok(afterPan.top > beforePan.top || afterPan.left > beforePan.left, `Space+끌기로 이동: ${JSON.stringify([beforePan, afterPan])}`);
+		// Space를 누른 동안에는 컴포넌트 끌어 옮기기가 시작되지 않는다(화면을 옮기다 컴포넌트가 따라 옮겨지지 않게)
+		await page.keyboard.down('Space');
+		const dragStarted = await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('#spacing')
+			.dispatchEvent(new DragEvent('dragstart', { bubbles: true, composed: true, cancelable: true, dataTransfer: new DataTransfer() })));
+		await page.keyboard.up('Space');
+		assert.equal(dragStarted, false, 'Space 중에는 컴포넌트 끌기 막음');
+		const beforeStep = await percent();
+		await page.click('.design-zoom-controls button[title="확대"]');
+		await page.waitForFunction(p => document.querySelector('.design-zoom-controls .zoom-level').textContent !== p, {}, beforeStep);
+		await page.click('.design-zoom-controls button[title="100%로"]');
+		await page.waitForFunction(() => !document.querySelector('.design-zoom-controls') && document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-zoom').style.transform === '');
+		await page.mouse.move(...zoomPoint);
+		await wheelAt(-300);
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-zoom').style.transform);
+		await wheelAt(1000);
+		await page.waitForFunction(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-zoom').style.transform === '');
+		assert.equal((await zoomState()).screen, original.screen, '100%를 지나가면 100%에서 멈춤');
+		// 100%에서도 Space 중에는 컴포넌트 끌기·선택이 일어나지 않는다(확대했다 돌아와 Space로 옮기다 컴포넌트가 옮겨지지 않게)
+		await page.mouse.move(...zoomPoint);
+		await page.keyboard.down('Space');
+		const dragAt100 = await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('#spacing')
+			.dispatchEvent(new DragEvent('dragstart', { bubbles: true, composed: true, cancelable: true, dataTransfer: new DataTransfer() })));
+		await page.keyboard.up('Space');
+		assert.equal(dragAt100, false, '100%에서도 Space 중에는 컴포넌트 끌기 막음');
+		// 다른 탭에 갔다 돌아와도(마우스는 그대로 캔버스 위라 mouseenter가 다시 오지 않는다) Space 중에는 막힌다
+		await clickTab('Script');
+		await clickTab('Design');
+		await new Promise(resolve => setTimeout(resolve, 300));
+		// 탭 단추를 누른 직후라 포커스가 그 단추에 남아 있어도 Space는 화면 이동으로 쓴다
+		await page.mouse.move(...zoomPoint);
+		await page.evaluate(() => [...document.querySelectorAll('.tab-bar button')].find(b => b.textContent.trim() === 'Design').focus());
+		assert.equal(await page.evaluate(() => document.activeElement?.tagName), 'BUTTON', '탭 단추에 포커스');
+		await page.keyboard.down('Space');
+		const afterTabs = await page.evaluate(() => {
+			const s = document.querySelector('.canvas-host').shadowRoot;
+			return { pan: s.querySelector('.wse-zoom-scroll').hasAttribute('data-pan'), started: s.querySelector('#spacing').dispatchEvent(new DragEvent('dragstart', { bubbles: true, composed: true, cancelable: true, dataTransfer: new DataTransfer() })) };
+		});
+		await page.keyboard.up('Space');
+		assert.deepEqual(afterTabs, { pan: true, started: false }, '탭을 갔다 와도 Space 중 컴포넌트 끌기 막음·손 커서');
 		const spacingHover = async id => {
 			const point = await page.evaluate(id => {
 				const r = document.querySelector('.canvas-host').shadowRoot.querySelector('#' + id).getBoundingClientRect();
@@ -211,7 +298,7 @@ export default async function ({ page, pickProperty }) {
 		// 바인딩된 그리드의 본문 셀: Property의 id는 dataList 컬럼 id 목록에서 고른다(헤더 셀은 그대로 입력칸)
 		await page.evaluate(() => {
 			const text = '<html xmlns:w2="urn:test" xmlns:xf="http://www.w3.org/2002/xforms"><head><xf:model><w2:dataCollection xmlns:w2="http://www.inswave.com/websquare"><w2:dataList id="dl"><w2:columnInfo><w2:column id="name"/><w2:column id="age"/></w2:columnInfo></w2:dataList></w2:dataCollection></xf:model></head>'
-				+ '<body><w2:gridView xmlns:w2="http://www.inswave.com/websquare" id="grd" dataList="data:dl"><w2:header id="h"><w2:row id="hr"><w2:column id="hc" value="H"/></w2:row></w2:header><w2:gBody id="b"><w2:row id="br"><w2:column id="nmae"/></w2:row></w2:gBody></w2:gridView></body></html>';
+				+ '<body><w2:gridView xmlns:w2="http://www.inswave.com/websquare" id="grd" dataList="data:dl"><w2:header id="h"><w2:row id="hr"><w2:column id="hc" value="H"/></w2:row></w2:header><w2:gBody id="b"><w2:row id="br"><w2:column id="nmae"/><w2:column id="agee"/></w2:row></w2:gBody></w2:gridView></body></html>';
 			const root = window.parseXml(text);
 			root.children[1].children[0].def = 2;
 			window.send({ type: 'document', version: 94, text, root, script: { text: '' } });
@@ -240,6 +327,16 @@ export default async function ({ page, pickProperty }) {
 		await page.evaluate(() => [...document.querySelectorAll('.combo-list li')].find(l => l.textContent === 'age').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })));
 		await page.waitForFunction(() => window.sent.some(m => m.type === 'setAttr' && m.name === 'id' && m.value === 'age'), {timeout: 3000}).catch(() => assert.fail('목록에서 고르면 바로 반영'));
 		assert.equal(await page.$('.kv input[role="combobox"]'), null, '고르면 닫힘');
+		// 목록을 연 채(포커스를 잃지 않은 채) 캔버스에서 다른 셀을 고르면 편집은 취소되고, 닫을 때 새로 고른 셀에 값이 반영되지 않는다
+		await (await idValue()).click();
+		await page.waitForSelector('.combo-list li');
+		await page.keyboard.type('zz');
+		await page.evaluate(() => { window.sent.length = 0; });
+		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid tbody td:nth-child(2)').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
+		await page.waitForFunction(() => !document.querySelector('.kv input[role="combobox"]') && !document.querySelector('.combo-list'), { timeout: 3000 })
+			.catch(() => assert.fail('다른 셀을 고르면 열린 목록·입력이 닫힘'));
+		await new Promise(resolve => setTimeout(resolve, 300));
+		assert.deepEqual(await page.evaluate(() => window.sent.filter(m => m.type === 'setAttr')), [], '새로 고른 셀에 값이 반영되지 않음');
 		await page.evaluate(() => document.querySelector('.canvas-host').shadowRoot.querySelector('.w2grid thead th:last-child').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
 		await page.waitForFunction(() => !document.querySelector('.kv .value.has-list'));
 		console.log('Property: 바인딩된 그리드 셀 id → 입력칸 + dataList 컬럼 목록 passed');

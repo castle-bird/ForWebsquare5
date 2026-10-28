@@ -45,6 +45,14 @@ export default async function ({ clickTab, page, reset, javaText }) {
 	await marksAre({ gutter: ['1:modified', '2:modified', '4:added'], ruler: ['modified', 'added'] }, '입력이 멈추면 다시 비교');
 	await reset('a\nc');
 	await marksAre({ gutter: ['2:deleted'], ruler: ['deleted'] }, '지운 줄은 그 아래 줄에 표시');
+	// 같은 줄이 반복돼 비교 결과가 한 줄 밀려 나오는 경우(<row> 블록 추가·삭제): 표시는 블록의 시작·끝 줄에 맞는다
+	const rows2 = '<row>\n  <col id="a"/>\n</row>\n<row>\n  <col id="b"/>\n</row>', rows3 = '<row>\n  <col id="a"/>\n</row>\n<row>\n  <col id="c"/>\n</row>\n<row>\n  <col id="b"/>\n</row>';
+	await reset(rows3);
+	await page.evaluate(text => window.send({ type: 'gitBase', target: 'script', text }), rows2);
+	await marksAre({ gutter: ['4:added', '5:added', '6:added'], ruler: ['added'] }, '반복되는 줄: 추가한 <row> 블록 전체(4~6줄)');
+	await reset(rows2);
+	await page.evaluate(text => window.send({ type: 'gitBase', target: 'script', text }), rows3);
+	await marksAre({ gutter: ['4:deleted'], ruler: ['deleted'] }, '반복되는 줄: 지운 <row> 블록 자리');
 	await page.evaluate(() => window.send({ type: 'gitBase', target: 'script' }));
 	await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .cm-change-ruler .cm-change-mark'));
 	assert.deepEqual((await marks()).gutter, [], '기준이 없으면(Git 밖) 표시 없음');

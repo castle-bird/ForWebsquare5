@@ -1,19 +1,17 @@
-import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { defOf, isScreen, nodeAt, parseXml, type XmlNode } from './core/xmlModel';
-import { editableScript, scriptBody } from './core/edit';
+import { isScreen, nodeAt, parseXml, type XmlNode } from './core/xmlModel';
+import { editableScript } from './core/edit';
 import { errorMessage } from './core/errors';
-import type { CodeTarget, CssRuleSource, SettingsMenuItem, ToExtension, ToWebview } from './core/protocol';
-import { ENGINE_PAGE, findWebRoot, fromWebPath, serial } from './project/paths';
+import type { CodeTarget, SettingsMenuItem, ToExtension, ToWebview } from './core/protocol';
+import { ENGINE_PAGE, GENERATED_DIRS, findWebRoot, fromWebPath, serial } from './project/paths';
 import { BrowserPreview, disposeBrowserPreviews } from './vscode/browserPreview';
-import { scopeCss, stylesheetFiles } from './project/styles';
 import { openCss } from './vscode/css';
-import { attachFrames, resolveSrc } from './project/frames';
+import { resolveSrc } from './project/frames';
 import { loadApiDocs } from './project/apiDocs';
-import { engineModules, udcNames } from './project/modules';
-import { annotate, loadComponents, type ComponentDef } from './project/components';
-import { convert, disposeWpack, publish, readWpackConfig, warmWpack } from './project/wpack';
+import { udcNames } from './project/modules';
+import type { ComponentDef } from './project/components';
+import { disposeWpack, warmWpack } from './project/wpack';
 import { offerSetup, onDidChangeInstall, registerSetup, resolvePath, type SetupKey } from './vscode/setup';
 import { applyCodeEdit, applyNodeEdit, formatCode } from './vscode/documentEdit';
 import { LinkedFiles, registerLinks } from './vscode/links';
@@ -30,11 +28,14 @@ import { insertFromPalette, paletteFavorites, savePaletteFavorite, reorderPalett
 import { createScreen } from './vscode/createScreen';
 import { registerSqlCompletion } from './vscode/sqlCompletion';
 import { registerScreenOpen, rememberScreenEditor } from './vscode/screenOpen';
+import { registerWpack } from './vscode/wpack';
+import { documentMessage, loadDefinitions, loadStyles, loadModules } from './vscode/resources';
 
 export const VIEW_TYPE = 'for-websquare5.designer';
 
 export function activate(context: vscode.ExtensionContext) {
 	registerSetup(context);
+	registerWpack(context);
 	registerViewSettings(context);
 	registerLinks(context);
 	registerSqlCompletion(context);
@@ -44,10 +45,6 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.registerCustomEditorProvider(VIEW_TYPE, new DesignerProvider(context.extensionUri, context.globalState, context.workspaceState, context.storageUri ?? context.globalStorageUri), {
 			webviewOptions: { retainContextWhenHidden: true },
 		}),
-		// 화면 XML → JS 변환: 저장할 때, 그리고 AI·다른 프로그램이 디스크의 XML을 바꿀 때(편집기에 열려 있는지와 상관없이)
-		vscode.workspace.onDidSaveTextDocument(doc => void wpackConvert(doc.uri, doc.getText())),
-		watchScreenFiles(),
-		{ dispose: disposeWpack },
 		// 포맷 단축키(Ctrl+Alt+L): 웹뷰는 VS Code 키 바인딩으로 받아 보이는 편집기에 전달. Alt+글자 조합은 웹뷰에서 VS Code 메뉴가 열려서 피한다.
 		vscode.commands.registerCommand('for-websquare5.format', () => {
 			const panel = [...panels].find(p => p.active);
@@ -69,138 +66,12 @@ const SETTINGS_MENU: Record<SettingsMenuItem, [string, ...unknown[]]> = {
 	settings: ['workbench.action.openSettings', '@ext:castle-bird.for-websquare5'],
 };
 
-const wpackQueues = new Map<string, Promise<unknown>>();
-/** 파일마다 마지막으로 변환한 XML: 저장과 디스크 변경 감시가 같은 내용을 두 번 변환하지 않게 */
-const wpackDone = new Map<string, string>();
-let warnedNoWpack = false, warnedNoDefs = false;
-
-/**
- * 변환 대상이 아닌 곳: 의존성·Git·Eclipse 배포본(.metadata, 우리가 XML을 복사해 넣는다)·빌드 산출물(Maven target, Gradle build, Eclipse Java 출력 bin)·WEB-INF·META-INF.
- * Java 빌드는 이런 곳에 XML을 한꺼번에 많이 복사하므로 파일을 읽기 전에 거른다(저장 시 변환은 이 목록과 상관없다)
- */
-const GENERATED_DIRS = ['node_modules', '.git', '.metadata', 'target', 'build', 'bin', 'WEB-INF', 'META-INF'].map(name => name.replace('.', '\\.')).join('|');
-const NOT_SCREEN_DIR = new RegExp(`[\\\\/](${GENERATED_DIRS})[\\\\/]`, 'i');
-/** 웹 루트 바로 아래의 이 폴더(과 변환 산출물 `_wpack…`)에서 바뀐 .js·config.xml은 공통 JS 다시 읽기에서 제외 */
+/** 웹 루트 바로 아래의 생성 폴더는 공통 JS 다시 읽기에서 제외 */
 const NOT_MODULE_DIR = new RegExp(`^[\\\\/]?(${GENERATED_DIRS}|_wpack)[\\\\/_]`, 'i');
-
-/**
- * 작업 폴더의 XML이 디스크에서 바뀌면(AI·다른 프로그램·Git) 저장 이벤트가 없으므로 디스크 내용으로 변환한다.
- * 문서를 읽고 쓰는 것(다시 읽기·저장·충돌 알림)은 VS Code가 평소처럼 하고, 저장 안 한 편집이 있는 파일은 건드리지 않는다(저장할 때 변환된다)
- */
-function watchScreenFiles(): vscode.Disposable {
-	const watcher = vscode.workspace.createFileSystemWatcher('**/*.xml');
-	const timers = new Map<string, NodeJS.Timeout>();
-	const onDisk = (uri: vscode.Uri) => {
-		// 작업 폴더 기준으로 본다: 작업 폴더 자체가 D:\build\… 같은 곳에 있어도 거르지 않게
-		if (uri.scheme !== 'file' || NOT_SCREEN_DIR.test(`/${vscode.workspace.asRelativePath(uri, false)}`)) {
-			return;
-		}
-		const key = uri.toString();
-		clearTimeout(timers.get(key));
-		// 한 번 쓰기에 이벤트가 여러 번 올 수 있어 잠깐 모은다
-		timers.set(key, setTimeout(() => void (async () => {
-			timers.delete(key);
-			if (vscode.workspace.textDocuments.some(d => d.isDirty && d.uri.toString() === key)) {
-				return;
-			}
-			try {
-				const disk = (await readFile(uri.fsPath, 'utf8')).replace(/^\uFEFF/, '');
-				await wpackConvert(uri, disk, true);
-			} catch {
-				// 지워졌거나 아직 쓰는 중: 다음 변경 때 다시
-			}
-		})(), 30));
-	};
-	watcher.onDidChange(onDisk);
-	watcher.onDidCreate(onDisk);
-	// 첫 변환도 바로 되게, 시작이 끝난 뒤 작업 폴더의 웹 루트 변환기를 미리 띄운다
-	// 제외 폴더를 위 목록보다 적게 둔다: 개발팩 웹 루트는 `bin` 아래(…\bin\websquare)에 있다
-	const warm = setTimeout(() => void Promise.resolve(vscode.workspace.findFiles('**/websquare/config.xml', '**/{node_modules,.metadata,WEB-INF}/**', 1)).then(async ([config]) => {
-		const webRoot = config && path.dirname(path.dirname(config.fsPath));
-		if (webRoot && await readWpackConfig(webRoot).catch(() => undefined)) {
-			await warmWpack(await resolvePath('wpackExecutable', config, webRoot));
-		}
-	}).catch(() => undefined), 3000);
-	return { dispose: () => { watcher.dispose(); timers.forEach(clearTimeout); clearTimeout(warm); } };
-}
-
-/** fromDisk: 파일 감시로 읽은 내용. 방금 저장해서 이미 변환한 내용이면 건너뛰고, 읽을 수 없는 XML은 알리지 않는다(쓰는 중일 수 있다). 저장은 매번 변환 */
-async function wpackConvert(uri: vscode.Uri, xml: string, fromDisk = false): Promise<void> {
-	const file = uri.fsPath;
-	if (uri.scheme !== 'file' || !/\.xml$/i.test(file)) {
-		return;
-	}
-	const webRoot = await findWebRoot(file);
-	const config = webRoot && await readWpackConfig(webRoot).catch(() => undefined);
-	if (!webRoot || !config) {
-		return;
-	}
-	const rel = path.relative(webRoot, file);
-	const top = rel.split(path.sep)[0];
-	if (rel.startsWith('..') || ['WEB-INF', 'META-INF', config.destRoot, '_wpackbabel_'].includes(top)) {
-		return;
-	}
-	try {
-		if (!isScreen(parseXml(xml))) {
-			return;
-		}
-	} catch (e) {
-		if (!fromDisk) {
-			void vscode.window.showWarningMessage(`wpack 변환 건너뜀 (${path.basename(file)}): ${errorMessage(e)}`);
-		}
-		return;
-	}
-	const exe = await resolvePath('wpackExecutable', uri, webRoot);
-	if (!exe) {
-		if (!warnedNoWpack) {
-			warnedNoWpack = true;
-			void offerSetup('wpackExecutable', 'wpack 변환기를 찾지 못해 저장 시 변환을 건너뜁니다.', uri, webRoot);
-		}
-		return;
-	}
-	const name = path.basename(file);
-	await serial(wpackQueues, file, async () => {
-		if (fromDisk && wpackDone.get(file) === xml) {
-			return;
-		}
-		wpackDone.set(file, xml);
-		await publish(webRoot, config, rel, xml, await convert(exe, config, rel, xml));
-		vscode.window.setStatusBarMessage(`$(check) wpack: ${name}`, 3000);
-	}).catch(e => {
-		if (wpackDone.get(file) === xml) {
-			wpackDone.delete(file);
-		}
-		void vscode.window.showErrorMessage(`wpack 변환 실패 (${name}): ${errorMessage(e)}`);
-	});
-}
 
 /** 모든 화면 공통 설정(탭 순서·위치)을 바꾼 화면 말고 다른 화면에 */
 function broadcast(from: vscode.WebviewPanel, msg: ToWebview) {
 	panels.forEach(p => p !== from && void p.webview.postMessage(msg));
-}
-
-/** 웹뷰로 보낼 화면 XML: 노드 트리(정의 표시·연결 화면·이미지 주소)와 Script 본문. 읽지 못하면 이유를 담는다 */
-async function documentMessage(document: vscode.TextDocument, webview: vscode.Webview, webRoot: string, defs: ComponentDef[], udcs: Set<string>): Promise<Extract<ToWebview, { type: 'document' }>> {
-	const base = { type: 'document', version: document.version, text: document.getText() } as const;
-	try {
-		const root = parseXml(base.text);
-		const body = root ? scriptBody(base.text, root) : 'XML을 읽지 못했습니다.';
-		const script = typeof body === 'string' ? { text: '', note: body } : { text: body.text };
-		if (root) {
-			annotate(root, defs, udcs);
-			await attachFrames(root, document.uri.fsPath, webRoot, defs, udcs);
-			const images = (n: XmlNode) => {
-				if (defOf(n, defs)?.realType === 'image' && n.attrs.src && !/^[a-z]+:/i.test(n.attrs.src)) {
-					n.url = webview.asWebviewUri(vscode.Uri.file(fromWebPath(webRoot, n.attrs.src, ENGINE_PAGE))).toString();
-				}
-				[...n.children, ...n.frame ? [n.frame] : []].forEach(images);
-			};
-			images(root);
-		}
-		return { ...base, root, script };
-	} catch (e) {
-		return { ...base, error: String(e), script: { text: '', note: String(e) } };
-	}
 }
 
 class DesignerProvider implements vscode.CustomTextEditorProvider {
@@ -541,58 +412,6 @@ export async function openFrame(document: vscode.TextDocument, index: number, we
 		await vscode.commands.executeCommand('vscode.openWith', vscode.Uri.file(target), VIEW_TYPE, { preview: false });
 	} else {
 		void vscode.window.showWarningMessage(src ? `연결 화면을 찾지 못했습니다: ${src}` : '연결된 화면(src)이 없습니다.');
-	}
-}
-
-async function loadDefinitions(uri: vscode.Uri, webRoot?: string): Promise<{ defs: ComponentDef[]; error?: string }> {
-	try {
-		const source = await resolvePath('componentDefinitionFile', uri, webRoot);
-		if (!source) {
-			if (!warnedNoDefs) {
-				warnedNoDefs = true;
-				void offerSetup('componentDefinitionFile', '컴포넌트 정의 파일(WebSquareConfig.xml)을 찾지 못해 Property·Event 목록이 비어 있습니다.', uri, webRoot);
-			}
-			return { defs: [], error: '컴포넌트 정의(WebSquareConfig.xml)를 찾지 못했습니다. (F1 → WebSquare5: 환경 설정)' };
-		}
-		return { defs: await loadComponents(source) };
-	} catch (e) {
-		return { defs: [], error: `컴포넌트 정의 읽기 실패: ${errorMessage(e)}` };
-	}
-}
-
-async function loadStyles(document: vscode.TextDocument, webview: vscode.Webview, webRoot: string): Promise<Extract<ToWebview, { type: 'styles' }>> {
-	const css: string[] = [], rules: CssRuleSource[] = [], imports: string[] = [], failed: string[] = [], broken: string[] = [];
-	try {
-		const files = await stylesheetFiles(webRoot, document.uri.fsPath, document.getText());
-		const texts = await Promise.all(files.map(file => readFile(file, 'utf8').catch(() => undefined)));
-		const toUri = (p: string) => webview.asWebviewUri(vscode.Uri.file(p)).toString();
-		for (let i = 0; i < files.length; i++) {
-			const file = files[i], text = texts[i];
-			if (text === undefined) {
-				failed.push(path.relative(webRoot, file));
-				continue;
-			}
-			const errors: string[] = [], fileRules: CssRuleSource[] = [];
-			css.push(scopeCss(text, file, webRoot, toUri, imports, errors, fileRules));
-			rules.push(...fileRules);
-			broken.push(...errors.map(e => `${path.relative(webRoot, file)} ${e}`));
-		}
-	} catch (e) {
-		return { type: 'styles', css, rules, imports, error: `websquare/config.xml 읽기 실패: ${errorMessage(e)}` };
-	}
-	const error = [
-		failed.length && `CSS를 읽지 못함: ${failed.join(', ')}`,
-		broken.length && `CSS 문법 오류(그 부분만 빼고 적용): ${broken.join(', ')}`,
-	].filter(Boolean).join(' / ');
-	return { type: 'styles', css, rules, imports, ...error && { error } };
-}
-
-async function loadModules(webRoot: string): Promise<Extract<ToWebview, { type: 'modules' }>> {
-	try {
-		const { files, failed } = await engineModules(webRoot);
-		return { type: 'modules', files, ...failed.length && { error: `공통 JS를 읽지 못함: ${failed.join(', ')}` } };
-	} catch (e) {
-		return { type: 'modules', files: [], error: `공통 JS 목록(websquare/config.xml) 읽기 실패: ${errorMessage(e)}` };
 	}
 }
 

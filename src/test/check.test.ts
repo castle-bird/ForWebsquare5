@@ -34,6 +34,10 @@ suite('화면 점검·중복 id', () => {
 		assert.strictEqual(of(byId('a', 'w2:column')), undefined);
 		assert.strictEqual(of(byId('sbm')), undefined, '화면에 없는 데이터(스크립트에서 만듦)는 경고 안 함, 정의된 함수는 통과');
 		assert.strictEqual(screenProblems(parseXml('<html><body><a ref="data:dlt_code.x"/><b nodeset="data:dlt_code"/></body></html>')!).size, 0, '동적 생성 데이터 바인딩');
+		const plain = parseXml('<html><head><dataCollection xmlns="http://www.inswave.com/websquare"><dataMap id="map"><keyInfo><key id="k"/></keyInfo></dataMap></dataCollection></head><body><a id="ok" ref="data:map.k"/><b id="no" ref="data:map.x"/></body></html>')!;
+		const plainProblems = screenProblems(plain);
+		assert.strictEqual(plainProblems.get(findNode(plain, n => n.attrs.id === 'ok')!.index), undefined, '기본 namespace 데이터의 키');
+		assert.deepStrictEqual(plainProblems.get(findNode(plain, n => n.attrs.id === 'no')!.index), ['dataMap에 존재하지 않는 ID입니다. `map.x`']);
 		assert.strictEqual(of(byId('i2')), undefined, '컬럼을 모르는 linkedDataList는 컬럼 안 봄');
 		assert.strictEqual(of(byId('i3')), undefined);
 		assert.deepStrictEqual(of(byId('i4')), ['등록되지 않은 handler가 적용되어 있습니다. `scwin.gone`']);

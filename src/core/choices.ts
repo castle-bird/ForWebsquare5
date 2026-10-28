@@ -1,14 +1,11 @@
 import { encodeScript, eolOf, escape, lineIndent, startTagEnd, withAttrs, type TextEdit } from './edit';
-import { kid, localName, pathTo, prefixOf, type XmlNode } from './xmlModel';
+import { hasOnly, kid, localName, pathTo, prefixOf, type XmlNode } from './xmlModel';
 
 export interface ChoiceItem { label: string; value: string }
 export interface ItemSet { nodeset: string; label: string; value: string }
 export interface Choices { items: ChoiceItem[]; itemset?: ItemSet }
 // null = 속성 지우기 (웹뷰 메시지는 JSON이라 undefined 값은 키째 사라진다)
 export interface ChoicesFields extends Choices { attrs: Record<string, string | null | undefined> }
-
-const simple = (n: XmlNode, names: string[], attrs: string[] = []) =>
-	n.children.every(c => names.includes(localName(c.tag))) && Object.keys(n.attrs).every(a => attrs.includes(a));
 
 /** multiupload 파라미터: 자식 `<param name value>`를 이름(label)·값 목록으로 */
 const params = (node: XmlNode) => node.children.filter(c => localName(c.tag) === 'param');
@@ -20,14 +17,17 @@ export function readChoices(node: XmlNode): Choices | { error: string } {
 	const choices = kid(node, 'choices');
 	if (!choices) { return { items: [] }; }
 	const complex = { error: '선택 항목 구조가 복잡해서 이 팝업으로는 고칠 수 없습니다. Source 탭에서 고쳐 주세요.' };
+	if (!hasOnly(choices, ['item', 'itemset']) || node.children.filter(c => localName(c.tag) === 'choices').length > 1) { return complex; }
 	const itemsets = choices.children.filter(c => localName(c.tag) === 'itemset');
 	if (itemsets.length) {
 		const set = itemsets[0], label = kid(set, 'label'), value = kid(set, 'value');
-		if (itemsets.length > 1 || choices.children.length > 1 || !simple(set, ['label', 'value'], ['nodeset'])
-			|| [label, value].some(n => n && (n.children.length || n.text || !simple(n, [], ['ref'])))) { return complex; }
+		if (itemsets.length > 1 || choices.children.length > 1 || !hasOnly(set, ['label', 'value'], ['nodeset'])
+			|| set.children.length !== new Set(set.children.map(n => localName(n.tag))).size
+			|| [label, value].some(n => n && !hasOnly(n, [], ['ref']))) { return complex; }
 		return { items: [], itemset: { nodeset: set.attrs.nodeset ?? '', label: label?.attrs.ref ?? '', value: value?.attrs.ref ?? '' } };
 	}
-	if (!choices.children.every(c => localName(c.tag) === 'item' && simple(c, ['label', 'value'])
+	if (!choices.children.every(c => localName(c.tag) === 'item' && hasOnly(c, ['label', 'value'])
+		&& c.children.length === new Set(c.children.map(n => localName(n.tag))).size
 		&& c.children.every(p => !p.children.length && !Object.keys(p.attrs).length))) { return complex; }
 	return { items: choices.children.map(i => ({ label: kid(i, 'label')?.text ?? '', value: kid(i, 'value')?.text ?? '' })) };
 }
@@ -41,6 +41,7 @@ export function editChoices(text: string, root: XmlNode, node: XmlNode, fields: 
 	if ('error' in current) { throw new Error(current.error); }
 	const choices = kid(node, 'choices');
 	if (choices && /<!--/.test(text.slice(choices.start, choices.end))) { throw new Error('선택 항목에 주석이 있어 이 팝업으로는 고칠 수 없습니다. Source 탭에서 고쳐 주세요.'); }
+	if (choices && /<\?/.test(text.slice(choices.start, choices.end))) { throw new Error('선택 항목에 처리 명령이 있어 이 팝업으로는 고칠 수 없습니다. Source 탭에서 고쳐 주세요.'); }
 	if (fields.itemset && !fields.itemset.nodeset) { throw new Error('바인딩할 NodeSet을 골라 주세요.'); }
 
 	const eol = eolOf(text), p = prefixOf(node.tag);
@@ -75,6 +76,9 @@ export function editChoices(text: string, root: XmlNode, node: XmlNode, fields: 
 function editParams(text: string, node: XmlNode, items: ChoiceItem[]): TextEdit | undefined {
 	const old = params(node);
 	if (JSON.stringify(old.map(p => ({ label: p.attrs.name ?? '', value: p.attrs.value ?? '' }))) === JSON.stringify(items)) { return undefined; }
+	if (old.some(p => !hasOnly(p, [], ['name', 'value']) || /<!--|<\?/.test(text.slice(p.start, p.end)))) {
+		throw new Error('파라미터에 다른 내용이 있어 이 팝업으로는 고칠 수 없습니다. Source 탭에서 고쳐 주세요.');
+	}
 	const eol = eolOf(text), indent = lineIndent(text, node.start), unit = /^ +$/.test(indent) ? '    ' : '\t';
 	const lines = items.map(i => `${eol}${indent}${unit}<param name="${escape(i.label, '"')}" value="${escape(i.value, '"')}"></param>`).join('');
 	const tagEnd = startTagEnd(text, node.start) + 1, tag = text.slice(node.start, tagEnd);

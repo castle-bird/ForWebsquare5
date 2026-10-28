@@ -238,6 +238,9 @@ suite('edit', () => {
 	});
 
 	test('setStyle: 바꾼 속성만 교체, 없던 속성은 뒤에, 나머지 표기·url 안 ; 유지', () => {
+		assert.strictEqual(setStyle('width:1px;color:red;width:3px;', { width: '2px' }), 'width:2px;color:red;');
+		assert.strictEqual(setStyle('width:1px;color:red;width:3px;', { width: undefined }), 'color:red;');
+		assert.strictEqual(setStyle('content:"a\\";b";width:1px;', { width: '2px' }), 'content:"a\\";b";width:2px;');
 		assert.strictEqual(setStyle('width: 100px;height:21px;', { width: '150px' }), 'width: 150px;height:21px;');
 		assert.strictEqual(setStyle('background:url(a;b.png);WIDTH:1px', { width: '2px', left: '3px' }), 'background:url(a;b.png);WIDTH:2px;left:3px;');
 		assert.strictEqual(setStyle(undefined, { top: '5px' }), 'top:5px;');

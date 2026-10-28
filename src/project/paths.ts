@@ -3,6 +3,9 @@ import * as path from 'node:path';
 
 export const exists = (p: string) => access(p).then(() => true, () => false);
 
+/** 생성·배포 폴더: XML 변경 감시와 공통 JS 다시 읽기에서 제외 */
+export const GENERATED_DIRS = ['node_modules', '.git', '.metadata', 'target', 'build', 'bin', 'WEB-INF', 'META-INF'].map(name => name.replace('.', '\\.')).join('|');
+
 export const ENGINE_PAGE = '/websquare/websquare.html';
 
 export const configFile = (webRoot: string) => path.join(webRoot, 'websquare', 'config.xml');
@@ -12,7 +15,7 @@ export function cached<T>(cache: Map<string, Promise<T>>, key: string, load: () 
 	if (!result) {
 		result = load();
 		cache.set(key, result);
-		result.catch(() => cache.delete(key));
+		result.catch(() => { if (cache.get(key) === result) { cache.delete(key); } });
 	}
 	return result;
 }

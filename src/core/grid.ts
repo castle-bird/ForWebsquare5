@@ -69,6 +69,7 @@ export function addGridPart(text: string, root: XmlNode, grid: XmlNode, part: Gr
 interface ColumnSpan { start: number; span: number; row: number; down: number }
 
 const attrSpans = (col: XmlNode) => ({ across: Number(col.attrs.colSpan), down: Number(col.attrs.rowSpan) });
+const validSpan = (n: number) => Number.isSafeInteger(n) && n > 0 ? n : 1;
 
 /**
  * 표 모양 배치: 가로·세로로 합친 셀(colSpan·rowSpan)이 덮는 자리에는 셀 요소가 없다. 구역(sections)마다 행 목록.
@@ -78,17 +79,16 @@ export function columnLayout(sections: XmlNode[][], columnsOf: (row: XmlNode) =>
 	const cells = new Map<XmlNode, ColumnSpan>();
 	const covered = new Map<XmlNode, { start: number; span: number }[]>();
 	for (const sectionRows of sections) {
-		const taken: Set<number>[] = sectionRows.map(() => new Set());
 		sectionRows.forEach(row => covered.set(row, []));
 		sectionRows.forEach((row, i) => {
 			let pos = 0;
 			for (const col of columnsOf(row)) {
-				while (taken[i].has(pos)) { pos++; }
+				let occupied: { start: number; span: number } | undefined;
+				while ((occupied = covered.get(row)!.find(c => c.start <= pos && pos < c.start + c.span))) { pos = occupied.start + occupied.span; }
 				const { across, down: rows } = spanOf(col);
-				const span = Math.max(1, across || 1), down = Math.max(1, rows || 1);
+				const span = validSpan(across), down = validSpan(rows);
 				cells.set(col, { start: pos, span, row: i, down: Math.min(down, sectionRows.length - i) });
 				for (let r = i; r < Math.min(i + down, sectionRows.length); r++) {
-					for (let c = pos; c < pos + span; c++) { taken[r].add(c); }
 					if (r > i) { covered.get(sectionRows[r])!.push({ start: pos, span }); }
 				}
 				pos += span;

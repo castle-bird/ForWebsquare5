@@ -42,6 +42,11 @@ suite('XML 편집 계획', () => {
 		const column = plan(text, { type: 'setAttr', version: 1, index: indexOf(text, 'name'), name: 'id', value: 'title' });
 		assert.strictEqual(applyEdits(text, column.changes), text.replace('id="name"', 'id="title"').replace('data:list.name', 'data:list.title'));
 		assert.match(column.notice!, /바인딩 1곳/);
+		// 기본 namespace로 선언한 데이터의 키도 접두사 형식과 같이
+		const plain = '<html xmlns:w2="http://www.inswave.com/websquare"><head><xf:model><dataCollection xmlns="http://www.inswave.com/websquare"><dataMap id="map"><keyInfo><key id="k"/></keyInfo></dataMap></dataCollection></xf:model></head><body><xf:input ref="data:map.k"/></body></html>';
+		const key = plan(plain, { type: 'setAttr', version: 1, index: indexOf(plain, 'k'), name: 'id', value: 'k2' });
+		assert.strictEqual(applyEdits(plain, key.changes), plain.replace('id="k"', 'id="k2"').replace('data:map.k', 'data:map.k2'));
+		assert.match(key.notice!, /바인딩 1곳/);
 	});
 
 	test('이동·삭제는 모든 대상이 있을 때만, 자기 자손으로 이동은 거부', () => {

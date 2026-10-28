@@ -8,6 +8,13 @@ const headOf = (text: string) => { const root = parseXml(text)!; return { root, 
 const row = (no: string, desc: string, date = '20250101', user = 'zz') => ({ no, desc, date, user });
 
 suite('Info 탭 개정 이력', () => {
+	test('표시하지 않는 속성이나 내용은 덮어쓰지 않는다', () => {
+		for (const content of ['<w2:historyInfo custom="keep"><w2:history/></w2:historyInfo>', '<w2:historyInfo><w2:history custom="keep"/></w2:historyInfo>', '<w2:historyInfo><w2:history><extra/></w2:history></w2:historyInfo>']) {
+			const text = `<html ${NS}><head>${content}</head></html>`;
+			const { root, head } = headOf(text);
+			assert.throws(() => editHistory(text, root, head, [row('1', 'x')]), /Source/);
+		}
+	});
 	test('있는 historyInfo를 다시 쓰고(들여쓰기·접두사 유지) 바뀐 게 없으면 편집 없음', () => {
 		const text = `<html ${NS}>\n\t<head meta_programId="BM003M01">\n\t\t<w2:historyInfo>\n\t\t\t<w2:history meta_no="1" meta_desc="asd" meta_date="20250101" meta_user="zz"></w2:history>\n\t\t</w2:historyInfo>\n\t\t<w2:type>COMPONENT</w2:type>\n\t</head>\n\t<body/>\n</html>`;
 		const { root, head } = headOf(text);

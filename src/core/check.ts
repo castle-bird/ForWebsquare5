@@ -1,6 +1,6 @@
 // 화면 점검: 겹치는 id, 없는 데이터·컬럼을 가리키는 바인딩, Script에 없는 이벤트 함수
 import { isDataKind } from './data';
-import { EV, localName, pathTo, type XmlNode } from './xmlModel';
+import { EV, isWs, localName, pathTo, type XmlNode } from './xmlModel';
 
 /** 안에서만 id가 겹치면 안 되는 범위: 그리드(와 그 header·gBody·footer·subTotal), 데이터의 columnInfo·keyInfo. 그 밖은 화면 전체 */
 const SCOPE = /:(gridView|header|gBody|footer|subTotal|columnInfo|keyInfo)$/;
@@ -40,7 +40,7 @@ function dataColumns(root: XmlNode): Map<string, { kind: string; columns?: Set<s
 	const data = new Map<string, { kind: string; columns?: Set<string> }>();
 	const visit = (n: XmlNode) => {
 		if (isDataKind(n) && n.attrs.id) {
-			const info = n.children.find(c => /:(columnInfo|keyInfo)$/.test(c.tag));
+			const info = n.children.find(c => isWs(c, 'columnInfo') || isWs(c, 'keyInfo'));
 			data.set(n.attrs.id, { kind: localName(n.tag), columns: info && new Set(info.children.flatMap(c => c.attrs.id ? [c.attrs.id] : [])) });
 		}
 		n.children.forEach(visit);

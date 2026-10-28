@@ -2,6 +2,18 @@ import * as assert from 'assert';
 import { readUsedTables } from '../core/tables';
 
 suite('ERD 사용 테이블 저장 파일', () => {
+	test('수동 JSON의 중복 노드·컬럼 ID는 새 ID로 살리고 선의 구분자 충돌을 처리한다', () => {
+		const data = readUsedTables({
+			tables: [{ id: 'a', name: 'first', columns: [{ id: 'c', name: 'one' }, { id: 'c', name: 'two' }] }, { id: 'a', name: 'copy' }, { id: 'b|c' }, { id: 'a|b' }, { id: 'c' }],
+			memos: [{ id: 'a' }, { id: 'm' }, { id: 'a-2' }],
+			links: [{ from: 'a', to: 'b|c' }, { from: 'a|b', to: 'c' }],
+		});
+		// 새 id는 파일에 이미 있는 id(뒤에 나오는 메모 a-2 포함)와 겹치지 않고, 선은 원래 id를 가진 첫 항목에 잇는다
+		assert.deepStrictEqual(data.tables.map(t => [t.id, t.name]), [['a', 'first'], ['a-3', 'copy'], ['b|c', ''], ['a|b', ''], ['c', '']]);
+		assert.deepStrictEqual(data.tables[0].columns.map(c => [c.id, c.name]), [['c', 'one'], ['c-2', 'two']]);
+		assert.deepStrictEqual(data.memos.map(m => m.id), ['a-4', 'm', 'a-2']);
+		assert.deepStrictEqual(data.links.map(l => [l.from, l.to]), [['a', 'b|c'], ['a|b', 'c']]);
+	});
 	test('사람이 고친 JSON도 모양에 맞추고, 없는 테이블·메모를 잇는 선·겹친 선·모르는 CRUD·화살표·색은 버림', () => {
 		const data = readUsedTables({
 			tables: [

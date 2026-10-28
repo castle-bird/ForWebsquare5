@@ -31,9 +31,47 @@ function lineChanges(base: Text, doc: Text): Range[] {
 	if (ids.size > 0xFFFF - 0x800) {
 		return [];
 	}
-	return diff(a, b, DIFF).map(c => c.fromB === c.toB
-		? { from: Math.min(c.fromB + 1, doc.lines), to: Math.min(c.fromB + 1, doc.lines), kind: 'deleted' }
-		: { from: c.fromB + 1, to: c.toB, kind: c.fromA === c.toA ? 'added' : 'modified' });
+	let baseLines: string[] | undefined, docLines: string[] | undefined;
+	return diff(a, b, DIFF).map(c => {
+		if (c.fromB === c.toB) {
+			const shift = bestShift(baseLines ??= [...base.iterLines()], c.fromA, c.toA);
+			const at = Math.min(c.fromB + shift + 1, doc.lines);
+			return { from: at, to: at, kind: 'deleted' };
+		}
+		if (c.fromA === c.toA) {
+			const shift = bestShift(docLines ??= [...doc.iterLines()], c.fromB, c.toB);
+			return { from: c.fromB + shift + 1, to: c.toB + shift, kind: 'added' };
+		}
+		return { from: c.fromB + 1, to: c.toB, kind: 'modified' };
+	});
+}
+
+const indentOf = (line: string) => {
+	let width = 0;
+	for (const ch of line) {
+		if (ch === ' ') { width++; } else if (ch === '	') { width += 4; } else { break; }
+	}
+	return line.trim() ? width : 0;
+};
+
+/**
+ * 같은 줄이 반복되면 같은 추가·삭제를 여러 자리로 풀이할 수 있다(<row>…</row> 뒤에 <row>…</row>를 넣으면 비교 결과가 한 줄 아래로 밀리는 식).
+ * 내용이 그대로인 만큼 위아래로 밀어 본 자리 중 첫·끝 줄 들여쓰기 합이 가장 작은(블록의 시작과 끝에 가까운) 자리를 고른다. 같으면 원래 자리
+ * lines는 그 줄들이 들어 있는 쪽(추가는 지금 내용, 삭제는 기준 내용), [from, to)는 바뀐 줄. 반환값은 밀 줄 수(음수는 위)
+ */
+function bestShift(lines: string[], from: number, to: number): number {
+	let up = 0, down = 0;
+	while (from - up > 0 && lines[from - up - 1] === lines[to - up - 1]) { up++; }
+	while (to + down < lines.length && lines[from + down] === lines[to + down]) { down++; }
+	let best = 0, bestScore = Infinity;
+	for (let k = -up; k <= down; k++) {
+		const score = indentOf(lines[from + k]) + indentOf(lines[to + k - 1]);
+		if (score < bestScore || (score === bestScore && Math.abs(k) < Math.abs(best))) {
+			best = k;
+			bestScore = score;
+		}
+	}
+	return best;
 }
 
 const setBase = StateEffect.define<Text | null>();

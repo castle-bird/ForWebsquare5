@@ -1,10 +1,24 @@
 import * as assert from 'assert';
 import { findNode, parseXml, type XmlNode } from '../core/xmlModel';
 import { applyEdits } from '../core/edit';
-import { canMoveGridColumn, deleteGridColumns, editGridCells, moveGridColumn } from '../core/grid';
+import { canMoveGridColumn, columnLayout, deleteGridColumns, editGridCells, moveGridColumn } from '../core/grid';
 import { isMerged, mergeCells, unmergeCells } from '../core/merge';
 
 const XMLNS = 'xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms"';
+
+suite('그리드 칸 배치', () => {
+	test('정수가 아닌 병합 크기는 한 칸으로 처리한다', () => {
+		const row = parseXml('<row><column colSpan="1.5" rowSpan="1.5"/><column/></row>')!;
+		const { cells } = columnLayout([[row]], n => n.children);
+		assert.deepStrictEqual([...cells.values()], [{ start: 0, span: 1, row: 0, down: 1 }, { start: 1, span: 1, row: 0, down: 1 }]);
+	});
+	test('큰 병합 영역은 칸 수만큼 순회하지 않고 구간으로 처리한다', () => {
+		const root = parseXml('<grid><row><column colSpan="1000000000" rowSpan="2"/></row><row><column/><column colSpan="Infinity"/></row></grid>')!;
+		const { cells } = columnLayout([root.children], n => n.children);
+		assert.strictEqual(cells.get(root.children[1].children[0])?.start, 1000000000);
+		assert.strictEqual(cells.get(root.children[1].children[1])?.span, 1);
+	});
+});
 const byId = (root: XmlNode, id: string) => findNode(root, n => n.attrs.id === id)!;
 /** 행마다 칸 id(문서 순서). 병합 풀기로 새로 만든 칸(id 없음·columnN)은 '(새 칸)' */
 const rows = (text: string) => {

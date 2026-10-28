@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import { parseXml } from '../core/xmlModel';
 import { pasteNode } from '../core/paste';
 import { moveNode } from '../core/move';
-import { addDataNode, DATA_KINDS, editDataFields, renameDataRefs } from '../core/data';
+import { addDataNode, DATA_KINDS, editDataFields, isDataNode, renameDataRefs } from '../core/data';
 import { applyEdits } from '../core/edit';
 import { addSubmissionNode, editSubmissionNode, formatDataRef, parseDataRef, newSubmissionFields, nextSubmissionId, submissionFields, type SubmissionFields } from '../core/submission';
 import { addGridColumn, addGridPart, addGridRow, bindGridView } from '../core/grid';
@@ -119,6 +119,28 @@ suite('Choices (selectbox·radio 선택 항목)', () => {
 		assert.throws(() => editChoices(odd, parseXml(odd)!, select(odd), { items: [], attrs: {} }), /Source/);
 		const commented = '<html xmlns:xf="http://www.w3.org/2002/xforms"><body><xf:select1 id="s"><xf:choices><!-- 주석 --><xf:item><xf:label>A</xf:label><xf:value>a</xf:value></xf:item></xf:choices></xf:select1></body></html>';
 		assert.throws(() => editChoices(commented, parseXml(commented)!, select(commented), { items: [], attrs: {} }), /주석/);
+		const instruction = commented.replace('<!-- 주석 -->', '<?keep value?>');
+		assert.throws(() => editChoices(instruction, parseXml(instruction)!, select(instruction), { items: [], attrs: {} }), /Source/);
+	});
+
+	test('팝업에 없는 선택 항목 정보는 덮어쓰지 않는다', () => {
+		for (const inner of [
+			'<xf:choices custom="keep"><xf:item/></xf:choices>',
+			'<xf:choices><item xmlns="urn:other"/></xf:choices>',
+			'<xf:choices><xf:item><xf:label>A</xf:label><xf:label>B</xf:label></xf:item></xf:choices>',
+			'<xf:choices><xf:item>keep<xf:label>A</xf:label></xf:item></xf:choices>',
+			'<xf:choices><xf:itemset nodeset="x"><xf:label ref="a"/><xf:label ref="b"/></xf:itemset></xf:choices>',
+		]) {
+			const text = `<html xmlns:xf="http://www.w3.org/2002/xforms"><body><xf:select1>${inner}</xf:select1></body></html>`;
+			assert.throws(() => editChoices(text, parseXml(text)!, select(text), { items: [], attrs: {} }), /Source/);
+		}
+	});
+
+	test('multiupload 파라미터의 추가 정보는 덮어쓰지 않는다', () => {
+		for (const param of ['<param name="a" value="1" extra="keep"/>', '<param name="a"><extra/></param>', '<param name="a"><!-- keep --></param>']) {
+			const text = `<html xmlns:w2="http://www.inswave.com/websquare"><body><w2:multiupload>${param}</w2:multiupload></body></html>`;
+			assert.throws(() => editChoices(text, parseXml(text)!, select(text), { items: [], attrs: {} }), /Source/);
+		}
 	});
 });
 
@@ -272,6 +294,15 @@ suite('Submission creation', () => {
 });
 
 suite('DataMap/DataList fields', () => {
+	test('데이터 판별은 접두사 대신 namespace를 따른다', () => {
+		assert.ok(isDataNode(parseXml('<dataList xmlns="http://www.inswave.com/websquare"/>')!));
+		assert.ok(!isDataNode(parseXml('<other:dataMap xmlns:other="urn:other"/>')!));
+	});
+	test('keyInfo의 다른 자식은 행 편집으로 지우지 않는다', () => {
+		const text = '<html xmlns:w2="http://www.inswave.com/websquare"><w2:dataMap id="dma"><w2:keyInfo><w2:key id="a"/><extra/></w2:keyInfo></w2:dataMap></html>';
+		const root = parseXml(text)!, map = root.children[0];
+		assert.throws(() => editDataFields(text, root, map, []), /Source/);
+	});
 	test('행 추가·순서 변경·삭제와 DataMap 값을 한 편집으로 반영하고 기존 속성을 보존', () => {
 		const base = '<html xmlns:w2="http://www.inswave.com/websquare"><w2:dataMap id="dma" baseNode="map"><w2:keyInfo><w2:key id="old" name="Old" dataType="text" custom="keep"/></w2:keyInfo><w2:data use="false"><old custom="value-attr">old value</old><external>x</external></w2:data></w2:dataMap></html>';
 		const root = parseXml(base)!;

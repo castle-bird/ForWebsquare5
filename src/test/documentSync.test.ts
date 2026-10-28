@@ -49,6 +49,15 @@ suite('디자이너 편집 동기화', () => {
 				return true;
 			} },
 		};
+		const resources = { exports: {} };
+		runInNewContext(transformSync(fs.readFileSync(path.resolve(__dirname, '../../src/vscode/resources.ts'), 'utf8'), { loader: 'ts', format: 'cjs' }).code, {
+			module: resources, exports: resources.exports,
+			require: (name: string) => {
+				const key = name.startsWith('../') ? './' + name.slice(3) : name.startsWith('./') ? './vscode/' + name.slice(2) : name;
+				return mocks[key] ?? (name.startsWith('node:') ? require(name) : {});
+			},
+		});
+		mocks['./vscode/resources'] = resources.exports;
 		const source = fs.readFileSync(path.resolve(__dirname, '../../src/extension.ts'), 'utf8') + '\nexport { DesignerProvider };';
 		const module = { exports: {} as { DesignerProvider: new (...args: unknown[]) => { resolveCustomTextEditor(doc: unknown, panel: unknown): Promise<void> } } };
 		runInNewContext(transformSync(source, { loader: 'ts', format: 'cjs' }).code, {

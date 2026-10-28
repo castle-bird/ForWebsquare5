@@ -138,7 +138,12 @@ function toCompletion(item: RemoteCompletion, rank: number, detail: Promise<Remo
 			if (item.edits) {
 				extraEdits(view, item.edits);
 			} else {
-				void detail.then(d => extraEdits(view, d?.edits));
+				// 늦게 온 편집의 줄·글자는 고를 때 문서 기준: 그 자리까지 앞부분이 그대로면(아래에서 이어 침) 넣고, 위쪽이 바뀌었으면 자리가 어긋나 버린다
+				const completed = view.state.doc;
+				void detail.then(d => {
+					const end = Math.max(0, ...(d?.edits ?? []).map(e => posAt(completed, e.toLine, e.toCh)));
+					if (view.dom.isConnected && view.state.doc.sliceString(0, end) === completed.sliceString(0, end)) { extraEdits(view, d?.edits); }
+				});
 			}
 		},
 	};

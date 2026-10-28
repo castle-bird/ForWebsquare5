@@ -144,6 +144,29 @@ export default async function ({ page, modifiedKey, reset, checkIndentUnit, cont
 	assert.equal(await content(), javaText + 'BigDecimal', '고르면 바로 넣음(푼 결과 전)');
 	await page.evaluate(() => { window.pendingDetails.forEach(reply => reply()); window.pendingDetails = undefined; });
 	await page.waitForFunction(text => window.editor().state.doc.toString() === text, {timeout: 3000}, 'import java.math.BigDecimal;\n' + javaText + 'BigDecimal').catch(() => assert.fail('늦게 온 자동 import'));
+	// 고른 뒤 아래에서 이어 쳐도(import 자리 앞은 그대로) 늦게 온 import를 넣는다
+	const pickBeforeDetails = async () => {
+		await page.evaluate(() => { window.pendingDetails = []; });
+		await reset(javaText); await page.keyboard.type('Big', {delay: 25});
+		await page.waitForFunction(() => [...document.querySelectorAll('.cm-completionLabel')].some(e => e.textContent === 'BigDecimal'), {timeout: 3000});
+		await new Promise(resolve => setTimeout(resolve, 100));
+		await page.keyboard.press('Enter');
+		assert.equal(await content(), javaText + 'BigDecimal', '지연 응답 전에 자동완성을 적용');
+	};
+	await pickBeforeDetails();
+	await page.evaluate(() => { const doc = window.editor().state.doc; window.editor().dispatch({ changes: { from: doc.length, insert: ' x' } }); });
+	await page.evaluate(() => { window.pendingDetails.forEach(reply => reply()); window.pendingDetails = undefined; });
+	await page.waitForFunction(text => window.editor().state.doc.toString() === text, {timeout: 3000}, 'import java.math.BigDecimal;\n' + javaText + 'BigDecimal x').catch(() => assert.fail('이어 친 뒤 늦게 온 자동 import'));
+	// import 자리 앞이 바뀌면(위쪽 편집) 줄·글자 자리가 어긋나므로 버린다
+	await pickBeforeDetails();
+	await page.evaluate(() => { window.editor().dispatch({ changes: { from: 0, insert: '// changed\n' } }); });
+	const changedBeforeDetails = await content();
+	await page.evaluate(() => {
+		window.remoteDetails = () => [{ label: 'BigDecimal', edits: [{ fromLine: 1, fromCh: 0, toLine: 1, toCh: 0, insert: 'import java.math.BigDecimal;\n' }] }];
+		window.pendingDetails.forEach(reply => reply()); window.pendingDetails = undefined;
+	});
+	await new Promise(resolve => setTimeout(resolve, 100));
+	assert.equal(await content(), changedBeforeDetails, '앞부분이 바뀌면 이전 위치의 자동 import 편집은 버림');
 	await page.evaluate(() => { window.remoteDetails = undefined; });
 	// Java 탭 붙여넣기: 편집이 반영된 뒤 빠진 import만 묻고(포맷 아님), 돌아온 글(import 추가)을 반영한다. 그냥 입력은 묻지 않는다
 	await reset(javaText); await page.evaluate(() => { window.sent.length = 0; });

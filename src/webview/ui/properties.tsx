@@ -147,8 +147,8 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 			}}>
 			{warning && <p className="warning" title={warning}>{warning}</p>}
 			<Tabs order={tabOrder} onReorder={setTabOrder} items={{
-				Property: propGroups && <PropertyTable groups={propGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} />,
-				Event: evGroups && <PropertyTable groups={evGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} isEvent onScript={onScript} />,
+				Property: propGroups && <PropertyTable nodeIndex={node?.index} groups={propGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} />,
+				Event: evGroups && <PropertyTable nodeIndex={node?.index} groups={evGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} isEvent onScript={onScript} />,
 			}} />
 			<div className="style-area">
 				<span>Style</span>
@@ -165,8 +165,9 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 	);
 }
 
-function PropertyTable({ groups: all, search, onSearch, keyWidth, onKeyWidth, onKeyClick, onEdit, isEvent, onScript }: {
-	groups: RowGroup[]; search: Search; onSearch(s: Search): void; keyWidth?: number; onKeyWidth(w: number): void; onKeyClick(e: ReactMouseEvent<HTMLElement>, row: Row): void; onEdit: Edit;
+function PropertyTable({ nodeIndex, groups: all, search, onSearch, keyWidth, onKeyWidth, onKeyClick, onEdit, isEvent, onScript }: {
+	/** 지금 고른 노드 번호: 바뀌면 칸을 새로 만들어 열어 둔 편집을 닫는다 */
+	nodeIndex?: number; groups: RowGroup[]; search: Search; onSearch(s: Search): void; keyWidth?: number; onKeyWidth(w: number): void; onKeyClick(e: ReactMouseEvent<HTMLElement>, row: Row): void; onEdit: Edit;
 	isEvent?: boolean; onScript?(eventName: string): void;
 }) {
 	const match = useMemo(() => matcher(search.text), [search.text]);
@@ -195,8 +196,9 @@ function PropertyTable({ groups: all, search, onSearch, keyWidth, onKeyWidth, on
 								<th colSpan={2}><span className={clsx('chevron', { open: open(g.category) })} />{g.category}</th>
 							</tr>
 						)}
+						{/* 노드가 바뀌면 칸을 새로 만들어, 열어 둔 편집(목록 포함)이 새로 고른 노드로 넘어가 반영되지 않게 한다 */}
 						{open(g.category) && g.rows.map(r => (
-							<tr key={r.name} className={clsx({ set: r.value !== undefined })}>
+							<tr key={`${nodeIndex}:${r.name}`} className={clsx({ set: r.value !== undefined })}>
 								<td className={clsx('key', { 'has-help': !!r.description })} onClick={e => onKeyClick(e, r)}>{r.display ?? r.name}</td>
 								<td>
 									{isEvent

@@ -16,6 +16,6 @@ export async function readWebConfig(webRoot: string): Promise<Document> {
 	}
 	const doc = readFile(file, 'utf8').then(text => parseDocument(text, { xmlMode: true }));
 	configCache.set(file, { mtime: mtimeMs, doc });
-	doc.catch(() => configCache.delete(file));
+	doc.catch(() => { if (configCache.get(file)?.doc === doc) { configCache.delete(file); } });
 	return doc;
 }

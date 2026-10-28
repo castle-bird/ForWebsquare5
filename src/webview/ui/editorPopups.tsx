@@ -105,7 +105,7 @@ export function useEditorPopups(openEventHandler: ReturnType<typeof useEventHand
 			if (p.kind === 'submission') {
 				const { source } = p;
 				return <SubmissionEditor key={p.key} {...common} initial={p.initial} editing={!!source} busy={!!p.busy}
-					dataIds={dataCollection?.children.filter(c => isDataNode(c) && c.attrs.id).map(c => ({ id: c.attrs.id, list: c.tag.endsWith(':dataList') })) ?? []}
+					dataIds={dataCollection?.children.filter(c => isDataNode(c) && c.attrs.id).map(c => ({ id: c.attrs.id, list: isWs(c, 'dataList') })) ?? []}
 					onScript={source && ((eventName, current) => { const target = findSubmission(source); return target && openEventHandler(target, eventName, current); })}
 					onConfirm={fields => applySubmission(p.key, source, fields)} />;
 			}
@@ -117,7 +117,7 @@ export function useEditorPopups(openEventHandler: ReturnType<typeof useEventHand
 			const node = choicesNode(p);
 			return node && <ChoicesEditor key={p.key} {...common} node={node} kind={p.choices}
 				sources={dataCollection?.children.filter(c => isDataNode(c) && c.attrs.id).map(c => ({ nodeset: `data:${c.attrs.id}`,
-					fields: c.children.find(i => /:(columnInfo|keyInfo)$/.test(i.tag))?.children.flatMap(f => f.attrs.id ? [f.attrs.id] : []) ?? [] })) ?? []}
+					fields: c.children.find(i => isWs(i, 'columnInfo') || isWs(i, 'keyInfo'))?.children.flatMap(f => f.attrs.id ? [f.attrs.id] : []) ?? [] })) ?? []}
 				onApply={fields => { if (doc) { postPopupEdit({ type: 'editChoices', version: doc.version, index: node.index, popup: p.key, fields }); } }} />;
 		})}
 	</>;

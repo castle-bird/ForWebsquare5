@@ -14,7 +14,7 @@ export function DataEditor({ node, externalError, offsetIndex = 0, onApply, onCl
 	node: XmlNode; externalError?: string; offsetIndex?: number; onApply(fields: DataField[], id: string): void; onClose(): void;
 }) {
 	const map = isWs(node, 'dataMap');
-	const info = node.children.find(c => c.tag.endsWith(map ? ':keyInfo' : ':columnInfo'));
+	const info = node.children.find(c => isWs(c, map ? 'keyInfo' : 'columnInfo'));
 	const data = map ? node.children.find(c => isWs(c, 'data')) : undefined;
 	const [rows, setRows] = useState<Row[]>(() => (info?.children ?? []).map((c, uid) => ({
 		uid, ord: uid, id: c.attrs.id ?? '', name: c.attrs.name ?? '', dataType: c.attrs.dataType ?? 'text',

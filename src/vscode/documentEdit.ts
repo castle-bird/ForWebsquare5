@@ -75,6 +75,15 @@ async function serverReady(extensions: vscode.Extension<unknown>[]): Promise<{ r
 /** 기다려도 포매터가 없던 언어 → 그때 설치된 확장 수. 확장을 새로 설치하면 다시 기다린다 */
 const noFormatter = new Map<string, number>();
 
+async function retryFormatter(run: () => Thenable<vscode.TextEdit[] | undefined>): Promise<vscode.TextEdit[] | undefined> {
+	for (let i = 0; i < 10; i++) {
+		await new Promise(r => setTimeout(r, 300));
+		const edits = await run();
+		if (edits) { return edits; }
+	}
+	return undefined;
+}
+
 /**
  * 결과가 나올 때까지 0.3초마다 다시(알림에서 취소 가능). ready가 있으면 그게 끝난 뒤 5초까지, 없으면 60초까지.
  * 포매터는 ready보다 먼저 등록되기도 해서(Java: 4.6초 vs 10초) ready만 기다리지 않고 계속 물어본다
@@ -131,19 +140,13 @@ async function formatDocument(document: vscode.TextDocument, builtIn = false): P
 		await Promise.resolve(chosenExt.activate()).catch(() => undefined);
 	}
 	let edits = await run();
-	for (let i = 0; (builtIn || activating) && !edits && i < 10; i++) {
-		await new Promise(r => setTimeout(r, 300));
-		edits = await run();
-	}
+	if (!edits && (builtIn || activating)) { edits = await retryFormatter(run); }
 	// 기본 포매터를 따로 지정하지 않았어도 설치된 포매터 확장(Prettier 등)은 처음 쓸 때 켜진다 → 아직 안 켜진 것을 켜고 다시 묻는다
 	const idle = !edits && noFormatter.get(lang) !== vscode.extensions.all.length
 		? vscode.extensions.all.filter(ext => !ext.isActive && (ext.packageJSON as { categories?: string[] } | undefined)?.categories?.includes('Formatters')) : [];
 	if (idle.length) {
 		await Promise.all(idle.map(ext => Promise.resolve(ext.activate()).catch(() => undefined)));
-		for (let i = 0; !edits && i < 10; i++) {
-			await new Promise(r => setTimeout(r, 300));
-			edits = await run();
-		}
+		edits = await retryFormatter(run);
 	}
 	const extensions = !edits && noFormatter.get(lang) !== vscode.extensions.all.length ? languageExtensions(lang) : [];
 	if (extensions.length) {

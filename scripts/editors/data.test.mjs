@@ -251,7 +251,7 @@ export default async function ({ page }) {
 		console.log('Data: Submission 더블클릭 → 수정 팝업·값 채움·수정 요청 passed');
 		// 값 바인딩: Data 트리의 dataMap key를 캔버스 컴포넌트에 떨구면 그 컴포넌트 ref에 data:{map}.{key}
 		await page.evaluate(() => {
-			const text = '<html xmlns:w2="urn:test" xmlns:xf="http://www.w3.org/2002/xforms"><body><w2:input id="ipt_bind" label="B"/></body><head><xf:model><w2:dataCollection xmlns:w2="http://www.inswave.com/websquare" baseNode="map"><w2:dataMap id="dataMap1"><w2:keyInfo><w2:key id="m_bucd_from" name="from"/></w2:keyInfo></w2:dataMap></w2:dataCollection></xf:model></head></html>';
+			const text = '<html xmlns:w2="urn:test" xmlns:xf="http://www.w3.org/2002/xforms"><body><w2:input id="ipt_bind" label="B"/></body><head><xf:model><dataCollection xmlns="http://www.inswave.com/websquare" baseNode="map"><dataMap id="dataMap1"><keyInfo><key id="m_bucd_from" name="from"/></keyInfo></dataMap></dataCollection></xf:model></head></html>';
 			window.sent.length = 0;
 			window.send({ type: 'document', version: 60, text, root: window.parseXml(text), script: { text: '' } });
 		});
@@ -269,4 +269,7 @@ export default async function ({ page }) {
 		const bind = await page.evaluate(() => window.sent.find(m => m.type === 'setAttr' && m.name === 'ref'));
 		assert.equal(bind?.value, 'data:dataMap1.m_bucd_from', JSON.stringify(bind));
 		console.log('Data: key → 컴포넌트 드래그 앤 드롭 ref 바인딩 passed');
+		await page.evaluate(() => [...document.querySelectorAll('.pane .tree-row .id')].find(t => t.textContent === 'dataMap1').closest('.tree-row').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
+		await page.waitForSelector('.data-editor[open]');
+		assert.equal(await page.$eval('.data-editor tbody input', el => el.value), 'm_bucd_from', '기본 namespace의 데이터 필드를 표시');
 }

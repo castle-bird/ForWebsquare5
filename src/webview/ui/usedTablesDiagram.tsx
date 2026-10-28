@@ -1,7 +1,7 @@
 // ERD 사용 테이블의 그림(React Flow): 테이블(머리 + 컬럼 줄)·메모·그룹 틀을 그림 안에서 바로 만들고 고친다(ERD Cloud·Excalidraw처럼).
 // 내용·자리·선은 data(저장 대상)가 기준이고, 선택·잰 크기·끄는 중 자리 같은 그림 상태만 React Flow 것을 둔다
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { applyEdgeChanges, applyNodeChanges, Background, BackgroundVariant, BaseEdge, ConnectionLineType, ConnectionMode, ControlButton, Controls, EdgeLabelRenderer, getSmoothStepPath, MarkerType, MiniMap, Panel, Position, ReactFlow, ReactFlowProvider, ViewportPortal, getNodesBounds, useInternalNode, useReactFlow, useStore, type Connection, type Edge, type EdgeChange, type EdgeProps, type InternalNode, type NodeChange, type XYPosition } from '@xyflow/react';
+import { applyEdgeChanges, applyNodeChanges, Background, BackgroundVariant, BaseEdge, ConnectionLineType, ConnectionMode, ControlButton, Controls, EdgeLabelRenderer, getSmoothStepPath, MarkerType, MiniMap, Panel, Position, ReactFlow, ReactFlowProvider, ViewportPortal, getNodesBounds, useInternalNode, useReactFlow, useStore, type Connection, type Edge, type EdgeChange, type EdgeProps, type NodeChange, type XYPosition } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { clsx } from 'clsx';
 import { ARROWS, GROUP_SIZE, MEMO_SIZE, NOTE_COLORS, SHAPE_SIZE, SHAPES, type Arrow, type NoteColor, type ShapeKind, type TableColor, type TableLink, type UsedShape, type UsedTables } from '../../core/tables';
@@ -13,6 +13,7 @@ import { post } from '../store';
 import { DiagramContext, Field, NODE_TYPES, editItem, newId, editTable, fieldKey, insertColumn, mixedKeys, shapeIcon, useDiagram,
 	type FlowNode, type GroupNode, type MemoNode, type MenuItem, type ShapeNode, type TableNode } from './usedTablesNodes';
 import { Menu } from './menu';
+import { sizeOf, facingSides, inside, straightAt, alignTo } from './diagramGeometry';
 import type { Edit } from './usedTablesPane';
 
 type LinkEdge = Edge<{ link: TableLink }, 'link'>;
@@ -24,34 +25,11 @@ const MARKER = { type: MarkerType.ArrowClosed, width: 18, height: 18 };
 /** 붙여넣기 때 원래 자리에서 비키는 거리 */
 const PASTE_OFFSET = GRID * 2;
 
-const linkId = (l: TableLink) => `${l.from}>${l.to}`;
+/** 선 id: 두 끝 id를 `>`로 잇는다. 사람이 고친 JSON의 id에 `>`가 있어도 다른 선과 겹치지 않게 끝마다 인코딩한다 */
+const linkId = (l: TableLink) => `${encodeURIComponent(l.from)}>${encodeURIComponent(l.to)}`;
 const editLink = (edit: Edit, id: string, patch: Partial<TableLink>) => edit(d => ({ ...d, links: d.links.map(l => linkId(l) === id ? { ...l, ...patch } : l) }));
-const sizeOf = (n: FlowNode) => ({ w: n.measured?.width ?? n.width ?? 0, h: n.measured?.height ?? n.height ?? 0 });
-const centerOf = (n: FlowNode) => { const { w, h } = sizeOf(n); return { x: n.position.x + w / 2, y: n.position.y + h / 2 }; };
-/** 선이 붙을 점: 두 박스가 마주 보는 면(가로로 더 떨어져 있으면 좌우, 아니면 위아래). 박스를 옮기면 따라 바뀐다 */
-function facingSides(a: FlowNode, b: FlowNode): [string, string] {
-	const p = centerOf(a), q = centerOf(b), dx = q.x - p.x, dy = q.y - p.y;
-	return Math.abs(dx) >= Math.abs(dy) ? dx >= 0 ? ['r', 'l'] : ['l', 'r'] : dy >= 0 ? ['b', 't'] : ['t', 'b'];
-}
-/** 그룹 틀 안에 든 것: 테이블·메모는 가운데가, 다른 틀은 통째로 안에 있으면 */
-function inside(frame: FlowNode, n: FlowNode) {
-	const { w, h } = sizeOf(frame), x0 = frame.position.x, y0 = frame.position.y;
-	const within = (p: XYPosition) => p.x >= x0 && p.x <= x0 + w && p.y >= y0 && p.y <= y0 + h;
-	if (n.type !== 'group-frame') { return within(centerOf(n)); }
-	const s = sizeOf(n);
-	return within(n.position) && within({ x: n.position.x + s.w, y: n.position.y + s.h });
-}
 
 const FIT = { maxZoom: 1, padding: 0.2 };
-
-
-/** 곧은 선이 지날 자리: 마주 보는 두 박스가 선과 수직인 방향으로 겹치면(위아래로 이을 때 가로 범위 등) 겹친 범위의 가운데. 덜 겹치면 없음 */
-function straightAt(a: InternalNode | undefined, b: InternalNode | undefined, vertical: boolean) {
-	if (!a || !b) { return undefined; }
-	const span = (n: InternalNode) => { const p = n.internals.positionAbsolute, s = vertical ? n.measured.width ?? 0 : n.measured.height ?? 0, at = vertical ? p.x : p.y; return [at, at + s]; };
-	const [a0, a1] = span(a), [b0, b1] = span(b), lo = Math.max(a0, b0), hi = Math.min(a1, b1);
-	return hi - lo >= 16 ? Math.round((lo + hi) / 2) : undefined;
-}
 
 /** 선: 두 박스가 겹쳐 마주 보면 곧은 선, 아니면 둥글게 꺾인 직각선 + 화살표(선택) + 가운데 글자(더블클릭으로 편집) */
 function LinkLine({ id, source, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerStart, markerEnd, data, style }: EdgeProps<LinkEdge>) {
@@ -82,28 +60,6 @@ const TOOLS: { tool: Tool; label: string; icon: string | ReactNode; size: { w: n
 	{ tool: 'group', label: '그룹', icon: 'layers', size: GROUP_SIZE },
 	...SHAPES.map(([kind, label]) => ({ tool: kind, label, icon: shapeIcon(kind), size: SHAPE_SIZE })),
 ];
-
-/** 끌 때 다른 박스와 맞출 거리(화면 px) */
-const ALIGN = 6;
-/**
- * 정렬 맞춤: 끄는 박스의 왼쪽·가운데·오른쪽(위·가운데·아래)이 다른 박스의 것과 가까우면 거기에 붙인다(가로·세로 따로, 가장 가까운 것).
- * 돌려주는 at은 맞춘 선의 그림 좌표(안내선)
- */
-function alignTo(node: FlowNode, pos: XYPosition, nodes: FlowNode[], zoom: number) {
-	const { w, h } = sizeOf(node), tol = ALIGN / zoom;
-	const best = (mine: number[], theirs: number[], cur?: { d: number; at: number }) => {
-		for (const a of mine) { for (const b of theirs) { if (Math.abs(b - a) <= tol && (!cur || Math.abs(b - a) < Math.abs(cur.d))) { cur = { d: b - a, at: b }; } } }
-		return cur;
-	};
-	let x: { d: number; at: number } | undefined, y: { d: number; at: number } | undefined;
-	for (const o of nodes) {
-		const s = sizeOf(o);
-		if (o.id === node.id || !s.w) { continue; }
-		x = best([pos.x, pos.x + w / 2, pos.x + w], [o.position.x, o.position.x + s.w / 2, o.position.x + s.w], x);
-		y = best([pos.y, pos.y + h / 2, pos.y + h], [o.position.y, o.position.y + s.h / 2, o.position.y + s.h], y);
-	}
-	return { position: { x: pos.x + (x?.d ?? 0), y: pos.y + (y?.d ?? 0) }, guides: { x: x?.at, y: y?.at } };
-}
 /** 정렬 안내선(그림 좌표에 그려 확대·이동을 따라감, 굵기는 화면 1px) */
 function Guides({ x, y }: { x?: number; y?: number }) {
 	const zoom = useStore(s => s.transform[2]), far = 100000;

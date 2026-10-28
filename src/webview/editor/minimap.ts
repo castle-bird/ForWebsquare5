@@ -67,6 +67,7 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 	readonly dom: HTMLElement;
 	readonly canvas: HTMLCanvasElement;
 	readonly slider: HTMLElement;
+	readonly resize: ResizeObserver;
 	/** 미니맵 맨 위에 그린 자리(0부터 센 미니맵 줄, 소수) */
 	offset = 0;
 	/** 접기를 뺀 줄 대응(문서·접기가 바뀔 때만 다시 만든다) */
@@ -106,6 +107,8 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 		this.slider = this.dom.appendChild(Object.assign(document.createElement('div'), { className: 'cm-minimap-slider' }));
 		this.probe = Object.assign(document.createElement('span'), { className: 'cm-minimap-probe' });
 		view.dom.appendChild(this.dom);
+		this.resize = new ResizeObserver(() => { this.stale = true; this.schedule(); });
+		this.resize.observe(this.dom);
 		view.scrollDOM.addEventListener('scroll', this.onScroll, { passive: true });
 		this.dom.addEventListener('pointerdown', this.onDown);
 		this.schedule();
@@ -360,6 +363,7 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 	};
 
 	destroy() {
+		this.resize.disconnect();
 		cancelAnimationFrame(this.frame);
 		cancelIdleCallback(this.idle);
 		clearTimeout(this.timer);

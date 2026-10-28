@@ -4,7 +4,8 @@ function declarations(style: string): string[] {
 	for (let i = 0; i < style.length; i++) {
 		const c = style[i];
 		if (quote) {
-			quote = c === quote ? '' : quote;
+			if (c === '\\') { i++; }
+			else if (c === quote) { quote = ''; }
 		} else if (c === '"' || c === "'") {
 			quote = c;
 		} else if (c === '(') {
@@ -22,13 +23,15 @@ function declarations(style: string): string[] {
 
 /** props의 속성만 바꾼다(값이 undefined면 그 속성을 지움). 나머지 선언·순서·공백은 그대로 */
 export function setStyle(style: string | undefined, props: Record<string, string | undefined>): string {
-	const rest = new Map(Object.entries(props).map(([k, v]) => [k.toLowerCase(), v]));
+	const updates = new Map(Object.entries(props).map(([k, v]) => [k.toLowerCase(), v]));
+	const rest = new Map(updates);
 	const decls = declarations(style ?? '').flatMap(d => {
 		const colon = d.indexOf(':');
 		const name = d.slice(0, colon).trim().toLowerCase();
-		if (colon <= 0 || !rest.has(name)) {
+		if (colon <= 0 || !updates.has(name)) {
 			return [d];
 		}
+		if (!rest.has(name)) { return []; }
 		const value = rest.get(name);
 		rest.delete(name);
 		return value === undefined ? [] : [d.slice(0, colon + 1) + (d[colon + 1] === ' ' ? ' ' : '') + value];

@@ -291,6 +291,7 @@ statementType (STATEMENT|PREPARED) "PREPARED"
 		const { java, links, last } = await linked(dir => ({ controller: path.join(dir, 'AController.java') }));
 		const tabsOf = () => vscode.window.tabGroups.all.flatMap(g => g.tabs).filter(t => t.input instanceof vscode.TabInputText && t.input.uri.fsPath === java);
 		try {
+			await vscode.window.showTextDocument(await vscode.workspace.openTextDocument({ content: 'foreground', language: 'plaintext' }));
 			await links.reload();
 			assert.ok((await links.edit('controller', last('controller')!.version!, [{ fromLine: 0, fromCh: 0, toLine: 0, toCh: 0, insert: '// x\n' }])).ok);
 			// VS Code가 저장 안 한 파일을 여는 데 걸리는 시간(이 동작이 없는 버전이면 탭이 안 생기고, 그때는 닫을 것도 없다)

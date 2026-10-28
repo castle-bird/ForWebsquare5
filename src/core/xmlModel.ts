@@ -87,6 +87,9 @@ export const localName = (tag: string) => tag.slice(tag.indexOf(':') + 1);
 export const prefixOf = (tag: string) => tag.slice(0, tag.indexOf(':') + 1);
 export const kid = (n: XmlNode | undefined, name: string) => n?.children.find(c => localName(c.tag) === name);
 export const kids = (n: XmlNode | undefined, name: string) => n?.children.filter(c => localName(c.tag) === name) ?? [];
+/** 편집기가 보존할 수 있는 속성·자식만 있는지 */
+export const hasOnly = (n: XmlNode, children: readonly string[], attrs: readonly string[] = []) =>
+	!n.text && n.children.every(c => c.ns === n.ns && children.includes(localName(c.tag))) && Object.keys(n.attrs).every(a => attrs.includes(a));
 export const defOf = <T>(node: XmlNode, defs: readonly T[] | undefined): T | undefined => node.def === undefined ? undefined : defs?.[node.def];
 
 export const WEBSQUARE_NS = 'http://www.inswave.com/websquare';

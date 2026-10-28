@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { errorMessage } from '../core/errors';
 import { childTags, readWebConfig } from './config';
-import { exists, findDirs, serial } from './paths';
+import { exists, findDirs, isInside, serial } from './paths';
 
 interface WpackConfig {
 	destRoot: string;
@@ -19,7 +19,8 @@ export async function readWpackConfig(webRoot: string): Promise<WpackConfig | un
 	const value = (name: string) => childTags(wpack).find(e => e.name === name);
 	const common = value('common');
 	return {
-		destRoot: value('destRoot')?.attribs.value || '_wpack_',
+		// 앞의 `/`·`\`는 웹 루트 기준(`/_wpack_` = `_wpack_`). 루트만 적었으면 화면 옆
+		destRoot: (value('destRoot')?.attribs.value || '_wpack_').replace(/^[\\/]+/, '') || '.',
 		scopeCommon: common?.attribs.value === 'true' && common.attribs.name ? common.attribs.name : undefined,
 	};
 }
@@ -145,10 +146,20 @@ export function disposeWpack(): void {
 	serverQueues.clear();
 }
 
+function within(root: string, relative: string): string {
+	const file = path.resolve(root, relative);
+	if (path.isAbsolute(relative) || !isInside(file, path.resolve(root))) {
+		throw new Error('변환 경로가 웹 루트 밖입니다.');
+	}
+	return file;
+}
+
 export async function convert(exe: string, config: WpackConfig, relPath: string, xml: string): Promise<string> {
 	const tmp = await mkdtemp(path.join(os.tmpdir(), 'ws5-wpack-'));
 	try {
 		const src = path.join(tmp, 'src'), dest = path.join(tmp, 'dest');
+		within(src, relPath);
+		within(dest, relPath);
 		await mkdir(path.dirname(path.join(src, relPath)), { recursive: true });
 		await writeFile(path.join(src, relPath), xml);
 		const script = path.basename(exe).toLowerCase() === 'index.js';
@@ -186,6 +197,9 @@ export async function convert(exe: string, config: WpackConfig, relPath: string,
 }
 
 export async function publish(webRoot: string, config: WpackConfig, relPath: string, xml: string, js: string): Promise<string[]> {
+	within(webRoot, relPath);
+	const dest = within(webRoot, config.destRoot);
+	within(dest, relPath);
 	const jsRel = path.join(config.destRoot, relPath.replace(/\.xml$/i, '.js'));
 	const targets: [string, string][] = [[path.join(webRoot, jsRel), js]];
 	for (const deploy of await eclipseDeployRoots(webRoot)) {

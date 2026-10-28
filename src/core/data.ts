@@ -42,6 +42,7 @@ export function editDataFields(text: string, root: XmlNode, node: XmlNode, field
 	const rowTag = prefix + (map ? 'key' : 'column');
 	const info = node.children.find(c => c.tag === infoTag);
 	if (!info) { throw new Error(`${infoTag}가 없습니다. Source 탭에서 확인해 주세요.`); }
+	if (info.children.some(c => c.tag !== rowTag)) { throw new Error('keyInfo/columnInfo 안에 다른 내용이 있어 Source 탭에서 편집해야 합니다.'); }
 	const originals = new Map(info.children.filter(c => c.tag === rowTag).map(c => [c.index, c]));
 	const ids = new Set<string>();
 	for (const field of fields) {
@@ -130,7 +131,7 @@ export function editDataFields(text: string, root: XmlNode, node: XmlNode, field
 }
 
 /** 컬럼·키를 직접 갖는 데이터(dataMap·dataList) */
-export const isDataNode = (n: XmlNode) => /:(dataMap|dataList)$/.test(n.tag);
+export const isDataNode = (n: XmlNode) => isWs(n, 'dataMap') || isWs(n, 'dataList');
 
 /** 데이터 노드(dataList·dataMap·linkedDataList·alias…) */
 export const isDataKind = (node: XmlNode) => DATA_KINDS.some(kind => isWs(node, kind));

@@ -1,7 +1,7 @@
 // 오른쪽 아래 Outline·Data 트리 창: 트리, 펼치기·접기, 화면 점검 경고 이동, Outline 끌어 옮기기
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { DndContext, PointerSensor, useSensor, useSensors, type DragMoveEvent, type DragStartEvent } from '@dnd-kit/core';
-import { findNode, pathTo, type XmlNode } from '../../core/xmlModel';
+import { findNode, isWs, pathTo, type XmlNode } from '../../core/xmlModel';
 import { isDataNode } from '../../core/data';
 import { problemAncestors, screenProblems } from '../../core/check';
 import { useEditorStore } from '../store';
@@ -84,8 +84,8 @@ export function TreePane({ body, dataRoots, model, dataCollection, outline, data
 
 	/** Data 트리에서 끌어 캔버스에 바인딩할 값: dataList는 data:id, 컬럼·키는 data:id.컬럼 */
 	const refOf = (n: XmlNode) => {
-		if (n.attrs.id && /:dataList$/.test(n.tag)) { return `data:${n.attrs.id}`; }
-		if (!root || !n.attrs.id || !/:(key|column)$/.test(n.tag)) { return undefined; }
+		if (n.attrs.id && isWs(n, 'dataList')) { return `data:${n.attrs.id}`; }
+		if (!root || !n.attrs.id || !(isWs(n, 'key') || isWs(n, 'column'))) { return undefined; }
 		const owner = pathTo(root, n.index)?.at(-3);
 		return owner?.attrs.id && isDataNode(owner) ? `data:${owner.attrs.id}.${n.attrs.id}` : undefined;
 	};

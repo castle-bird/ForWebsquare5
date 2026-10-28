@@ -1,6 +1,6 @@
 // 화면 정보(Info 탭): head의 meta_* 속성(프로그램 ID·이름 등)과 `<w2:historyInfo>`의 개정 이력
 import { eolOf, escape, indentStep, INVALID_XML_CHAR, leadOf, lineIndent, startTagEnd, type TextEdit } from './edit';
-import { isWs, localName, nsPrefix, prefixOf, WEBSQUARE_NS, type XmlNode } from './xmlModel';
+import { hasOnly, isWs, localName, nsPrefix, prefixOf, WEBSQUARE_NS, type XmlNode } from './xmlModel';
 
 /**
  * head 속성 → 화면 이름. multiline은 여러 줄 입력, date는 달력(yyyy-MM-dd).
@@ -48,7 +48,7 @@ export function editHistory(text: string, root: XmlNode, head: XmlNode, rows: Hi
 	if (rows.some(r => HISTORY_ATTRS.some(([key]) => INVALID_XML_CHAR.test(r[key])))) { throw new Error('XML에 쓸 수 없는 문자가 들어 있습니다.'); }
 	if (JSON.stringify(readHistory(head)) === JSON.stringify(rows.map(r => Object.fromEntries(HISTORY_ATTRS.map(([key]) => [key, r[key]]))))) { return undefined; }
 	const info = historyInfo(head);
-	if (info?.children.some(c => localName(c.tag) !== 'history') || info && /<!--/.test(text.slice(info.start, info.end))) {
+	if (info && (!hasOnly(info, ['history']) || info.children.some(c => !hasOnly(c, [], HISTORY_ATTRS.map(([, attr]) => attr))) || /<!--|<\?/.test(text.slice(info.start, info.end)))) {
 		throw new Error('개정 이력에 다른 내용이 있어 Info 탭으로는 고칠 수 없습니다. Source 탭에서 고쳐 주세요.');
 	}
 	const p = info ? prefixOf(info.tag) : nsPrefix(root, WEBSQUARE_NS);
