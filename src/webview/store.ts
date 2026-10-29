@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { CodeTarget, LinkState, PanelFont, TabPosition, ToExtension, ToWebview, XmlElementSpec } from '../core/protocol';
 import { DEFAULT_LINK_EXTS, DEFAULT_LINK_TABS, type LinkTab } from '../core/links';
 import type { CodeThemeState } from '../core/codeTheme';
+import type { SiblingLink } from '../core/linkSuggest';
 import type { Blame } from '../core/blame';
 import { DEFAULT_CODE_OPTIONS, type CodeOptions } from '../core/codeOptions';
 import { findNode, isWs, isXf, localName, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
@@ -69,6 +70,10 @@ interface EditorState {
 	diagnostics: Partial<Record<CodeTarget, Extract<ToWebview, { type: 'diagnostics' }>>>;
 	/** 연결 탭 경로 입력의 파일 검색 목록(탭 id별) */
 	linkFiles: Record<string, string[]>;
+	/** 지금 화면 파일 이름(확장자 없이): 연결 탭 추천의 기준 */
+	linkScreen: string;
+	/** 같은 폴더 화면이 탭마다 연결해 둔 파일 */
+	linkSiblings: Record<string, SiblingLink[]>;
 	/** 탭마다 마지막으로 연결하지 못한 이유(입력을 바꾸면 지움) */
 	linkProblems: Record<string, string | undefined>;
 	/** 잠깐 뜨는 알림(key: 같은 글도 다시 띄움) */
@@ -157,6 +162,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	paletteFavorites: [],
 	diagnostics: {},
 	linkFiles: {},
+	linkScreen: '',
+	linkSiblings: {},
 	linkProblems: {},
 	linkExts: DEFAULT_LINK_EXTS,
 	xmlSchemas: {},
@@ -203,7 +210,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 		} else if (data.type === 'linkProblem') {
 			set({ linkProblems: { ...get().linkProblems, [data.kind]: data.message } });
 		} else if (data.type === 'files') {
-			set({ linkFiles: { ...get().linkFiles, [data.kind]: data.files } });
+			set({ linkFiles: { ...get().linkFiles, [data.kind]: data.files }, linkScreen: data.screen ?? '', linkSiblings: { ...get().linkSiblings, [data.kind]: data.siblings ?? [] } });
 		} else if (data.type === 'gitBase') {
 			set({ gitBases: { ...get().gitBases, [data.target]: data.text } });
 		} else if (data.type === 'diagnostics') {

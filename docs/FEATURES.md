@@ -75,6 +75,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 화면 탭에서 Java·XML·SQL 등 연결 파일을 열어 편집합니다. 탭 목록과 순서는 직접 바꿀 수 있고, 탭 줄 앞쪽 화살표로 탭 줄을 위·아래로 옮길 수 있습니다(기본 위).
 
 - 작업 폴더 안 파일을 이름으로 검색해 연결
+- 연결 전 탭에는 화면 파일 이름의 도메인(`userList01.xml` → `userList`)으로 시작하는 파일이 역할별(Controller·Service·ServiceImpl·Mapper·MyBatis·Validator·VO)로 최대 10개 추천되고, 그 탭에 맞는 역할이 위에 옵니다. 눌러서 연결합니다. 그 아래에는 같은 폴더의 다른 화면이 같은 탭에 연결해 둔 파일이 많이 쓴 순으로 최대 5개 추천됩니다(이 PC에서 연결해 둔 것만)
 - VS Code에 설치된 언어 확장(Java 등)의 자동완성·포맷·마우스 오버 설명(Javadoc)·정의로 이동(Ctrl+클릭·F12)·파라미터 힌트 사용
 - Java import 목록은 IntelliJ처럼 파일을 열면 `import …` 한 줄로 접혀 있고, 누르거나 왼쪽 접기 표시로 펼칩니다
 - Java 탭은 코드를 붙여 넣거나 포맷하면 빠진 import를 자동으로 넣습니다(Language Support for Java 사용). 안 쓰는 import는 지우지 않고, 후보가 여럿인 클래스는 건너뜁니다

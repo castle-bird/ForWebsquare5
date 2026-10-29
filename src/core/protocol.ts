@@ -8,6 +8,7 @@ import type { UsedTables } from './tables';
 import type { Blame } from './blame';
 import type { InsertPosition, DropPosition } from './paste';
 import type { LinkTab, LinkTarget } from './links';
+import type { SiblingLink } from './linkSuggest';
 import type { CodeThemeState, ThemeOverlay } from './codeTheme';
 import type { CodeOptions } from './codeOptions';
 
@@ -45,7 +46,7 @@ export type ToWebview =
 	| { type: 'signatureResult'; id: number; signature?: SignatureInfo } // 파라미터 힌트(없으면 닫음)
 	| { type: 'hoverResult'; id: number; text?: string } // 연결 탭 마우스 올림 설명(언어 확장의 마크다운, 없으면 text 없음)
 	| { type: 'reveal'; target: CodeTarget; line: number; ch: number; endLine?: number; endCh?: number } // 그 편집기 탭을 보이고 그 범위를 선택·스크롤(정의로 이동, 끝이 없으면 그 자리 단어)
-	| { type: 'files'; kind: string; files: string[] } // 연결할 수 있는 파일(작업 폴더 기준 경로)
+	| { type: 'files'; kind: string; files: string[]; screen?: string; siblings?: SiblingLink[] } // 연결할 수 있는 파일(작업 폴더 기준 경로)
 	| { type: 'linkProblem'; kind: string; message: string } // 연결하지 못한 이유(알림을 꺼 둬도 경로 입력 화면에 보인다)
 	| { type: 'toast'; message: string } // 편집기 오른쪽 아래 잠깐 뜨는 알림(VS Code 알림을 꺼 둬도 보임)
 	// ERD 사용 테이블. folder 없음 = 저장 폴더를 아직 안 고름. external: 바깥(AI·사람·공유)에서 JSON을 고쳐 다시 읽음(되돌리기 기록은 이어 감)

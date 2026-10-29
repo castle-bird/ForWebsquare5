@@ -171,7 +171,7 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .code-host { flex: 1; min-height: 0; }
 .code-banner { padding: 6px 10px; color: var(--vscode-editorWarning-foreground); background: var(--vscode-editorWidget-background); }
 .code-banner button { margin-left: 8px; cursor: pointer; }
-.link-picker { height: 100%; display: flex; align-items: center; justify-content: center; }
+.link-picker { height: 100%; box-sizing: border-box; display: flex; align-items: flex-start; justify-content: center; overflow: auto; padding: min(12vh, 80px) 16px 16px; }
 .link-picker form { width: min(560px, 100%); }
 .link-picker h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
 .link-picker-hint { margin: 0 0 10px; font-size: 12px; opacity: .7; }
@@ -182,6 +182,23 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 }
 .link-picker-row input::placeholder { color: var(--vscode-input-placeholderForeground); }
 .link-picker-row input:focus { outline: none; border-color: var(--vscode-focusBorder); }
+/* 추천 파일: 화면 이름(도메인)으로 시작하는 파일. 이 탭에 맞는 역할은 왼쪽에 강조 막대 */
+.link-suggest { margin-top: 16px; }
+.link-suggest h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--vscode-descriptionForeground); }
+.link-suggest ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.link-suggest-item {
+	position: relative; display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; padding: 5px 10px 5px 12px; text-align: left;
+	font-size: 12px; white-space: nowrap; overflow: hidden; cursor: pointer; background: none; border: 1px solid transparent; border-radius: var(--ctl-radius);
+	transition: background-color .12s ease, border-color .12s ease;
+}
+.link-suggest-item:hover, .link-suggest-item:focus-visible { outline: none; background: var(--vscode-list-hoverBackground); border-color: var(--vscode-panel-border); }
+.link-suggest-item.fit::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 1px; background: var(--vscode-focusBorder); }
+.link-suggest-item .codicon { flex: none; opacity: .7; }
+.link-suggest-item .file-name { flex: none; font-weight: 600; }
+.link-suggest-item .file-dir { flex: 1; min-width: 0; opacity: .6; overflow: hidden; text-overflow: ellipsis; }
+.link-suggest-role { flex: none; padding: 0 7px; border-radius: 9px; font-size: 11px; line-height: 18px; color: var(--vscode-badge-foreground); background: var(--vscode-badge-background); }
+.link-suggest-item.fit .link-suggest-role { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.link-suggest-none { margin: 0; font-size: 12px; opacity: .65; }
 .file-input { position: relative; flex: 1; min-width: 0; display: flex; }
 .file-suggest {
 	position: absolute; z-index: 10; top: calc(100% + 2px); left: 0; right: 0; max-height: 320px; overflow-y: auto; margin: 0; padding: 4px; list-style: none;

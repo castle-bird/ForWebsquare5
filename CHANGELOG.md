@@ -1,5 +1,9 @@
 # 변경 내역
 
+## 1.11.0 (2026-10-29)
+
+- 연결 탭(Controller·Service·Mapper·MyBatis 등)의 경로 입력칸 아래에 추천 파일을 보여 줍니다. 화면 파일 이름의 도메인(`userList01.xml` → `userList`)으로 시작하는 파일을 `UserListController`·`UserListService`·`UserListServiceImpl`·`UserListMapper`·`userList_mapper.xml`·`UserListValidator`처럼 역할별로 최대 10개 나열하고, 그 탭에 맞는 역할이 위에 옵니다. 누르면 바로 연결됩니다. 옆 화면(`userList02`)·다른 도메인·빌드 폴더(`target` 등)의 파일은 뺍니다. 그 아래 "같은 폴더 XML에서 추천"에는 같은 폴더의 다른 화면이 이 탭에 연결해 둔 파일을 많이 쓴 순으로 최대 5개 보여 줍니다(이 PC에서 연결해 둔 것만, 화면 수 표시)
+
 ## 1.10.0 (2026-10-29)
 
 - Property: `class` 값을 칠 때 화면에 적용된 CSS의 클래스가 목록으로 뜹니다. 마지막 낱말로 거르고 앞에 쓴 클래스는 뺍니다

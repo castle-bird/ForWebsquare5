@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
+import { clsx } from 'clsx';
 import { cleanPath, linkTarget, type LinkTab } from '../../core/links';
+import { screenDomain, suggestLinks, type LinkSuggestion } from '../../core/linkSuggest';
 import type { LinkState, ToExtension } from '../../core/protocol';
 import { CodeEditor } from '../editor/codeEditor';
 import { linkLanguage } from '../editor/linkLanguages';
 import { isModKey, isUndoRedo } from '../keys';
 import { post, useEditorStore } from '../store';
 import { Menu } from './menu';
+import { EmptyState } from './emptyState';
 import { FileInput } from './fileInput';
 import type { TabHint } from './tabs';
 
@@ -79,11 +82,30 @@ function LinkedFile({ tab, state, active }: { tab: LinkTab; state: LinkState; ac
 		: <LinkPicker tab={tab} missing={state.path} />;
 }
 
+const fileName = (file: string) => file.split(/[\\/]/).pop() ?? file;
+
+/** 추천 한 줄: 누르면 그 탭에 연결. badge는 오른쪽 배지(역할·사용한 화면 수) */
+function SuggestItem({ kind, file, name, fit, badge }: Pick<LinkSuggestion, 'file' | 'name' | 'fit'> & { kind: string; badge: string }) {
+	return <li>
+		<button type="button" className={clsx('link-suggest-item', { fit })} title={file} onClick={() => post({ type: 'link', kind, path: file })}>
+			<span className="codicon codicon-file-code" aria-hidden="true" />
+			<span className="file-name">{name}</span>
+			<span className="file-dir">{file.slice(0, file.length - name.length).replace(/[\\/]$/, '')}</span>
+			<span className="link-suggest-role">{badge}</span>
+		</button>
+	</li>;
+}
+
 function LinkPicker({ tab, missing }: { tab: LinkTab; missing?: string }) {
 	const [value, setValue] = useState('');
 	const files = useEditorStore(s => s.linkFiles[tab.id]);
 	const exts = useEditorStore(s => s.linkExts);
 	const problem = useEditorStore(s => s.linkProblems[tab.id]);
+	const screen = useEditorStore(s => s.linkScreen);
+	const siblings = useEditorStore(s => s.linkSiblings[tab.id]);
+	const suggestions = useMemo(() => files && screen ? suggestLinks(screen, tab, files) : [], [files, screen, tab]);
+	// 열자마자 받아 둔다: 입력칸을 누르기 전에도 추천이 보이게
+	useEffect(() => { post({ type: 'findFiles', kind: tab.id }); }, [tab.id]);
 	const change = (next: string) => {
 		setValue(next);
 		useEditorStore.setState(s => ({ linkProblems: { ...s.linkProblems, [tab.id]: undefined } }));
@@ -108,6 +130,16 @@ function LinkPicker({ tab, missing }: { tab: LinkTab; missing?: string }) {
 				<button type="submit" className="btn btn-primary" disabled={!cleanPath(value)}>연결</button>
 				<button type="button" className="btn btn-secondary" onClick={() => post({ type: 'link', kind: tab.id })}>찾아보기…</button>
 			</div>
+			{!files && <section className="link-suggest" aria-label="추천 파일 찾는 중"><EmptyState compact kind="loading">추천 파일 찾는 중…</EmptyState></section>}
+			{files && screen && <section className="link-suggest" aria-label="이름으로 추천한 파일">
+				<h4><span className="codicon codicon-lightbulb" aria-hidden="true" />{screenDomain(screen)} 이름으로 추천</h4>
+				{suggestions.length ? <ul>{suggestions.map(s => <SuggestItem key={s.file} kind={tab.id} {...s} badge={s.role} />)}</ul>
+					: <p className="link-suggest-none">{screenDomain(screen)}(으)로 시작하는 파일이 없습니다.</p>}
+			</section>}
+			{!!siblings?.length && <section className="link-suggest" aria-label="같은 폴더 화면에서 추천한 파일">
+				<h4><span className="codicon codicon-folder-opened" aria-hidden="true" />같은 폴더 XML에서 추천</h4>
+				<ul>{siblings.map(s => <SuggestItem key={s.file} kind={tab.id} file={s.file} name={fileName(s.file)} fit={false} badge={`화면 ${s.count}개`} />)}</ul>
+			</section>}
 		</form>
 	</div>;
 }

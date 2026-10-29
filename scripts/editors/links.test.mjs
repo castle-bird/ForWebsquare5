@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 
 export default async function ({ page, modifiedKey, reset, checkIndentUnit, content, clickTab, lastSent }) {
 	// 연결 탭(Controller·Service·Mapper·Mybatis): 경로 입력 → 편집기, 파일별 저장·Undo, 우클릭 메뉴, 탭 끌어 순서 바꾸기
@@ -11,6 +13,8 @@ export default async function ({ page, modifiedKey, reset, checkIndentUnit, cont
 	await page.evaluate(() => ['controller', 'service', 'mapper', 'mybatis'].forEach(kind => window.send({ type: 'linked', kind })));
 	await clickTab('Controller');
 	await page.waitForSelector('.tab-body:not([hidden]) .link-picker input');
+	// 파일 목록을 받기 전에는 추천 자리에 로딩 표시(목록이 갑자기 생기지 않게)
+	assert.equal(await page.$eval('.tab-body:not([hidden]) .link-suggest .empty-loading', e => e.textContent), '추천 파일 찾는 중…');
 	assert.equal(await page.$eval('.tab-body:not([hidden]) .link-picker button[type="submit"]', b => b.disabled), true, '빈 경로는 연결 버튼 비활성');
 	await page.type('.tab-body:not([hidden]) .link-picker input', '"src/A.java"');
 	await page.keyboard.press('Enter');
@@ -342,6 +346,37 @@ export default async function ({ page, modifiedKey, reset, checkIndentUnit, cont
 	await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .link-picker .warning'));
 	await page.keyboard.press('Escape');
 	console.log('Link: 경로 입력 파일 검색(퍼지·키보드·클릭) passed');
+	// 추천: 화면 이름(userList01)의 도메인으로 시작하는 파일을 이 탭에 맞는 역할부터 보여 주고, 눌러서 연결
+	await page.evaluate(() => {
+		window.mockScreen = 'userList01';
+		window.mockFiles = ['src/main/java/all/UserListController.java', 'src/main/java/all/UserListService.java', 'src/main/java/all/UserListServiceImpl.java', 'src/main/java/all/UserListMapper.java',
+			'src/main/java/all/UserListValidator.java', 'src/main/resources/mapper/userList_mapper.xml', 'src/main/webapp/ui/userList02.xml', 'src/main/java/all/OtherController.java'];
+		window.sent.length = 0;
+		document.activeElement?.blur();
+	});
+	await page.click('.tab-body:not([hidden]) .link-picker input');
+	await page.waitForSelector('.tab-body:not([hidden]) .link-suggest-item');
+	assert.deepEqual(await page.$$eval('.tab-body:not([hidden]) .link-suggest-item', bs => bs.map(b => [b.querySelector('.file-name').textContent, b.querySelector('.link-suggest-role').textContent, b.classList.contains('fit')])), [
+		['UserListService.java', 'Service', true], ['UserListServiceImpl.java', 'ServiceImpl', true], ['UserListController.java', 'Controller', false],
+		['UserListMapper.java', 'Mapper', false], ['userList_mapper.xml', 'MyBatis', false], ['UserListValidator.java', 'Validator', false]], 'Service 탭: 맞는 역할이 먼저, 옆 화면·다른 도메인은 없음');
+	assert.equal(await page.$eval('.tab-body:not([hidden]) .link-suggest h4', h => h.textContent), 'userList 이름으로 추천');
+	await page.screenshot({ path: path.join(tmpdir(), 'ws5-link-suggest.png') });
+	await page.click('.tab-body:not([hidden]) .link-suggest-item');
+	assert.deepEqual(await lastSent('link'), { type: 'link', kind: 'service', path: 'src/main/java/all/UserListService.java' }, '추천을 눌러 연결');
+	await page.evaluate(() => { window.mockFiles = ['x/Other.java']; document.activeElement?.blur(); });
+	await page.click('.tab-body:not([hidden]) .link-picker input');
+	await page.waitForFunction(() => document.querySelector('.tab-body:not([hidden]) .link-suggest-none')?.textContent === 'userList(으)로 시작하는 파일이 없습니다.');
+	// 같은 폴더 XML에서 추천: 다른 화면이 이 탭에 연결해 둔 파일을 이름 추천 아래에 따로
+	await page.evaluate(() => { window.mockFiles = ['src/main/java/all/UserListService.java', 'src/main/java/x/CommonService.java']; window.mockSiblings = [{ file: 'src/main/java/x/CommonService.java', count: 3 }]; document.activeElement?.blur(); });
+	await page.click('.tab-body:not([hidden]) .link-picker input');
+	await page.waitForFunction(() => document.querySelectorAll('.tab-body:not([hidden]) .link-suggest').length === 2);
+	assert.deepEqual(await page.$$eval('.tab-body:not([hidden]) .link-suggest h4', hs => hs.map(h => h.textContent)), ['userList 이름으로 추천', '같은 폴더 XML에서 추천']);
+	assert.deepEqual(await page.$$eval('.tab-body:not([hidden]) .link-suggest:nth-of-type(2) .link-suggest-item', bs => bs.map(b => [b.querySelector('.file-name').textContent, b.querySelector('.link-suggest-role').textContent])), [['CommonService.java', '화면 3개']]);
+	await page.screenshot({ path: path.join(tmpdir(), 'ws5-link-suggest2.png') });
+	await page.click('.tab-body:not([hidden]) .link-suggest:nth-of-type(2) .link-suggest-item');
+	assert.deepEqual(await lastSent('link'), { type: 'link', kind: 'service', path: 'src/main/java/x/CommonService.java' }, '같은 폴더 추천을 눌러 연결');
+	await page.evaluate(() => { window.mockScreen = undefined; window.mockSiblings = undefined; });
+	console.log('Link: 화면 이름 기준 추천 passed');
 	// MyBatis: 매퍼 태그·속성 자동완성, XML 문법 오류 밑줄
 	await page.evaluate(() => window.send({ type: 'linked', kind: 'mybatis', path: 'res/a.xml', text: '<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "mybatis-3-mapper.dtd">\n<mapper namespace="a">\n</mapper>', version: 3 }));
 	await clickTab('Mybatis');

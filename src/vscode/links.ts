@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { cleanPath, linkIdOf, linkProblem, linkTarget, type LinkTab } from '../core/links';
 import { errorMessage } from '../core/errors';
+import { SIBLING_LIMIT, siblingLinks } from '../core/linkSuggest';
 import { serial } from '../project/paths';
 import type { CodeChange, CodeTarget, ToExtension, ToWebview } from '../core/protocol';
 import { closeAutoTabs, isOpenByUser, registerAutoTabs } from './autoTabs';
@@ -484,7 +485,11 @@ export class LinkedFiles {
 		const exclude = globs.length ? `{${globs.join(',')}}` : undefined;
 		const found = await Promise.all(linkExts().map(ext => vscode.workspace.findFiles(`**/*${ext}`, exclude, MAX_FILES_PER_EXT)));
 		const folder = this.folder?.fsPath;
-		await this.post({ type: 'files', kind, files: found.flat().map(u => this.shown(u.fsPath, folder)).sort() });
+		const files = found.flat().map(u => this.shown(u.fsPath, folder)).sort(), shown = new Set(files);
+		// 같은 폴더 화면이 연결한 파일 중 지금 찾을 수 있는 것만
+		const siblings = siblingLinks(this.owner.uri.fsPath, workspaceState.keys().filter(k => k.startsWith(KEY)).map(k => [k.slice(KEY.length), workspaceState.get<Saved>(k)?.[kind]] as const))
+			.map(s => ({ ...s, file: this.shown(s.file, folder) })).filter(s => shown.has(s.file)).slice(0, SIBLING_LIMIT);
+		await this.post({ type: 'files', kind, files, screen: path.basename(this.owner.uri.fsPath, path.extname(this.owner.uri.fsPath)), siblings });
 	}
 
 	/** path 없으면 파일 선택 창. 상대 경로는 작업 폴더 기준 */
