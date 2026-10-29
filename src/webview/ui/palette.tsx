@@ -4,6 +4,7 @@ import { insertPositions, insertTarget, INSERT_POSITION_LABELS, matchPalette, pa
 import { pathTo } from '../../core/xmlModel';
 import type { InsertPosition } from '../../core/paste';
 import { Menu } from './menu';
+import { EmptyState } from './emptyState';
 import { COMPONENT_ICONS } from '../../core/icons';
 import { post, useEditorStore } from '../store';
 import { useRowDrag } from './rowDrag';
@@ -81,10 +82,10 @@ export function PalettePane() {
 		<div className="palette-list">
 			<section className="palette-favorites" aria-label="즐겨찾기">
 				<h2>즐겨찾기</h2>
-				{favorites.length ? favorites.map(def => row(def, true)) : <p className="empty">{query ? '검색 결과 없음' : '별을 눌러 추가'}</p>}
+				{favorites.length ? favorites.map(def => row(def, true)) : <EmptyState compact kind={query ? 'search' : 'empty'} icon={query ? undefined : 'star-empty'}>{query ? '검색 결과 없음' : '별을 눌러 추가'}</EmptyState>}
 			</section>
 			{definitions?.error && <p className="warning">{definitions.error}</p>}
-			{!groups.length && <p className="empty">{query ? '검색 결과 없음' : '넣을 수 있는 컴포넌트 없음'}</p>}
+			{!groups.length && <EmptyState kind={query ? 'search' : 'empty'} hint={query ? '다른 이름·태그·묶음으로 찾아 보세요' : undefined}>{query ? '검색 결과 없음' : '넣을 수 있는 컴포넌트 없음'}</EmptyState>}
 			{groups.map(group => {
 				const open = !!query.trim() || expanded.has(group);
 				return <section key={group}>

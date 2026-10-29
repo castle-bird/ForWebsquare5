@@ -137,7 +137,8 @@ export function GridCellsEditor({ grid, defs, externalError, offsetIndex = 0, on
 			if (!d || !mine) { return; }
 			d.x = e.clientX; d.y = e.clientY;
 			const p = cellUnder(d), box = bodyBox(d.wrap);
-			const outside = d.x < box.left || d.x > box.right || d.y < box.top || d.y > box.bottom;
+			// 칸 묶음(tbody)을 벗어나면 경계 1px 위(스크롤바 등)여도 밖: 안 잡으면 그다음 움직임을 못 받아 끌기가 끊긴다
+			const outside = e.type === 'pointerleave' || d.x < box.left || d.x > box.right || d.y < box.top || d.y > box.bottom;
 			// 다른 칸이나 보이는 영역 밖으로 가면 범위: 표 밖에서도 계속 받고 가장자리에서는 굴린다(한 칸 안 글자 고르기는 그대로)
 			if (!multi && !outside && (!p || same(mine.anchor, p))) { return; }
 			if (p && !same(mine.focus, p)) { toRange(e, p); }

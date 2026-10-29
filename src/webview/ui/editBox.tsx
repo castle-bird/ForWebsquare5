@@ -7,10 +7,11 @@ import { ComboInput } from './combo';
  * 위에 header, 아래에 status(바꾼 개수 등)·취소·적용 버튼을 붙인다.
  * changed: footer 값이 바뀜 → 글자가 그대로여도 닫을 때 onCommit
  * suggestions: 한 줄 입력에 고를 값 목록(직접 입력도 됨). 목록에서 고르면 바로 반영
+ * words: 값이 공백으로 나눈 여러 낱말(class). 목록에서 고른 낱말만 입력칸에 넣고 이어서 입력(Enter·포커스 이동으로 반영)
  */
-export function EditBox({ value, onCommit, onClose, className, style, multiline = true, initialHeight, header, footer, status, changed = false, suggestions }: {
+export function EditBox({ value, onCommit, onClose, className, style, multiline = true, initialHeight, header, footer, status, changed = false, suggestions, words }: {
 	value: string; onCommit(v: string): void; onClose(): void; className?: string; style?: CSSProperties; multiline?: boolean; initialHeight?: number;
-	header?: ReactNode; footer?: ReactNode; status?: ReactNode; changed?: boolean; suggestions?: string[];
+	header?: ReactNode; footer?: ReactNode; status?: ReactNode; changed?: boolean; suggestions?: string[]; words?: boolean;
 }) {
 	const [draft, setDraft] = useState(value);
 	// Enter로 닫힐 때 뒤따르는 blur가 한 번 더 반영하지 않게
@@ -62,7 +63,7 @@ export function EditBox({ value, onCommit, onClose, className, style, multiline 
 	if (suggestions && !multiline) {
 		// 입력칸 + 목록(열자마자 전체 목록). 목록에서 고르면 바로 반영
 		const { onChange: _, value: __, ...input } = common;
-		return <ComboInput type="text" {...input} value={draft} options={suggestions} onValue={setDraft} onPick={v => { setDraft(v); close(true, v); }} />;
+		return <ComboInput type="text" {...input} value={draft} options={suggestions} words={words} onValue={setDraft} onPick={v => { setDraft(v); if (!words) { close(true, v); } }} />;
 	}
 	if (!footer) {
 		return multiline ? <textarea ref={textareaRef} {...common} /> : <input type="text" {...common} />;

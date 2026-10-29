@@ -28,6 +28,14 @@ export default async function ({ clickTab, page, lastSent }) {
 	], '팔레트·화살표는 정렬 탭에 포함되지 않는다');
 	await page.click('.tab-palette');
 	await page.waitForSelector('.palette-pane');
+	// 패널 머리 통일: Palette 머리는 탭 줄과 같은 높이·아래 선, 글자는 탭 글자와 같은 왼쪽 18px, 검색칸은 28px
+	assert.deepEqual(await page.evaluate(() => {
+		const head = document.querySelector('.palette-pane header'), bar = document.querySelector('.right-panel-content .tab-bar'), tab = bar.querySelector('[role="tab"]');
+		const text = document.createRange(); text.selectNodeContents(head.firstElementChild);
+		const first = document.createRange(); first.selectNodeContents(tab);
+		return { head: head.getBoundingClientRect().height, bar: bar.getBoundingClientRect().height, line: getComputedStyle(head).borderBottomWidth, textLeft: Math.round(text.getBoundingClientRect().left - head.getBoundingClientRect().left), tabTextLeft: Math.round(first.getBoundingClientRect().left - bar.getBoundingClientRect().left), search: document.querySelector('.palette-pane .palette-search input').getBoundingClientRect().height };
+	}), { head: 33, bar: 33, line: '1px', textLeft: 18, tabTextLeft: 18 + 0, search: 28 }, '패널 머리 높이·선·글자 시작이 탭 줄과 같음');
+	assert.deepEqual(await page.$eval('.palette-pane .palette-search input', i => { const s = getComputedStyle(i, '::placeholder'); return [s.fontFamily.includes('monospace'), s.fontSize, getComputedStyle(i).textOverflow]; }), [true, '12px', 'ellipsis'], '팔레트 검색 안내 문구도 코딩 글꼴 12px');
 	assert.deepEqual(await page.$$eval('.palette-category', bs => bs.map(b => b.textContent)), ['Chart', 'Container', 'Forms', 'Frame', 'Grid', 'HTML5', 'Navigation', 'Others']);
 	assert.equal(await page.$('[data-component="hidden-component"]'), null, '숨긴 컴포넌트 제외');
 	await page.evaluate(() => [...document.querySelectorAll('.palette-category')].find(b => b.textContent === 'Forms').click());

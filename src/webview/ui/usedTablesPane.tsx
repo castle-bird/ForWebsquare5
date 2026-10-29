@@ -6,6 +6,7 @@ import type { ToWebview } from '../../core/protocol';
 import { post } from '../store';
 import { isUndoRedo } from '../keys';
 import { UsedTablesDiagram } from './usedTablesDiagram';
+import { EmptyState } from './emptyState';
 
 type Status = Omit<Extract<ToWebview, { type: 'usedTables' }>, 'type'>;
 export type Edit = (next: UsedTables | ((current: UsedTables) => UsedTables)) => void;
@@ -82,7 +83,7 @@ function useUsedTables() {
 export function UsedTablesPane() {
 	const { status, data, change, undo, redo, canUndo, canRedo } = useUsedTables();
 
-	if (!status) { return <p className="empty">불러오는 중…</p>; }
+	if (!status) { return <EmptyState kind="loading">불러오는 중…</EmptyState>; }
 	if (!status.folder) {
 		return <div className="used-tables-setup">
 			<h3>사용 테이블 저장 위치</h3>
@@ -93,7 +94,7 @@ export function UsedTablesPane() {
 			</div>
 		</div>;
 	}
-	if (!data) { return <p className="empty">불러오는 중…</p>; }
+	if (!data) { return <EmptyState kind="loading">불러오는 중…</EmptyState>; }
 
 	return <div className="used-tables"
 		// 입력칸의 Ctrl+Z·Y는 입력칸 것만: VS Code로 넘어가면 화면 XML 문서가 되돌려진다

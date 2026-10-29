@@ -8,6 +8,12 @@ body {
 button { font: inherit; color: inherit; }
 /* 입력 상자 높이 조절 손잡이는 어디서도 보이지 않게 */
 textarea { resize: none; }
+/* 스크롤바: VS Code 목록·편집기처럼 10px 막대, 테마 scrollbarSlider 색(캔버스는 canvas.css에서 따로) */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, .4)); }
+::-webkit-scrollbar-thumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, .7)); }
+::-webkit-scrollbar-thumb:active { background: var(--vscode-scrollbarSlider-activeBackground, rgba(191, 191, 191, .4)); }
 
 /*
  * 기본 입력 컴포넌트(웹뷰 전체, 캔버스 제외). :where로 우선순위 0 → 표 안 입력칸·검색칸처럼 따로 꾸민 곳은 그대로.
@@ -119,6 +125,8 @@ input[type="search"]::-webkit-search-cancel-button:hover { opacity: 1; }
 .tab-actions { margin-left: auto; display: flex; align-items: center; padding-right: 4px; }
 button.icon { background: none; border: none; padding: 3px; border-radius: 4px; cursor: pointer; opacity: .8; }
 button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground); }
+/* hover·선택 전환: 배경·글자색·투명도를 120ms에 부드럽게(설정 메뉴의 애니메이션 끔이면 없음, 아래 [data-animation="off"] 규칙) */
+:is(.tree-row, button.icon, .context-menu button, .palette-list button, .tab-bar button) { transition: background-color .12s ease, color .12s ease, opacity .12s ease; }
 .tab-body { flex: 1; overflow: auto; min-height: 0; }
 .canvas-frame > .tab-body { padding: 12px; }
 .canvas-frame > .tab-body:has(.design-layout) { padding: 0; overflow: hidden; }
@@ -129,9 +137,12 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .tab-bar .tab-run:disabled { opacity: .35; cursor: default; }
 .tab-bar .tab-palette:disabled { opacity: .35; cursor: default; }
 .palette-pane { display: flex; flex-direction: column; height: 100%; background: var(--vscode-sideBar-background); }
-.palette-pane header { padding: 10px 12px; font-weight: 600; font-size: 12px; }
+/* 패널 머리: 탭 줄(.tab-bar)과 같은 33px(선 포함)·아래 선, 글자 시작도 탭 글자(여백 6 + 12)와 같은 18px → 옆 패널과 가로선이 이어진다 */
+.palette-pane header { box-sizing: border-box; height: 33px; display: flex; align-items: center; margin-bottom: 5px; padding: 0 18px; font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--vscode-panel-border); }
 .palette-search { padding: 0 8px 8px; }
 .palette-search input { width: 100%; }
+/* Outline·Data 트리 검색칸: 팔레트 검색칸과 같은 모양(트리가 스크롤돼도 위에 남는다. 패널 안쪽 여백 5px을 빼 좌우 8px을 맞춘다) */
+.palette-search.tree-search { position: sticky; top: calc(-1 * var(--pad, 0px)); z-index: 3; padding: 0 3px 8px; background: var(--vscode-sideBar-background); }
 .palette-list { flex: 1; overflow: auto; min-height: 0; padding: 0 4px 8px; }
 .palette-list button { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left; border: none; background: none; padding: 6px 8px; cursor: pointer; border-radius: 3px; }
 .palette-list button:hover { background: var(--vscode-list-hoverBackground); }
@@ -291,7 +302,13 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .ws-signature > .md { margin-top: 6px; padding-top: 6px; border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent); }
 .ws-doc-meta { margin-top: 10px; padding-top: 6px; border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent); font-size: .9em; opacity: .6; }
 .ws-doc-sample { margin: 4px 0; padding: 8px; border-radius: 4px; overflow-x: auto; white-space: pre; font-family: var(--vscode-editor-font-family); font-size: .9em; background: var(--vscode-textCodeBlock-background); }
-.empty { opacity: .6; padding: 0 8px; }
+/* 빈 상태 안내(ui/emptyState.tsx): 가운데 아이콘 + 한 줄 문구 + 보조 문구. compact는 한 줄 */
+.empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 24px 12px; text-align: center; color: var(--vscode-descriptionForeground); }
+.empty .codicon { font-size: 24px; opacity: .6; }
+.empty-text { font-size: 12px; color: var(--vscode-foreground); opacity: .85; }
+.empty-hint { font-size: 11px; opacity: .75; }
+.empty.compact { flex-direction: row; justify-content: flex-start; gap: 6px; padding: 4px 8px; text-align: left; }
+.empty.compact .codicon { font-size: 14px; }
 .error { color: var(--vscode-errorForeground); white-space: pre-wrap; }
 
 .btn {
@@ -334,11 +351,11 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .right-panel-content { --panel-font-family: var(--vscode-editor-font-family, monospace); }
 .right-panel-content[data-panel-font="ui"] { --panel-font-family: var(--vscode-font-family, sans-serif); }
 
-.kv { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.kv { width: 100%; border-collapse: collapse; table-layout: fixed; --kv-line: color-mix(in srgb, var(--vscode-panel-border) 55%, transparent); }
 .kv .col-key { width: var(--key-width, 40%); }
 .kv td { font-family: var(--panel-font-family, var(--vscode-editor-font-family, monospace)); }
 .kv th, .kv td {
-	text-align: left; padding: 1px 6px; border-bottom: 1px solid var(--vscode-panel-border);
+	text-align: left; padding: 1px 6px; border-bottom: 1px solid var(--kv-line);
 	overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 18px;
 }
 /* sticky top은 스크롤 영역의 padding 안쪽 기준이라 0이면 위에 여백만큼 틈이 생겨 뒤 글자가 비친다 → 여백만큼 올린다 */
@@ -347,29 +364,28 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 	text-transform: uppercase; letter-spacing: 0.5px; background: var(--vscode-sideBar-background);
 }
 /* opacity를 준 Key 칸은 따로 쌓여서 sticky 머리보다 위에 그려진다 → 머리를 올린다 (손잡이는 그 위) */
-.kv thead th { z-index: 1; padding: 2px 6px; border-bottom: 1px solid var(--vscode-panel-border); }
-.kv td:first-child { border-right: 1px solid var(--vscode-panel-border); opacity: .85; }
+.kv thead th { z-index: 1; padding: 2px 6px; border-bottom: 1px solid var(--vscode-panel-border); color: var(--vscode-descriptionForeground); }
+.kv td:first-child { border-right: 1px solid var(--kv-line); opacity: .85; }
+.kv tr { transition: background-color .12s ease; }
 .kv tr:not(.category):hover { background: var(--vscode-list-hoverBackground); }
 .kv-wrap { position: relative; }
 .kv thead th:first-child { border-right: 1px solid var(--vscode-panel-border); }
 .kv-wrap > .col-resizer { position: absolute; top: 0; bottom: 0; left: calc(var(--key-width, 40%) - 2px); width: 4px; cursor: col-resize; z-index: 2; }
 .kv-wrap > .col-resizer:hover, .kv-wrap > .col-resizer:active { background: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder)); }
 
+/* Property·Event 검색칸: 팔레트·Outline·Data 검색칸과 같은 모양(기본 입력 컴포넌트: 28px·둥근 6px·포커스 링, 위에 남는 sticky, 좌우 8px).
+   Key·Value 선택과 입력칸은 같은 높이·글꼴·글자색·안쪽 여백이라 글자 줄이 맞는다 */
 .kv-search {
 	position: sticky; top: calc(-1 * var(--pad, 0px)); z-index: 3;
-	display: flex; gap: 6px; height: 32px; box-sizing: border-box; padding-bottom: 6px;
+	display: flex; gap: 6px; box-sizing: border-box; padding: 0 3px 8px;
 	background: var(--vscode-sideBar-background);
 }
-.kv-search select, .kv-search input {
-	box-sizing: border-box; height: 100%; font: inherit; outline: none; border-radius: 4px;
-	font-family: var(--panel-font-family, var(--vscode-editor-font-family, monospace));
-	border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border));
-}
-.kv-search select { flex: none; color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background); padding: 0 4px; }
-.kv-search input { flex: 1; min-width: 0; padding: 0 8px; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border-color: var(--vscode-input-border, var(--vscode-panel-border)); }
-.kv-search input::placeholder { color: var(--vscode-input-placeholderForeground); }
-.kv-search select:focus, .kv-search input:focus { border-color: var(--vscode-focusBorder); }
-.kv-search ~ .kv-wrap .kv thead th { top: calc(32px - var(--pad, 0px)); }
+/* 검색칸(팔레트·Property·Outline·Data) 글자·안내 문구는 모두 코딩 글꼴(editor.fontFamily) 12px. 안내 문구가 길면 …로 줄인다 */
+:is(.palette-search, .kv-search, .tree-search) :is(select, input) { font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; line-height: normal; color: var(--vscode-input-foreground); }
+:is(.palette-search, .kv-search, .tree-search) input { text-overflow: ellipsis; }
+.kv-search select { flex: none; min-width: 78px; padding: 0 8px; }
+.kv-search input { flex: 1; min-width: 0; }
+.kv-search ~ .kv-wrap .kv thead th { top: calc(36px - var(--pad, 0px)); }
 
 .style-area { flex: none; border-top: 1px solid var(--vscode-panel-border); padding: 6px 8px 8px; }
 .style-area > span { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--vscode-descriptionForeground); }
@@ -378,12 +394,18 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 	white-space: pre-wrap; word-break: break-all;
 	font-family: var(--vscode-editor-font-family); font-size: calc(var(--vscode-editor-font-size, 14px) - 2px); line-height: 1.4;
 	background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
-	border-radius: 4px;
+	border-radius: var(--ctl-radius);
 }
 
 .tree-row { display: flex; align-items: center; gap: 6px; line-height: 24px; height: 24px; padding: 0 4px; border-radius: 3px; white-space: nowrap; cursor: pointer; user-select: none; }
 .tree-row { font-family: var(--panel-font-family, var(--vscode-editor-font-family, monospace)); }
 .tree-row:hover { background: var(--vscode-list-hoverBackground); }
+/* 들여쓰기 안내선(VS Code 트리처럼): 깊이마다 부모 쉐브론 아래로 옅은 세로선. 트리 위에 마우스를 올리면 진해진다. --depth·--indent는 줄 style(ui/tree.tsx) */
+[role="tree"] { --tree-guide: var(--vscode-tree-inactiveIndentGuidesStroke, color-mix(in srgb, var(--vscode-foreground) 12%, transparent)); }
+[role="tree"]:hover { --tree-guide: var(--vscode-tree-indentGuidesStroke, color-mix(in srgb, var(--vscode-foreground) 30%, transparent)); }
+.tree-row { position: relative; }
+.tree-row::before { content: ''; position: absolute; left: 12px; top: 0; bottom: 0; width: calc(var(--depth, 0) * var(--indent, 10px)); pointer-events: none;
+	background: repeating-linear-gradient(90deg, var(--tree-guide) 0 1px, transparent 1px var(--indent, 10px)); }
 .tree-row.selected { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
 .tree-row.dragging { opacity: .4; }
 /* F2 id 바꾸기: id 자리의 입력칸(VS Code 탐색기 이름 바꾸기처럼) */
@@ -399,14 +421,15 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .tree-drop-line::before { content: ''; position: absolute; left: -4px; top: -2px; width: 6px; height: 6px; box-sizing: border-box; border: 2px solid var(--vscode-focusBorder); border-radius: 50%; background: var(--vscode-sideBar-background, var(--vscode-editor-background)); }
 .tree-row.drop-before { box-shadow: inset 0 2px 0 0 var(--vscode-focusBorder); }
 .tree-row.drop-after { box-shadow: inset 0 -2px 0 0 var(--vscode-focusBorder); }
-.chevron { flex: none; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; }
-.chevron::before { content: ''; width: 5px; height: 5px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); }
-.chevron.open::before { transform: rotate(45deg); }
+/* 펼침 화살표: VS Code Codicon chevron-right·down(JSX에서 codicon 클래스로 고른다) */
+.chevron { flex: none; width: 16px; height: 16px; }
 .chevron.hidden { visibility: hidden; }
 .tree-icon { flex: none; font-size: 14px; opacity: .8; }
 .id { opacity: .7; }
 .id::before { content: '#'; }
-.tree-row .name, .tree-row .cls { opacity: .55; }
+/* 연하게는 opacity가 아니라 글자색으로: opacity는 안의 검색 강조(mark)까지 연하게 만든다 */
+.tree-row .name, .tree-row .cls { color: color-mix(in srgb, currentColor 55%, transparent); }
+.tree-row .id { opacity: 1; color: color-mix(in srgb, currentColor 70%, transparent); }
 /* 화면 점검 경고(core/check): 마우스를 올리면 이유. 접힌 줄은 안쪽 문제를 흐리게 */
 .tree-row .tree-problem { flex: none; margin-left: 4px; font-size: 13px; color: var(--vscode-editorWarning-foreground, var(--vscode-problemsWarningIcon-foreground, #cca700)); }
 .tree-row .tree-problem.inside { opacity: .55; }
@@ -414,6 +437,9 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 button.icon.tree-problems { display: inline-flex; align-items: center; gap: 3px; padding: 2px 5px; font: inherit; font-size: 12px; color: var(--vscode-editorWarning-foreground, var(--vscode-problemsWarningIcon-foreground, #cca700)); opacity: 1; }
 .drag-ghost { position: fixed; top: -100px; left: 0; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; color: var(--vscode-list-activeSelectionForeground, #fff); background: var(--vscode-list-activeSelectionBackground, #0e639c); }
 .tree-row .name::before { content: '· '; }
+/* 트리 검색에 맞은 글자 */
+mark.tree-hit { color: var(--vscode-foreground); background: var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, .33)); border-radius: 2px; }
+.tree-row.selected mark.tree-hit { color: var(--vscode-list-activeSelectionForeground); background: var(--vscode-editor-findMatchBackground, rgba(234, 92, 0, .6)); }
 .context-menu { position: fixed; z-index: 200; min-width: 170px; padding: 4px; border-radius: 5px; background: var(--vscode-menu-background, var(--vscode-dropdown-background)); color: var(--vscode-menu-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border)); box-shadow: 0 4px 16px var(--vscode-widget-shadow, rgba(0, 0, 0, .25)); }
 .context-menu button { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; padding: 5px 8px; border-radius: 3px; font-size: 12px; text-align: left; color: inherit; background: none; border: 0; cursor: pointer; }
 /* 설정 메뉴의 "애니메이션"이 root의 data-animation으로 끈다(아래 [data-animation="off"] 규칙) */
@@ -422,7 +448,7 @@ button.icon.tree-problems { display: inline-flex; align-items: center; gap: 3px;
 @keyframes menu-in { from { opacity: 0; } }
 .popup[open] { animation: popup-in .15s ease-out; }
 @keyframes popup-in { from { opacity: 0; } }
-[data-animation="off"] :is(.tab-pill, .context-menu, .popup[open]) { animation: none; transition: none; }
+[data-animation="off"] :is(.tab-pill, .context-menu, .popup[open], .tree-row, button.icon, .context-menu button, .palette-list button, .tab-bar button, .kv tr) { animation: none; transition: none; }
 .context-menu button:hover, .context-menu button:focus { outline: none; background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground)); color: var(--vscode-menu-selectionForeground, inherit); }
 .context-menu button:disabled { opacity: .45; cursor: default; background: none; }
 .context-menu kbd { font: inherit; opacity: .7; }
@@ -649,13 +675,19 @@ input[type="checkbox"].switch:focus-visible { outline: 1px solid var(--vscode-fo
 .grid-bind-parts label.fixed { pointer-events: none; color: var(--vscode-descriptionForeground); }
 .submission-actions { display: flex; flex: none; justify-content: flex-end; gap: 8px; padding: 12px 18px 16px; }
 
+/* 카테고리 머리: 24px 줄에 작은 대문자 라벨(Style 영역·표 머리와 같은 방식), 아래 행과 구분되는 구역 배경 */
 .kv tr.category th {
-	position: static; cursor: pointer; font-weight: 600; padding: 1px 4px; font-size: inherit; text-transform: none; letter-spacing: normal;
-	background: var(--vscode-sideBarSectionHeader-background, var(--vscode-sideBar-background));
+	position: static; cursor: pointer; font-weight: 600; height: 24px; padding: 0 4px; line-height: 16px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+	color: var(--vscode-descriptionForeground);
+	background: var(--vscode-sideBarSectionHeader-background, color-mix(in srgb, var(--vscode-foreground) 6%, var(--vscode-sideBar-background)));
+	border-bottom-color: var(--vscode-panel-border);
 }
-.kv tr.category .chevron { vertical-align: middle; }
+.kv tr.category:hover th { color: var(--vscode-foreground); }
+/* 화살표와 글자가 같은 16px 줄 위에 놓여 가운데가 맞는다 */
+.kv tr.category th { vertical-align: middle; }
+.kv tr.category .chevron { vertical-align: top; margin-right: 2px; }
 .kv tr:not(.set):not(.category) td:first-child { opacity: .75; }
-.kv tr.set td:first-child { font-weight: 600; color: var(--vscode-foreground); opacity: 1; }
+.kv tr.set td:first-child { font-weight: 600; color: var(--vscode-foreground); opacity: 1; box-shadow: inset 2px 0 0 var(--vscode-focusBorder); }
 .kv tr.set td:last-child { font-weight: 500; }
 .kv td.has-help { cursor: help; }
 
@@ -698,8 +730,9 @@ input[type="checkbox"].switch:focus-visible { outline: 1px solid var(--vscode-fo
 }
 .kv td:has(.edit) { padding: 0; }
 .kv .edit { height: 20px; display: block; }
+/* 편집 중에도 보기 상태(.style-value)와 같은 자리·여백·줄바꿈: .edit의 margin: 0이 위 여백 4px을 지워 글자가 위로 튀던 것을 막는다 */
 textarea.edit.style-value {
-	box-sizing: border-box; width: 100%; min-height: 52px; padding: 6px 8px;
+	display: block; box-sizing: border-box; width: 100%; min-height: 52px; margin-top: 4px; padding: 6px 8px; white-space: pre-wrap; word-break: break-all;
 	font-family: var(--vscode-editor-font-family); font-size: calc(var(--vscode-editor-font-size, 14px) - 2px); line-height: 1.4;
 	border: 1px solid var(--vscode-focusBorder); outline: none;
 }

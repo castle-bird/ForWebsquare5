@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { clsx } from 'clsx';
 import { useDraggable } from '@dnd-kit/core';
 import { INDENT } from '../../core/outlineDrop';
@@ -9,6 +9,7 @@ import { post } from '../store';
 import { lastPressedIn } from '../keys';
 import { outlineChildren, outlineIcon } from '../design/renderers';
 import { EditBox } from './editBox';
+import type { TreeFilter } from '../../core/treeFilter';
 
 /** Data 트리 끌어 옮기기(브라우저 기본 끌기: 같은 끌기를 Design에 놓으면 바인딩). zone: 이 행에 놓을 수 있으면 자리 */
 export interface Reorder {
@@ -53,7 +54,18 @@ export interface Rename { index?: number; commit(node: XmlNode, id: string): voi
 /** 화면 점검(core/check): of 노드 → 문제들, inside 안쪽에 문제가 있는 노드 */
 export interface Problems { of: Map<number, string[]>; inside: Set<number> }
 
-export function TreeItem({ node, depth, selected, extra, onSelect, onRange, onContextMenu, onDoubleClick, fold, defs, interactive, bindRef, reorder, rename, problems, dropParent }: {
+/** 줄에 보이는 글자(검색 대상): 컴포넌트 이름·태그·tagname·id·class, Data 트리는 name */
+export const nodeLabels = (n: XmlNode, defs: ComponentDef[] | undefined, interactive: boolean) =>
+	[interactive && defOf(n, defs)?.display || '', n.tag, n.attrs.tagname ?? '', n.attrs.id ?? '', interactive ? classLabel(n) : n.attrs.name ?? ''];
+
+/** 검색에 맞은 글자를 강조 */
+function Hit({ text, terms }: { text: string; terms?: string[] }) {
+	if (!terms?.length) { return <>{text}</>; }
+	const found = new RegExp(`(${terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+	return <>{text.split(found).map((part, i) => i % 2 ? <mark key={i} className="tree-hit">{part}</mark> : part)}</>;
+}
+
+export function TreeItem({ node, depth, selected, extra, onSelect, onRange, onContextMenu, onDoubleClick, fold, defs, interactive, bindRef, reorder, rename, problems, dropParent, filter }: {
 	node: XmlNode; depth: number; selected?: number;
 	/** onRange: Shift+클릭(지금 고른 줄부터 이 줄까지). row는 누른 줄 */
 	extra?: number[]; onSelect(i: number, additive?: boolean): void; onRange?(i: number, row: HTMLElement): void; onContextMenu?(e: MouseEvent<HTMLDivElement>, node: XmlNode): void; onDoubleClick?(node: XmlNode): void;
@@ -64,17 +76,20 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onRange, onCo
 	problems?: Problems;
 	/** Outline 끌기 중 놓일 곳의 부모 줄(inside: 그 줄 자체에 놓임) */
 	dropParent?: { index: number; inside: boolean };
+	/** 검색 중: 맞는 노드와 조상만 보이고 모두 펼쳐 있다(접기·끌어 옮기기는 쉼) */
+	filter?: TreeFilter;
 }) {
 	const ref = bindRef?.(node);
 	const cls = interactive ? classLabel(node) : '';
 	const name = interactive && defOf(node, defs)?.display || node.tag;
-	const open = fold.isOpen(node);
-	const children = interactive && defs ? outlineChildren(node, defs) : node.children;
+	const hit = filter?.match.has(node) ? filter.terms : undefined;
+	const children = (interactive && defs ? outlineChildren(node, defs) : node.children).filter(c => !filter || filter.keep.has(c));
+	const open = filter ? children.length > 0 : fold.isOpen(node);
 	const hasChildren = children.length > 0;
 	const isSelected = node.index === selected;
 	const isExtra = !!extra?.includes(node.index);
 	const container = isContainer(node);
-	const draggable = !!interactive && depth > 0;
+	const draggable = !!interactive && depth > 0 && !filter;
 	const drag = useDraggable({ id: node.index, data: { index: node.index, depth } satisfies DragData, disabled: !draggable });
 	const [nativeZone, setNativeZone] = useState<DropPosition>();
 	const movable = !!reorder?.canDrag(node);
@@ -91,10 +106,10 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onRange, onCo
 	}, [isSelected]);
 	return (
 		<>
-			<div ref={setRow} role="treeitem" aria-expanded={hasChildren ? open : undefined}
-				data-index={node.index} data-depth={depth} data-container={container || undefined} data-open={open && hasChildren || undefined}
+			<div ref={setRow} role="treeitem" aria-expanded={hasChildren && !filter ? open : undefined}
+				data-index={node.index} data-depth={depth} data-container={container || undefined} data-open={open && hasChildren || undefined} data-hit={hit ? '' : undefined}
 				className={clsx('tree-row', { selected: isSelected || isExtra, dragging: drag.isDragging, 'drop-inside': dropHere && dropParent.inside, 'drop-parent': dropHere && !dropParent.inside }, nativeZone && `drop-${nativeZone}`)}
-				style={{ paddingLeft: 4 + depth * INDENT }} onClick={e => e.shiftKey && onRange ? onRange(node.index, e.currentTarget) : onSelect(node.index, e.ctrlKey || e.metaKey)}
+				style={{ paddingLeft: 4 + depth * INDENT, '--depth': depth, '--indent': `${INDENT}px` } as CSSProperties} onClick={e => e.shiftKey && onRange ? onRange(node.index, e.currentTarget) : onSelect(node.index, e.ctrlKey || e.metaKey)}
 				onContextMenu={e => onContextMenu?.(e, node)}
 				onDoubleClick={() => onDoubleClick?.(node)}
 				draggable={ref || movable ? true : undefined}
@@ -124,20 +139,20 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onRange, onCo
 					if (z) { e.preventDefault(); reorder.drop(node, z); }
 				} : undefined}
 				{...(draggable ? drag.listeners : undefined)} {...(draggable ? drag.attributes : undefined)}>
-				<span className={clsx('chevron', { hidden: !hasChildren, open })} onClick={e => { e.stopPropagation(); fold.toggle(node, !open); }} />
+				<span className={clsx('chevron codicon', open ? 'codicon-chevron-down' : 'codicon-chevron-right', { hidden: !hasChildren || !!filter })} onClick={e => { e.stopPropagation(); fold.toggle(node, !open); }} />
 				{defs && <span className={`codicon codicon-${outlineIcon(node, defs)} tree-icon`} />}
-				<span className="tag" title={node.tag}>{name}{node.attrs.tagname && `:${node.attrs.tagname}`}</span>
+				<span className="tag" title={node.tag}><Hit text={name} terms={hit} />{node.attrs.tagname && <Hit text={`:${node.attrs.tagname}`} terms={hit} />}</span>
 				{rename?.index === node.index
 					? <EditBox value={node.attrs.id ?? ''} multiline={false} className="tree-rename" onCommit={v => rename.commit(node, v)} onClose={rename.close} />
-					: node.attrs.id && <span className="id">{node.attrs.id}</span>}
-				{cls && <span className="cls">{cls}</span>}
+					: node.attrs.id && <span className="id"><Hit text={node.attrs.id} terms={hit} /></span>}
+				{cls && <span className="cls"><Hit text={cls} terms={hit} /></span>}
 				{problems?.of.has(node.index)
 					? <span className="codicon codicon-warning tree-problem" role="img" aria-label="점검 문제" title={problems.of.get(node.index)!.join('\n').replaceAll('`', '')} />
 					// 묶음 줄(Data의 Submission 등)은 문서 노드가 아니라 자식으로 본다
 					: !open && problems && [node, ...children].some(c => problems.inside.has(c.index) || c !== node && problems.of.has(c.index)) && <span className="codicon codicon-warning tree-problem inside" role="img" aria-label="안쪽 점검 문제" title="안쪽에 점검 문제가 있습니다" />}
-				{!interactive && node.attrs.name && <span className="name">{node.attrs.name}</span>}
+				{!interactive && node.attrs.name && <span className="name"><Hit text={node.attrs.name} terms={hit} /></span>}
 			</div>
-			{open && children.map(c => <TreeItem key={c.index} node={c} depth={depth + 1} selected={selected} extra={extra} onSelect={onSelect} onRange={onRange} onContextMenu={onContextMenu} onDoubleClick={onDoubleClick} fold={fold} defs={defs} interactive={interactive} bindRef={bindRef} reorder={reorder} rename={rename} problems={problems} dropParent={dropParent} />)}
+			{open && children.map(c => <TreeItem key={c.index} node={c} depth={depth + 1} selected={selected} extra={extra} onSelect={onSelect} onRange={onRange} onContextMenu={onContextMenu} onDoubleClick={onDoubleClick} fold={fold} defs={defs} interactive={interactive} bindRef={bindRef} reorder={reorder} rename={rename} problems={problems} dropParent={dropParent} filter={filter} />)}
 		</>
 	);
 }

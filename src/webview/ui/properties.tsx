@@ -5,12 +5,15 @@ import { EV, type XmlNode } from '../../core/xmlModel';
 import { helpBlocks } from '../../core/helpText';
 import { EditBox } from './editBox';
 import { Tabs } from './tabs';
+import { EmptyState } from './emptyState';
 import { useFloating } from './floating';
 import { useEditorStore } from '../store';
 import { capturePointer } from './pointerCapture';
 
 /** suggestions: 고를 값 목록(정의의 정해진 값 포함). 목록이 길면 입력이 빠르므로 늘 직접 입력도(입력칸 + 목록) */
-interface Row { name: string; attr: string; value?: string; description?: string; display?: string; suggestions?: string[] }
+interface Row { name: string; attr: string; value?: string; description?: string; display?: string; suggestions?: string[]; words?: boolean }
+/** 값이 공백으로 나눈 여러 낱말인 속성: 목록은 마지막 낱말 기준으로 고른다 */
+const WORD_ATTRS = new Set(['class']);
 type Edit = (attr: string, value: string | undefined) => void;
 interface RowGroup { category: string; order: number; rows: Row[] }
 
@@ -26,12 +29,12 @@ function propertyGroups(node: XmlNode, def?: ComponentDef, choices: Record<strin
 	for (const p of def?.properties ?? []) {
 		if (!known.has(p.name)) {
 			known.add(p.name);
-			add(p.category, p.order, { name: p.name, attr: p.name, value: node.attrs[p.name], description: p.description, suggestions: choices[p.name] ?? (p.options?.length ? p.options : undefined) });
+			add(p.category, p.order, { name: p.name, attr: p.name, value: node.attrs[p.name], description: p.description, suggestions: choices[p.name] ?? (p.options?.length ? p.options : undefined), words: WORD_ATTRS.has(p.name) });
 		}
 	}
 	for (const [k, v] of Object.entries(node.attrs)) {
 		if (!known.has(k) && k !== 'xmlns' && !k.startsWith('xmlns:') && !k.startsWith(EV)) {
-			add('기타', 1000, { name: k, attr: k, value: v, suggestions: choices[k] });
+			add('기타', 1000, { name: k, attr: k, value: v, suggestions: choices[k], words: WORD_ATTRS.has(k) });
 		}
 	}
 	return sortGroups(groups);
@@ -76,7 +79,7 @@ function SearchBar({ search, onChange }: { search: Search; onChange(s: Search): 
 				<option value="name">Key</option>
 				<option value="value">Value</option>
 			</select>
-			<input type="search" value={search.text} placeholder="공백·쉼표로 여러 개, 정규식 가능"
+			<input type="search" value={search.text} placeholder="검색 (공백·쉼표 구분)" title="공백·쉼표로 여러 개, 정규식 가능" aria-label="속성 검색"
 				onChange={e => onChange({ ...search, text: e.target.value })}
 				onKeyDown={e => e.key === 'Escape' && onChange({ ...search, text: '' })} />
 		</div>
@@ -114,6 +117,7 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 	useEffect(() => () => window.clearTimeout(fadeTimer.current), []);
 	const propGroups = useMemo(() => node && propertyGroups(node, def, choices), [node, def, choices]);
 	const evGroups = useMemo(() => node && eventGroups(node, def), [node, def]);
+	const noSelection = <EmptyState icon="inspect" hint="Design·Outline에서 고르면 여기에 보입니다">선택한 컴포넌트 없음</EmptyState>;
 	useEffect(() => {
 		if (!help) {
 			return;
@@ -147,8 +151,8 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 			}}>
 			{warning && <p className="warning" title={warning}>{warning}</p>}
 			<Tabs order={tabOrder} onReorder={setTabOrder} items={{
-				Property: propGroups && <PropertyTable nodeIndex={node?.index} groups={propGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} />,
-				Event: evGroups && <PropertyTable nodeIndex={node?.index} groups={evGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} isEvent onScript={onScript} />,
+				Property: propGroups ? <PropertyTable nodeIndex={node?.index} groups={propGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} /> : noSelection,
+				Event: evGroups ? <PropertyTable nodeIndex={node?.index} groups={evGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} isEvent onScript={onScript} /> : noSelection,
 			}} />
 			<div className="style-area">
 				<span>Style</span>
@@ -184,7 +188,7 @@ function PropertyTable({ nodeIndex, groups: all, search, onSearch, keyWidth, onK
 	const open = (c: string) => !!match || !collapsed.has(c);
 	return (<>
 		<SearchBar search={search} onChange={onSearch} />
-		{match && !groups.length && <p className="empty">검색 결과 없음</p>}
+		{match && !groups.length && <EmptyState kind="search" hint="Esc로 검색을 지울 수 있습니다">검색 결과 없음</EmptyState>}
 		<div className="kv-wrap" style={{ '--key-width': keyWidth && `${keyWidth}px` } as CSSProperties}>
 			<table className="kv">
 				<colgroup><col className="col-key" /><col /></colgroup>
@@ -193,7 +197,7 @@ function PropertyTable({ nodeIndex, groups: all, search, onSearch, keyWidth, onK
 					<tbody key={g.category}>
 						{headers && (
 							<tr className="category" onClick={() => toggle(g.category)}>
-								<th colSpan={2}><span className={clsx('chevron', { open: open(g.category) })} />{g.category}</th>
+								<th colSpan={2}><span className={clsx('chevron codicon', open(g.category) ? 'codicon-chevron-down' : 'codicon-chevron-right')} />{g.category}</th>
 							</tr>
 						)}
 						{/* 노드가 바뀌면 칸을 새로 만들어, 열어 둔 편집(목록 포함)이 새로 고른 노드로 넘어가 반영되지 않게 한다 */}
@@ -206,7 +210,7 @@ function PropertyTable({ nodeIndex, groups: all, search, onSearch, keyWidth, onK
 											<Editable value={r.value} onCommit={v => onEdit(r.attr, v)} multiline={false} />
 											<button type="button" className="icon script-btn codicon codicon-code" title="Script: 없으면 만들고, 있으면 그 코드로 이동" onClick={() => onScript?.(r.name)} />
 										</div>
-										: <Editable value={r.value} onCommit={v => onEdit(r.attr, v)} multiline={false} suggestions={r.suggestions} />}
+										: <Editable value={r.value} onCommit={v => onEdit(r.attr, v)} multiline={false} suggestions={r.suggestions} words={r.words} />}
 								</td>
 							</tr>
 						))}
@@ -236,8 +240,8 @@ function ColumnResizer({ onResize }: { onResize(width: number): void }) {
 		onPointerCancel={() => drag.current = undefined} />;
 }
 
-function Editable({ value, onCommit, className, disabled, multiline, suggestions }: {
-	value?: string; onCommit(v: string | undefined): void; className?: string; disabled?: boolean; multiline?: boolean; suggestions?: string[];
+function Editable({ value, onCommit, className, disabled, multiline, suggestions, words }: {
+	value?: string; onCommit(v: string | undefined): void; className?: string; disabled?: boolean; multiline?: boolean; suggestions?: string[]; words?: boolean;
 }) {
 	const [editing, setEditing] = useState(false);
 	const [initialHeight, setInitialHeight] = useState<number>();
@@ -251,7 +255,7 @@ function Editable({ value, onCommit, className, disabled, multiline, suggestions
 	};
 
 	if (editing) {
-		return <EditBox value={value ?? ''} className={className} multiline={multiline} initialHeight={initialHeight} suggestions={suggestions} onCommit={v => onCommit(v === '' ? undefined : v)} onClose={() => setEditing(false)} />;
+		return <EditBox value={value ?? ''} className={className} multiline={multiline} initialHeight={initialHeight} suggestions={suggestions} words={words} onCommit={v => onCommit(v === '' ? undefined : v)} onClose={() => setEditing(false)} />;
 	}
 	return <div ref={divRef} className={clsx('value', className, suggestions && 'has-list')} title={value}
 		onClick={() => !disabled && startEditing()}>{value}</div>;

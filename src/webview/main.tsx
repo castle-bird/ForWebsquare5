@@ -17,6 +17,8 @@ import { InfoPane } from './ui/infoPane';
 import { UsedTablesPane } from './ui/usedTablesPane';
 
 import { boundColumnIds, canMoveGridColumn, listColumns } from '../core/grid';
+import { cssClassNames } from '../core/cssClasses';
+import { EmptyState } from './ui/emptyState';
 import { xmlSupport } from './editor/xmlSupport';
 import { CodeEditor, type CodeEditorHandle } from './editor/codeEditor';
 import { useTabHistory } from './ui/tabHistory';
@@ -49,7 +51,7 @@ const SETTINGS_MENU: ([SettingsMenuItem, string] | null)[] = [
 ];
 const GRID_MENU = { columnLeft: '왼쪽에 Column 추가', column: 'Column 추가', row: 'Row 추가', header: 'Header 추가', subTotal: 'subTotal 추가', footer: 'footer 추가' } as const;
 
-const LOADING = <p className="empty">불러오는 중…</p>;
+const LOADING = <EmptyState kind="loading">불러오는 중…</EmptyState>;
 /** 실험 기능 탭: 탭 줄 오른쪽(설정 버튼 왼쪽)에 고정 */
 const ERD_TAB = 'ERD';
 
@@ -159,6 +161,8 @@ function App() {
 	const nodePath = root && selected !== undefined ? pathTo(root, selected) : undefined, node = nodePath?.at(-1);
 	// 바인딩된 그리드의 본문 셀: id를 dataList 컬럼 id 목록에서 고른다
 	const cellIds = root && nodePath && boundColumnIds(root, nodePath);
+	// class 값 자동완성: 화면에 적용된 CSS의 클래스(이미 받은 규칙 목록의 선택자에서. 다시 읽지 않는다)
+	const classNames = useMemo(() => cssClassNames(styles?.rules ?? []), [styles?.rules]);
 	const body = root && root.children.find(c => c.tag === 'body');
 	const head = root?.children.find(c => c.tag === 'head');
 	// 매 렌더 새 배열이면 아래 dataRoots useMemo가 매번 깨져 Data 트리가 다시 그려진다
@@ -325,7 +329,7 @@ function App() {
 						Info: doc?.error ? <p className="error">{doc.error}</p>
 							: head && doc ? <InfoPane head={head} onAttr={(name, value) => editAttr(name, value, head.index)}
 								onHistory={rows => post({ type: 'editHistory', version: doc.version, index: head.index, rows })} />
-							: doc ? <p className="empty">head가 없는 화면입니다.</p> : LOADING,
+							: doc ? <EmptyState kind="warning">head가 없는 화면입니다.</EmptyState> : LOADING,
 						[ERD_TAB]: <UsedTablesPane />,
 						Script: doc ? <CodeEditor ref={scriptRef} target="script" lang={scriptLanguage} complete={jsTools.complete} hover={jsTools.hover} definition={jsTools.definition} signature={jsTools.signature} lint="js" text={doc.script.text} version={doc.version}
 							readOnly={!!doc.script.note} notes={[api?.error, modules?.error, doc.script.note]} post={post} /> : LOADING,
@@ -339,7 +343,7 @@ function App() {
 				<div className="right-panel-content" data-panel-font={panelFont} inert={!rightOpen}>
 				<Group orientation="vertical">
 					<Panel defaultSize="55%" minSize={120}>
-						<PropertyPane node={node} def={node && defOf(node, defs?.defs)} choices={cellIds ? { id: cellIds } : undefined} warning={defs?.error} onEdit={editSelected} onScript={eventName => node && openEventHandler(node, eventName)} />
+						<PropertyPane node={node} def={node && defOf(node, defs?.defs)} choices={cellIds || classNames.length ? { ...cellIds && { id: cellIds }, ...classNames.length && { class: classNames } } : undefined} warning={defs?.error} onEdit={editSelected} onScript={eventName => node && openEventHandler(node, eventName)} />
 					</Panel>
 					<Separator className="resizer" />
 					<Panel defaultSize="45%" minSize={120}>

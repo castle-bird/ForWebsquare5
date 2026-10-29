@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 
 export default async function ({ page }) {
 	await page.evaluate(() => {
@@ -160,6 +162,118 @@ export default async function ({ page }) {
 		await page.mouse.click(plain.x, plain.y);
 		assert.deepEqual(await selectedIds(), ['k_a'], '그냥 클릭은 하나만');
 		console.log('Outline: Shift+클릭 범위 선택 passed');
+	}
+	// 트리 검색: id·태그·class에 맞는 줄과 조상만 남고(일치 글자 강조), Esc로 지우면 원래대로, Enter로 첫 결과 선택, 검색 중에는 끌어 옮기지 않는다
+	{
+		const text = '<html xmlns:t="urn:test"><head/><body><t:group id="s_top" class="wrap"><t:wframe id="s_frame"/><t:group id="s_inner"><t:input id="s_save" class="btn primary"/><t:input id="s_cancel"/></t:group></t:group><t:group id="s_other"/></body></html>';
+		await page.evaluate(text => window.send({ type: 'document', version: 400000, text, root: window.parseXml(text), script: { text: '' } }), text);
+		await page.evaluate(() => window.tab('Outline', '.pane').click());
+		await page.evaluate(() => [...document.querySelectorAll('.pane .codicon-expand-all')].find(b => b.offsetParent)?.click());
+		await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row .id')].some(s => s.textContent === 's_cancel'));
+		const input = '.pane .tab-body:not([hidden]) .tree-search input';
+		const rows = () => page.evaluate(() => [...document.querySelectorAll('.pane .tab-body:not([hidden]) .tree-row')].map(r => r.querySelector('.id')?.textContent ?? r.querySelector('.tag').textContent));
+		const marks = () => page.evaluate(() => [...document.querySelectorAll('.pane .tree-row mark.tree-hit')].map(m => m.textContent));
+		const rowsAre = async (expected, message) => {
+			await page.waitForFunction(expected => JSON.stringify([...document.querySelectorAll('.pane .tab-body:not([hidden]) .tree-row')].map(r => r.querySelector('.id')?.textContent ?? r.querySelector('.tag').textContent)) === JSON.stringify(expected), { timeout: 3000 }, expected)
+				.catch(async () => assert.fail(`${message}: ${await rows()}`));
+		};
+		await page.click(input);
+		await page.keyboard.type('save');
+		await rowsAre(['body', 's_top', 's_inner', 's_save'], '맞는 줄과 조상만');
+		assert.deepEqual(await marks(), ['save'], '일치 글자 강조');
+		await page.keyboard.press('Escape');
+		await rowsAre(['body', 's_top', 's_frame', 's_inner', 's_save', 's_cancel', 's_other'], 'Esc로 지우면 전체');
+		assert.equal(await page.$eval(input, i => i.value), '');
+		await page.keyboard.type('PRIMARY');
+		await rowsAre(['body', 's_top', 's_inner', 's_save'], 'class로도, 대소문자 무시');
+		// 강조 모양은 어디서나 같다: id·class(연한 글자) 안에서도 같은 색·같은 진하기(선택 안 된 줄 기준)
+		await page.keyboard.press('Escape');
+		await page.keyboard.type('p');
+		await page.waitForFunction(() => document.querySelectorAll('.pane .tree-row mark.tree-hit').length > 2);
+		const look = await page.evaluate(() => [...document.querySelectorAll('.pane .tree-row:not(.selected) mark.tree-hit')].map(m => {
+			let opacity = 1;
+			for (let e = m; e && !e.classList.contains('tree-row'); e = e.parentElement) { opacity *= Number(getComputedStyle(e).opacity); }
+			return { where: m.parentElement.className, color: getComputedStyle(m).color, background: getComputedStyle(m).backgroundColor, opacity };
+		}));
+		assert.ok(look.some(l => l.where === 'cls') && look.some(l => l.where === 'id'), `id·class 모두 강조: ${JSON.stringify(look)}`);
+		assert.ok(look.every(l => l.opacity === 1 && l.color === look[0].color && l.background === look[0].background), `강조가 일정함: ${JSON.stringify(look)}`);
+		await page.keyboard.press('Escape');
+		await page.keyboard.type('btn nothing');
+		await page.waitForSelector('.pane .tab-body:not([hidden]):has(.tree-search) .empty');
+		assert.equal(await page.$eval('.pane .tab-body:not([hidden]):has(.tree-search) .empty .empty-text', e => e.textContent), '검색 결과 없음', '낱말이 모두 맞아야 함');
+		// 빈 상태 안내: 검색 아이콘(Codicon) + 문구 + Esc 안내, 가운데 정렬
+		assert.deepEqual(await page.$eval('.pane .tab-body:not([hidden]):has(.tree-search) .empty', e => ({ icon: e.querySelector('.codicon-search') && getComputedStyle(e.querySelector('.codicon')).fontFamily, hint: e.querySelector('.empty-hint')?.textContent, align: getComputedStyle(e).alignItems })),
+			{ icon: 'codicon', hint: 'Esc로 검색을 지울 수 있습니다', align: 'center' }, '빈 상태 안내 모양');
+		await page.screenshot({ path: path.join(tmpdir(), 'ws5-empty-search.png'), clip: await page.$eval('.pane .tab-body:not([hidden]):has(.tree-search) .empty', e => { const r = e.getBoundingClientRect(); return { x: r.x, y: Math.max(0, r.y - 50), width: Math.min(r.width, 340), height: r.height + 60, scale: 2 }; }) });
+		assert.deepEqual(await rows(), []);
+		await page.keyboard.press('Escape');
+		// Enter: 첫 결과를 고르고 트리로 포커스가 넘어가 방향키가 (걸러진) 줄을 옮긴다
+		await page.keyboard.type('cancel');
+		await rowsAre(['body', 's_top', 's_inner', 's_cancel'], 'cancel');
+		await page.keyboard.press('Enter');
+		await page.waitForFunction(() => document.querySelector('.pane .tree-row.selected .id')?.textContent === 's_cancel');
+		assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('role')), 'tree', '트리로 포커스');
+		await page.keyboard.press('ArrowUp');
+		await page.waitForFunction(() => document.querySelector('.pane .tree-row.selected .id')?.textContent === 's_inner');
+		// 검색 중에는 끌어 옮기지 않는다
+		const center = id => page.evaluate(id => { const r = [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.id')?.textContent === id).getBoundingClientRect(); return { x: r.x + 60, y: r.y + r.height / 2 }; }, id);
+		const from = await center('s_cancel'), to = await center('s_top');
+		await page.evaluate(() => { window.sent.length = 0; });
+		await page.mouse.move(from.x, from.y); await page.mouse.down();
+		await page.mouse.move(from.x, from.y + 8, { steps: 3 });
+		await page.mouse.move(to.x, to.y, { steps: 8 });
+		await page.mouse.up();
+		await new Promise(resolve => setTimeout(resolve, 50));
+		assert.ok(!await page.evaluate(() => window.sent.some(m => m.type === 'move')), '검색 중에는 끌어 옮기지 않음');
+		// 검색 중 아무것도 안 눌렀을 때 입력칸 키는 트리 단축키가 아니다(F2로 id 칸이 열리지 않음)
+		await page.click(input);
+		await page.keyboard.press('F2');
+		assert.equal(await page.$('.pane .tree-rename'), null, '검색칸의 F2는 트리 id 바꾸기가 아님');
+		await page.keyboard.press('Escape');
+		console.log('Outline: 검색(id·태그·class, 강조, Esc·Enter, 끌기 쉼) passed');
+	}
+	// Data 트리 검색: 이름(name)으로도 찾고, 찾은 줄을 고른 뒤 검색을 지우면 접힌 곳에 숨지 않고 그 줄까지 펼친다
+	{
+		const text = '<html xmlns:w2="http://www.inswave.com/websquare" xmlns:xf="http://www.w3.org/2002/xforms"><head><xf:model><w2:dataCollection><w2:dataMap id="dma_a"><w2:keyInfo><w2:key id="k_one" name="첫째"/></w2:keyInfo></w2:dataMap><w2:dataList id="dlt_b"><w2:columnInfo><w2:column id="c_two" name="둘째"/></w2:columnInfo></w2:dataList></w2:dataCollection></xf:model></head><body/></html>';
+		await page.evaluate(text => window.send({ type: 'document', version: 400001, text, root: window.parseXml(text), script: { text: '' } }), text);
+		await page.evaluate(() => window.tab('Data', '.pane').click());
+		await page.evaluate(() => [...document.querySelectorAll('.pane .codicon-collapse-all')].find(b => b.offsetParent)?.click());
+		const input = '.pane .tab-body:not([hidden]) .tree-search input';
+		const rows = () => page.evaluate(() => [...document.querySelectorAll('.pane .tab-body:not([hidden]) .tree-row')].map(r => r.querySelector('.id')?.textContent ?? r.querySelector('.tag').textContent));
+		await page.waitForSelector(input);
+		await page.click(input);
+		await page.keyboard.type('둘째');
+		await page.waitForFunction(() => [...document.querySelectorAll('.pane .tab-body:not([hidden]) .tree-row .id')].some(s => s.textContent === 'c_two'), { timeout: 3000 })
+			.catch(async () => assert.fail(`Data 이름 검색: ${await rows()}`));
+		assert.deepEqual(await rows(), ['w2:dataCollection', 'dlt_b', 'w2:columnInfo', 'c_two'], '이름이 맞은 키·컬럼과 조상만');
+		await page.evaluate(() => [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.id')?.textContent === 'c_two').click());
+		await page.keyboard.press('Escape');
+		await page.waitForFunction(() => document.querySelector('.pane .tab-body:not([hidden]) .tree-row.selected .id')?.textContent === 'c_two', { timeout: 3000 })
+			.catch(async () => assert.fail(`검색을 지운 뒤 선택한 줄이 보여야 함: ${await rows()}`));
+		console.log('Data: 트리 검색(이름)·지운 뒤 선택 줄 펼침 passed');
+	}
+	// 들여쓰기 안내선: 깊이만큼 부모 쉐브론 아래로 세로선(깊이 0은 없음), 트리 위에 마우스를 올리면 진해진다
+	{
+		const text = '<html xmlns:t="urn:test"><head/><body><t:group id="gd_1"><t:group id="gd_2"><t:group id="gd_3"><t:input id="gd_4"/></t:group></t:group></t:group></body></html>';
+		await page.evaluate(text => window.send({ type: 'document', version: 400002, text, root: window.parseXml(text), script: { text: '' } }), text);
+		await page.evaluate(() => window.tab('Outline', '.pane').click());
+		await page.evaluate(() => [...document.querySelectorAll('.pane .codicon-expand-all')].find(b => b.offsetParent)?.click());
+		await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row .id')].some(s => s.textContent === 'gd_4'));
+		const guides = () => page.evaluate(() => [...document.querySelectorAll('.pane [role="tree"] .tree-row')].map(r => {
+			const s = getComputedStyle(r, '::before');
+			return { depth: Number(r.dataset.depth), width: s.width, left: s.left, lines: s.backgroundImage.startsWith('repeating-linear-gradient'), color: s.backgroundImage };
+		}));
+		assert.deepEqual(await page.$$eval('.pane [role="tree"] .tree-row:not([aria-expanded="false"]) .chevron:not(.hidden)', es => [...new Set(es.map(e => getComputedStyle(e).fontFamily + ' ' + e.className.includes('codicon-chevron-down')))]), ['codicon true'], '펼침 화살표는 VS Code Codicon(펼침: 아래)');
+		await page.mouse.move(2, 2);
+		const idle = await guides();
+		assert.deepEqual(idle.map(g => [g.depth, g.width]), idle.map(g => [g.depth, `${g.depth * 10}px`]), '안내선 너비는 깊이 × 들여쓰기');
+		assert.ok(idle.length >= 5 && idle.every(g => g.lines && g.left === '12px'), '모든 줄에 안내선 배경');
+		const row = await page.evaluate(() => { const r = [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.id')?.textContent === 'gd_3').getBoundingClientRect(); return { x: r.x + 80, y: r.y + r.height / 2 }; });
+		await page.mouse.move(row.x, row.y);
+		const hover = await guides();
+		assert.notEqual(hover[2].color, idle[2].color, '트리 위에 마우스를 올리면 안내선이 진해짐');
+		await page.screenshot({ path: path.join(tmpdir(), 'ws5-tree-guides.png'), clip: await page.$eval('.pane [role="tree"]', e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: Math.min(r.width, 160), height: Math.min(r.height, 130), scale: 3 }; }) });
+		console.log('Outline: 들여쓰기 안내선 passed');
 	}
 
 }

@@ -34,8 +34,8 @@ export default async function ({ page }) {
 			await page.evaluate(tab => window.tab(tab, '.pane').click(), tab);
 			assert.equal(await family('.kv td.key'), expected, tab + ' Key');
 			assert.equal(await family('.kv .value'), expected, tab + ' Value');
-			assert.equal(await family('.kv-search select'), expected, tab + ' 검색 Key·Value 선택');
-			assert.equal(await family('.kv-search input'), expected, tab + ' 검색 입력칸');
+			assert.equal(await family('.kv-search select'), 'monospace', tab + ' 검색 Key·Value 선택: 패널 글꼴과 상관없이 코딩 글꼴');
+			assert.equal(await family('.kv-search input'), 'monospace', tab + ' 검색 입력칸: 코딩 글꼴');
 			await page.click('.kv .value');
 			assert.equal(await family('.kv .edit'), expected, tab + ' 입력칸');
 			await page.keyboard.press('Enter');
@@ -48,6 +48,7 @@ export default async function ({ page }) {
 		for (const tab of ['Outline', 'Data']) {
 			await page.evaluate(tab => window.tab(tab, '.pane').click(), tab);
 			assert.equal(await family('.tree-row'), expected, tab + ' 트리');
+				assert.equal(await family('.pane .tab-body:not([hidden]) .tree-search input'), 'monospace', tab + ' 트리 검색칸: 코딩 글꼴');
 		}
 		assert.deepEqual(await page.$eval('.kv td.key', e => { const s = getComputedStyle(e); return [s.fontSize, s.lineHeight]; }), size, '글자 크기·행 높이 유지');
 		assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-chip')).fontFamily), 'monospace', 'Design 칩 유지');
