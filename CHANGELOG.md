@@ -1,5 +1,14 @@
 # 변경 내역
 
+## 1.12.0 (2026-11-01)
+
+- Script 자동완성: `scwin.`을 치면 이 Script에서 선언한 멤버(`scwin.x = …` 변수·익명 함수·화살표 함수, 함수 안의 대입 포함)가 공통 JS·API 멤버보다 위에 뜹니다. 함수는 파라미터와 JSDoc 설명도 함께 보입니다
+- 화면 id를 바꾸면 Script도 함께 바꿉니다. 글자 바꾸기가 아니라 JS 문법으로 그 id를 가리키는 자리만 고칩니다: 변수로 쓴 id(`btnSave.setValue()`), `getComponentById("btnSave")`, 그 컴포넌트에 걸린 핸들러(`scwin.btnSave_onclick` → `scwin.btnNew_onclick`, 이벤트 속성과 Script의 정의·호출). 문자열·주석·속성 이름·더 긴 이름(`%btnSave%`, `obj.btnSave`, `btnSave2`)은 그대로이고, Script에 같은 이름 변수가 있거나 새 핸들러 이름이 이미 있거나 Script에 문법 오류가 있으면 그 부분은 바꾸지 않고 알립니다. 한 번의 Undo로 되돌립니다
+- Submission 팝업: 요청 URL의 "Controller 이동"을 누르면 팝업을 닫고 그 URL을 처리하는 Controller 메서드를 엽니다(메서드 이름 선택). 작업 폴더의 `.java`에서 `@RequestMapping`·`@GetMapping`·`@PostMapping` 등(클래스 경로 + 메서드 경로, `{변수}`, 앞에 붙은 컨텍스트 경로, `.do` 등 확장자 차이)을 직접 읽으므로 Spring 확장이나 Java 서버가 없어도 됩니다. 여럿이면 고르게 하고, 그 파일이 이 화면의 연결 탭(Controller 등)에 연결돼 있으면 그 탭에서, 아니면 VS Code 편집기로 엽니다. 맞는 매핑이 없으면 디자이너 화면 알림(토스트)으로 알립니다
+- 기본 연결 탭에 ServiceImpl을 추가했습니다(Controller·Service·ServiceImpl·Mapper·Mybatis). 탭 목록을 바꾼 적이 있으면 그 목록을 그대로 씁니다
+- 편집기 탭 줄이 좁으면 탭 좌우 여백을 줄이고, 그래도 넘치면 연결 탭 이름을 …로 줄여 오른쪽 버튼(ERD·설정 등)이 밀려나지 않게 했습니다
+- 정의로 이동·Controller로 이동이 아직 한 번도 안 연 연결 탭으로 가면 탭만 바뀌고 그 자리가 선택되지 않던 문제를 고쳤습니다
+
 ## 1.11.0 (2026-10-29)
 
 - 연결 탭(Controller·Service·Mapper·MyBatis 등)의 경로 입력칸 아래에 추천 파일을 보여 줍니다. 화면 파일 이름의 도메인(`userList01.xml` → `userList`)으로 시작하는 파일을 `UserListController`·`UserListService`·`UserListServiceImpl`·`UserListMapper`·`userList_mapper.xml`·`UserListValidator`처럼 역할별로 최대 10개 나열하고, 그 탭에 맞는 역할이 위에 옵니다. 누르면 바로 연결됩니다. 옆 화면(`userList02`)·다른 도메인·빌드 폴더(`target` 등)의 파일은 뺍니다. 그 아래 "같은 폴더 XML에서 추천"에는 같은 폴더의 다른 화면이 이 탭에 연결해 둔 파일을 많이 쓴 순으로 최대 5개 보여 줍니다(이 PC에서 연결해 둔 것만, 화면 수 표시)

@@ -9,7 +9,7 @@ export default async function ({ page, modifiedKey, reset, checkIndentUnit, cont
 
 	const tabButton = name => page.evaluateHandle(name => window.tab(name), name);
 
-	assert.deepEqual(await tabNames(), ['Design', 'Info', 'Script', 'Source', 'Controller', 'Service', 'Mapper', 'Mybatis']);
+	assert.deepEqual(await tabNames(), ['Design', 'Info', 'Script', 'Source', 'Controller', 'Service', 'ServiceImpl', 'Mapper', 'Mybatis']);
 	await page.evaluate(() => ['controller', 'service', 'mapper', 'mybatis'].forEach(kind => window.send({ type: 'linked', kind })));
 	await clickTab('Controller');
 	await page.waitForSelector('.tab-body:not([hidden]) .link-picker input');
@@ -553,12 +553,12 @@ export default async function ({ page, modifiedKey, reset, checkIndentUnit, cont
 	};
 	await dragTab('Mybatis', 'Design', false);
 	await page.waitForFunction(() => document.querySelector('.canvas-frame .tab-bar button[role="tab"]')?.textContent === 'Mybatis');
-	assert.deepEqual(await tabNames(), ['Mybatis', 'Design', 'Info', 'Script', 'Source', 'Controller', 'Service', 'Mapper']);
+	assert.deepEqual(await tabNames(), ['Mybatis', 'Design', 'Info', 'Script', 'Source', 'Controller', 'Service', 'ServiceImpl', 'Mapper']);
 	assert.deepEqual((await lastSent('setTabOrder')).order, await tabNames());
 	await dragTab('Design', 'Source', true);
-	assert.deepEqual(await tabNames(), ['Mybatis', 'Info', 'Script', 'Source', 'Design', 'Controller', 'Service', 'Mapper']);
+	assert.deepEqual(await tabNames(), ['Mybatis', 'Info', 'Script', 'Source', 'Design', 'Controller', 'Service', 'ServiceImpl', 'Mapper']);
 	// 다른 화면에서 바꾼 순서(확장이 보냄)
-	await page.evaluate(() => window.send({ type: 'tabOrder', order: ['Design', 'Script', 'Source', 'Controller', 'Service', 'Mapper', 'Mybatis'] }));
+	await page.evaluate(() => window.send({ type: 'tabOrder', order: ['Design', 'Script', 'Source', 'Controller', 'Service', 'ServiceImpl', 'Mapper', 'Mybatis'] }));
 	await page.waitForFunction(() => document.querySelector('.canvas-frame .tab-bar button[role="tab"]')?.textContent === 'Design');
 	await clickTab('Script');
 	await page.waitForFunction(() => document.querySelector('.canvas-frame .tab-bar button.active')?.textContent === 'Script');
@@ -580,7 +580,7 @@ export default async function ({ page, modifiedKey, reset, checkIndentUnit, cont
 	assert.deepEqual([await barNames('Property'), await barNames('Outline')], [['Event', 'Property'], ['Data', 'Outline']]);
 	const savedOrder = (await lastSent('setTabOrder')).order;
 	assert.ok(savedOrder.indexOf('Event') < savedOrder.indexOf('Property') && savedOrder.indexOf('Data') < savedOrder.indexOf('Outline') && savedOrder.includes('Design'), `다른 탭 줄 순서도 그대로 저장: ${savedOrder}`);
-	await page.evaluate(() => window.send({ type: 'tabOrder', order: ['Design', 'Script', 'Source', 'Controller', 'Service', 'Mapper', 'Mybatis'] }));
+	await page.evaluate(() => window.send({ type: 'tabOrder', order: ['Design', 'Script', 'Source', 'Controller', 'Service', 'ServiceImpl', 'Mapper', 'Mybatis'] }));
 	await page.waitForFunction(() => [...document.querySelectorAll('.tab-bar button[role="tab"]')].find(b => b.textContent === 'Property').closest('.tab-bar').querySelector('button[role="tab"]').textContent === 'Property');
 	for (const name of activeTabs.filter(n => ['Property', 'Event', 'Outline', 'Data'].includes(n))) { await (await anyTab(name)).click(); }
 	console.log('Tabs: Property/Event·Outline/Data 끌어서 순서 바꾸기 passed');

@@ -78,6 +78,8 @@ interface EditorState {
 	linkProblems: Record<string, string | undefined>;
 	/** 잠깐 뜨는 알림(key: 같은 글도 다시 띄움) */
 	toast?: { message: string; key: number };
+	/** 정의로 이동 등으로 온 reveal: 처음 보는 탭은 편집기가 나중에 생기므로 잠깐 보관했다가 생길 때 적용 */
+	pendingReveal?: { msg: Extract<ToWebview, { type: 'reveal' }>; at: number };
 	/** 연결할 수 있는 확장자(설정) */
 	linkExts: string[];
 	/** 연결한 XML의 DTD 스키마(탭 id별, 없으면 기본 MyBatis 목록) */

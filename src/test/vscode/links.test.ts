@@ -13,6 +13,7 @@ import { linkTabs, saveLinkTabs } from '../../vscode/linkTabs';
 import { stagedText } from '../../vscode/gitBase';
 import { execFileSync } from 'child_process';
 import { waitFor, SCREEN } from '../helpers';
+import { openAction } from '../../vscode/actionMapping';
 
 suite('links', () => {
 	test('경로 입력 정리·연결 가능 검사', () => {
@@ -191,6 +192,29 @@ statementType (STATEMENT|PREPARED) "PREPARED"
 			sub.dispose();
 			await links.dispose();
 		}
+	});
+
+	test('Controller로 이동(Submission 요청 URL): 연결 탭 파일이면 그 탭에 reveal, 아니면 false(VS Code 편집기로)', async () => {
+		const posted: ToWebview[] = [];
+		const { dir, links } = await linked(dir => ({ controller: path.join(dir, 'AController.java') }), msg => posted.push(msg));
+		try {
+			await links.reload();
+			const range = new vscode.Range(3, 13, 3, 23);
+			assert.strictEqual(await links.reveal(vscode.Uri.file(path.join(dir, 'AController.java')), range), true);
+			assert.deepStrictEqual(posted.find(m => m.type === 'reveal'), { type: 'reveal', target: 'link:controller', line: 3, ch: 13, endLine: 3, endCh: 23 });
+			posted.length = 0;
+			assert.strictEqual(await links.reveal(vscode.Uri.file(path.join(dir, 'Other.java')), range), false);
+			assert.ok(!posted.some(m => m.type === 'reveal'), '연결 안 된 파일은 웹뷰에 안 보냄');
+		} finally {
+			await links.dispose();
+		}
+	});
+
+	test('Controller로 이동: 맞는 매핑이 없으면 디자이너 토스트로 알림(VS Code 알림 아님)', async () => {
+		const notes: string[] = [];
+		const doc = await vscode.workspace.openTextDocument({ content: '<html/>', language: 'xml' });
+		await openAction(doc, '/no/such/action.do', async () => false, m => notes.push(m));
+		assert.deepStrictEqual(notes, ['요청 URL `/no/such/action.do`에 맞는 Controller 매핑(@RequestMapping 등)을 찾지 못했습니다.']);
 	});
 
 	test('정의로 이동: 연결 파일 안이면 그 탭에 reveal, 다른 파일이면 VS Code 편집기로, 없으면 알림', async () => {

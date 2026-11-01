@@ -26,6 +26,7 @@ import { blameFeed, blameText, onGitChange, stagedText } from './vscode/gitBase'
 import { lineOfOffset, sliceBlame } from './core/blame';
 import { insertFromPalette, paletteFavorites, savePaletteFavorite, reorderPaletteFavorites } from './vscode/palette';
 import { createScreen } from './vscode/createScreen';
+import { openAction } from './vscode/actionMapping';
 import { registerSqlCompletion } from './vscode/sqlCompletion';
 import { registerScreenOpen, rememberScreenEditor } from './vscode/screenOpen';
 import { registerWpack } from './vscode/wpack';
@@ -329,6 +330,8 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 					browserPreview.update(msg);
 				} else if (msg.type === 'openFrame') {
 					void openFrame(document, msg.index, webRoot);
+				} else if (msg.type === 'openAction') {
+					void openAction(document, msg.action, (uri, range) => links.reveal(uri, range), message => void post({ type: 'toast', message })).catch(e => vscode.window.showErrorMessage(`Controller 열기 실패: ${errorMessage(e)}`));
 				} else if (msg.type === 'openModule') {
 					// Script 정의로 이동(공통 JS): config.xml에서 읽은 공통 JS 목록에 있는 경로만 연다
 					void modules.then(async ({ files }) => {

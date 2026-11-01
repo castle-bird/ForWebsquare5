@@ -29,9 +29,10 @@ const bundle = await build({
 		import './src/webview/main';
 		import {EditorView, showTooltip} from '@codemirror/view';
 		import {EditorState} from '@codemirror/state';
+		import {CompletionContext} from '@codemirror/autocomplete';
 		import {scriptTools, scriptLanguage} from './src/webview/editor/completions';
 		import {signatureHelp} from './src/webview/editor/signatureHelp';
-		window.testTools = {EditorState, EditorView, showTooltip, scriptTools, scriptLanguage, signatureHelp};
+		window.testTools = {EditorState, EditorView, showTooltip, scriptTools, scriptLanguage, signatureHelp, CompletionContext};
 		import {forEachDiagnostic} from '@codemirror/lint';
 		import {indentUnit} from '@codemirror/language';
 		import {toSnippet} from './src/webview/editor/remoteCompletion';

@@ -308,6 +308,26 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 			],
 		});
 		view.current = editor;
+		/** 정의로 이동·Controller로 이동: 그 범위를 선택하고 보인다 */
+		const reveal = (data: Extract<ToWebview, { type: 'reveal' }>) => {
+			// 범위를 선택(끝이 없거나 빈 범위면 그 자리 단어): 커서만 가면 어디로 갔는지 잘 안 보인다
+			const pos = posAt(editor.state.doc, data.line, data.ch);
+			const given = data.endLine !== undefined && data.endCh !== undefined ? posAt(editor.state.doc, data.endLine, data.endCh) : pos;
+			const word = given > pos ? undefined : editor.state.wordAt(pos);
+			const anchor = word?.from ?? pos, head = word?.to ?? given;
+			const from = jumpFrom.current, to = EditorSelection.create([EditorSelection.range(anchor, head)]);
+			jumpFrom.current = undefined;
+			showSelection(editor, to);
+			if (from) {
+				jumped(() => showSelection(editor, from), () => showSelection(editor, to));
+			}
+		};
+		// 처음 보는 탭이면 편집기가 탭이 보인 뒤에 생겨 reveal 메시지를 못 받았다: 방금 온 것이면 적용
+		const pending = useEditorStore.getState().pendingReveal;
+		if (pending?.msg.target === target && Date.now() - pending.at < 3000) {
+			useEditorStore.setState({ pendingReveal: undefined });
+			reveal(pending.msg);
+		}
 		keepSearchMatchColors();
 		// VS Code 테마를 따라갈 때만 VS Code 밝음/어두움 전환을 따른다
 		const observer = new MutationObserver(() => {
@@ -321,17 +341,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 			const s = sync.current;
 			// 정의로 이동: 다른 탭이면 탭이 보이게 바뀐 뒤(숨은 편집기는 스크롤 위치를 못 잰다) 그 자리로
 			if (data.type === 'reveal' && data.target === target) {
-				// 범위를 선택(끝이 없거나 빈 범위면 그 자리 단어): 커서만 가면 어디로 갔는지 잘 안 보인다
-				const pos = posAt(editor.state.doc, data.line, data.ch);
-				const given = data.endLine !== undefined && data.endCh !== undefined ? posAt(editor.state.doc, data.endLine, data.endCh) : pos;
-				const word = given > pos ? undefined : editor.state.wordAt(pos);
-				const anchor = word?.from ?? pos, head = word?.to ?? given;
-				const from = jumpFrom.current, to = EditorSelection.create([EditorSelection.range(anchor, head)]);
-				jumpFrom.current = undefined;
-				showSelection(editor, to);
-				if (from) {
-					jumped(() => showSelection(editor, from), () => showSelection(editor, to));
-				}
+				useEditorStore.setState({ pendingReveal: undefined });
+				reveal(data);
 				return;
 			}
 			if (data.type === 'reveal') {

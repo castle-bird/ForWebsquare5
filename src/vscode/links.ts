@@ -462,6 +462,16 @@ export class LinkedFiles {
 		}
 	}
 
+	/** uri가 이 화면의 연결 탭 파일이면 그 탭을 보이고 range를 선택한다(true). 아니면 false(호출자가 VS Code 편집기로) */
+	async reveal(uri: vscode.Uri, range: vscode.Range): Promise<boolean> {
+		const linked = this.kindOf(uri);
+		if (!linked) {
+			return false;
+		}
+		await this.post({ type: 'reveal', target: linkTarget(linked), line: range.start.line, ch: range.start.character, endLine: range.end.line, endCh: range.end.character });
+		return true;
+	}
+
 	/** VS Code 언어 확장의 자동완성 */
 	/** 읽기만 하는 언어 서비스 조회(편집 대기열 밖): 연결 탭(target)이 웹뷰가 본 버전일 때만 ask. 다른 버전·실패면 undefined */
 	private query<T>(target: CodeTarget, version: number, ask: (doc: vscode.TextDocument) => Thenable<T> | T): Promise<T | undefined> {

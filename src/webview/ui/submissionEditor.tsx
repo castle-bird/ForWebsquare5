@@ -5,6 +5,7 @@ import { DATA_REF_TYPES, formatDataRef, parseDataRef, REF_ACTIONS, SUBMISSION_EV
 import { PopupActions, PopupTitle, usePopupWindow } from './popupWindow';
 import { ChoiceSelect } from './choiceSelect';
 import { Segmented } from './segmented';
+import { post } from '../store';
 
 const MODE_LABELS: Record<string, string> = { asynchronous: '비동기', synchronous: '동기' };
 const EVENT_LABELS: Record<typeof SUBMISSION_EVENTS[number], string> = { submit: 'submit', submitdone: 'submitdone', submiterror: 'submiterror' };
@@ -81,8 +82,11 @@ export function SubmissionEditor({ initial, editing, busy, externalError, offset
 					<div className="form-grid">
 						<label className="field"><span>서브미션 ID</span>
 							<input id="submission-id" value={fields.id} onChange={e => update('id', e.target.value)} required autoFocus /></label>
-						<label className="field"><span>요청 URL</span>
-							<input id="submission-action" value={fields.action} placeholder="/path/to/action.do" onChange={e => update('action', e.target.value)} /></label>
+							<div className="field"><div className="field-head"><label htmlFor="submission-action">요청 URL</label>
+								{/* 작업 폴더 .java의 @RequestMapping 등에서 이 URL의 메서드를 찾아 연다. 화면이 그리로 옮겨 가므로 팝업은 닫는다 */}
+								<button type="button" className="field-action" disabled={!fields.action.trim()} title="이 요청 URL을 처리하는 Controller 메서드로 이동(확인 안 한 수정은 버리고 팝업을 닫음)"
+									onClick={() => { post({ type: 'openAction', action: fields.action }); onClose(); }}><i className="codicon codicon-go-to-file" />Controller 이동</button></div>
+								<input id="submission-action" value={fields.action} placeholder="/path/to/action.do" onChange={e => update('action', e.target.value)} /></div>
 						<div className="field"><span>HTTP 메서드 · 통신 방식</span>
 							<div className="field-row">
 								<ChoiceSelect id="submission-method" aria-label="HTTP 메서드" value={fields.method} options={SUBMISSION_METHODS} label={v => v.toUpperCase() || '(없음)'} onChange={e => update('method', e.target.value)} />

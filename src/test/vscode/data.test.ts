@@ -51,7 +51,7 @@ suite('DataMap/DataList fields (VS Code)', () => {
 });
 
 suite('데이터 id 바꾸기 (VS Code)', () => {
-	test('데이터 id 바꾸기: 바인딩(ref·nodeset·dataList·json·bind)도 같이, 컬럼 이름·더 긴 id·Script는 그대로, 알림', async () => {
+	test('데이터 id 바꾸기: 바인딩(ref·nodeset·dataList·json·bind)도 같이, 컬럼 이름·더 긴 id는 그대로, Script의 그 id 변수도, 알림', async () => {
 		const xml = `<html xmlns:w2="http://www.inswave.com/websquare"><head><w2:dataCollection>
 <w2:dataList id="dlt_a"><w2:columnInfo><w2:column id="dlt_a"/></w2:columnInfo></w2:dataList>
 <w2:dataList id="dlt_a2"><w2:columnInfo/></w2:dataList><w2:linkedDataList id="ldt" bind="dlt_a"/>
@@ -66,8 +66,8 @@ suite('데이터 id 바꾸기 (VS Code)', () => {
 		assert.ok(await applyNodeEdit(doc, { type: 'setAttr', version: doc.version, index: list.index, name: 'id', value: 'dlt_b' }, m => notes.push(m)));
 		assert.strictEqual(doc.getText(), xml.replace('dataList id="dlt_a"', 'dataList id="dlt_b"').replace('bind="dlt_a"', 'bind="dlt_b"')
 			.replace('"id":"dlt_a"', '"id":"dlt_b"').replace('data:json,dlt_a"', 'data:json,dlt_b"').replace('dataList="data:dlt_a"', 'dataList="data:dlt_b"')
-			.replace('ref="data:dlt_a.dlt_a"', 'ref="data:dlt_b.dlt_a"'));
-		assert.deepStrictEqual(notes, ['바인딩 5곳도 함께 변경했습니다.\n`dlt_a` → `dlt_b`']);
+			.replace('ref="data:dlt_a.dlt_a"', 'ref="data:dlt_b.dlt_a"').replace('() => dlt_a.getRowCount()', '() => dlt_b.getRowCount()'));
+		assert.deepStrictEqual(notes, ['바인딩 5곳도 함께 변경했습니다.\n`dlt_a` → `dlt_b`\n\nScript도 함께 확인했습니다.\nScript의 `dlt_a` 참조 1곳']);
 		// DataList 팝업에서 id를 바꿔도 같이. 참조가 없으면 알림 없음
 		const two = findNode(parseXml(doc.getText())!, n => n.attrs.id === 'dlt_a2')!;
 		assert.ok(await applyNodeEdit(doc, { type: 'editDataFields', version: doc.version, index: two.index, popup: 'p', fields: [], id: 'dlt_c' }, m => notes.push(m)));

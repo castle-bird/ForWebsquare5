@@ -178,6 +178,7 @@ export type ToExtension =
 	| { type: 'bindGrid'; version: number; index: number; list: number; mode: GridBindMode; extras: GridExtras }
 	| { type: 'addGridPart'; version: number; index: number; part: GridPart | 'column' | 'columnLeft' | 'row'; at?: number }
 	| { type: 'openFrame'; index: number }
+	| { type: 'openAction'; action: string } // Submission 요청 URL → Controller 메서드 열기
 	| { type: 'openCss'; rules: number[] }
 	| { type: 'link'; kind: string; path?: string } // path 없으면 파일 선택 창
 	| { type: 'unlink'; kind: string }

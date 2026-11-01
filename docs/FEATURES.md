@@ -16,7 +16,8 @@
 - **브라우저로 보기**: 탭 줄 오른쪽 ERD 왼쪽의 ▷ 버튼(Design 탭에서만)을 누르면 지금 캔버스 화면을 기본 브라우저로 엽니다. WebSquare 서버(WAS)나 엔진 없이 프로젝트 CSS를 적용한 모양을 바로 볼 수 있어 퍼블리셔가 디자인을 확인하는 데 씁니다. 에디터에서 고치면 열려 있는 브라우저 화면이 따라 바뀌고 스크롤은 유지됩니다(Design 탭을 보는 동안). 확장이 내 PC(`127.0.0.1`)에만 작은 미리보기 서버를 잠깐 띄우며, 브라우저를 닫으면 끝납니다. 스크립트·데이터·서버 통신은 동작하지 않는 캔버스 모양입니다
 - **애니메이션**: 탭 배경이 탭 사이를 미끄러지고 메뉴·팝업이 열릴 때 부드럽게 나타납니다. 톱니바퀴 → 애니메이션으로 켜고 끕니다(모든 화면 공통, 기본 켬)
 - **Event → Script**: 이벤트 값을 더블클릭하면 `scwin.{id}_{이벤트}` 함수 뼈대를 만들거나 해당 함수로 이동합니다
-- **id 바꾸기**: dataList·dataMap이나 그 컬럼의 id를 바꾸면 `data:` 바인딩·바인딩된 그리드 열·Submission 참조도 같이 바뀝니다(Script 코드 안 참조는 그대로). 이미 쓰는 id로는 바꾸지 않고 알려 줍니다
+- **id 바꾸기**: dataList·dataMap이나 그 컬럼의 id를 바꾸면 `data:` 바인딩·바인딩된 그리드 열·Submission 참조도 같이 바뀝니다. 이미 쓰는 id로는 바꾸지 않고 알려 줍니다
+- **id 바꾸기와 Script**: 컴포넌트·데이터 id를 바꾸면 Script에서 그 id를 변수로 쓴 곳(`btnSave.setValue()`), `getComponentById("btnSave")`, 그 컴포넌트에 걸린 핸들러 이름(`scwin.btnSave_onclick` → `scwin.btnNew_onclick`, 이벤트 속성과 Script의 정의·호출)도 바꿉니다. JS 문법으로 가리키는 자리만 고쳐 문자열·주석·속성 이름·더 긴 이름은 그대로입니다. Script에 같은 이름 변수가 있거나, 새 핸들러 이름이 이미 있거나, 문법 오류가 있으면 그 부분은 바꾸지 않고 알립니다
 - **화면 점검**: Outline·Data 트리에 경고 아이콘으로 겹치는 id, 없는 컬럼을 가리키는 바인딩, Script에 없는 이벤트 함수를 표시합니다(마우스를 올리면 이유). 트리 위 경고 개수 버튼을 누르면 다음 경고로 이동합니다
 
 XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그대로 동작합니다.
@@ -70,11 +71,13 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
   ```
 - 테마 가져오기: 톱니바퀴 메뉴의 "테마 파일 가져오기…"로 VS Code 테마 `.json`을 가져옵니다
 
-## 연결 파일 (Controller · Service · Mapper · MyBatis)
+## 연결 파일 (Controller · Service · ServiceImpl · Mapper · MyBatis)
 
 화면 탭에서 Java·XML·SQL 등 연결 파일을 열어 편집합니다. 탭 목록과 순서는 직접 바꿀 수 있고, 탭 줄 앞쪽 화살표로 탭 줄을 위·아래로 옮길 수 있습니다(기본 위).
 
+- 기본 탭은 Controller·Service·ServiceImpl·Mapper·Mybatis입니다. 편집기 탭 줄이 좁으면 연결 탭 이름이 …로 줄어듭니다(마우스를 올리면 전체)
 - 작업 폴더 안 파일을 이름으로 검색해 연결
+- Submission 팝업의 요청 URL에서 "Controller 이동"을 누르면 팝업을 닫고 그 URL을 처리하는 Controller 메서드를 엽니다(메서드 이름이 선택됨). 작업 폴더 `.java`의 `@RequestMapping`·`@GetMapping`·`@PostMapping` 등을 직접 읽어 찾으므로 Spring 확장이나 Java 서버가 없어도 됩니다(클래스 경로 + 메서드 경로, `{변수}`, 앞에 붙은 컨텍스트 경로, `.do` 등 확장자 차이). 여럿이면 목록에서 고르고, 그 파일이 이 화면의 연결 탭에 연결돼 있으면 그 탭에서, 아니면 VS Code 편집기로 엽니다. 맞는 매핑이 없으면 화면 알림(토스트)으로 알립니다
 - 연결 전 탭에는 화면 파일 이름의 도메인(`userList01.xml` → `userList`)으로 시작하는 파일이 역할별(Controller·Service·ServiceImpl·Mapper·MyBatis·Validator·VO)로 최대 10개 추천되고, 그 탭에 맞는 역할이 위에 옵니다. 눌러서 연결합니다. 그 아래에는 같은 폴더의 다른 화면이 같은 탭에 연결해 둔 파일이 많이 쓴 순으로 최대 5개 추천됩니다(이 PC에서 연결해 둔 것만)
 - VS Code에 설치된 언어 확장(Java 등)의 자동완성·포맷·마우스 오버 설명(Javadoc)·정의로 이동(Ctrl+클릭·F12)·파라미터 힌트 사용
 - Java import 목록은 IntelliJ처럼 파일을 열면 `import …` 한 줄로 접혀 있고, 누르거나 왼쪽 접기 표시로 펼칩니다

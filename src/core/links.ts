@@ -21,6 +21,7 @@ export const FIXED_TABS = ['Design', 'Info', 'Script', 'Source'];
 export const DEFAULT_LINK_TABS: LinkTab[] = [
 	{ id: 'controller', label: 'Controller' },
 	{ id: 'service', label: 'Service' },
+	{ id: 'serviceImpl', label: 'ServiceImpl' },
 	{ id: 'mapper', label: 'Mapper' },
 	{ id: 'mybatis', label: 'Mybatis' },
 ];
@@ -35,7 +36,7 @@ const isLinkTab = (value: unknown): value is LinkTab => {
 	return !!tab && typeof tab.id === 'string' && typeof tab.label === 'string';
 };
 
-/** 저장된 탭 목록(예전 판이 같이 저장한 탭별 확장자 등은 버림). 없거나 모양이 틀리면 기본 4개 */
+/** 저장된 탭 목록(예전 판이 같이 저장한 탭별 확장자 등은 버림). 없거나 모양이 틀리면 기본 5개 */
 export const readLinkTabs = (stored: unknown): LinkTab[] =>
 	Array.isArray(stored) && stored.every(isLinkTab) ? stored.map(({ id, label }) => ({ id, label })) : DEFAULT_LINK_TABS;
 

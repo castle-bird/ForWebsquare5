@@ -4,7 +4,8 @@ import { pasteNode } from './paste';
 import { wrapComponents } from './wrap';
 import { moveNode } from './move';
 import { mergeCells, unmergeCells } from './merge';
-import { idConflict } from './check';
+import { idConflict, screenScoped } from './check';
+import { renameIdRefs } from './idRename';
 import { addDataNode, editDataFields, isDataKind, isDataRoot, renameDataRefs, type DataRename } from './data';
 import { addSubmissionNode, editSubmissionNode } from './submission';
 import { editChoices } from './choices';
@@ -37,13 +38,38 @@ export function prepareNodeEdit(text: string, msg: NodeEdit): { changes: TextEdi
 	}
 	const rename = root && changes.length ? dataRename(root, msg) : undefined;
 	const refs = rename ? renameDataRefs(text, root!, rename) : [];
-	let notice: string | undefined;
+	const notices: string[] = [];
 	if (rename && refs.length) {
 		const { from, to, columns = new Map<string, string>() } = rename;
 		const what = [...from !== to ? [`\`${from}\` → \`${to}\``] : [], ...[...columns].map(([a, b]) => `\`${from}.${a}\` → \`${b}\``)];
-		notice = `바인딩 ${refs.length}곳도 함께 변경했습니다.\n${what.join('\n')}`;
+		notices.push(`바인딩 ${refs.length}곳도 함께 변경했습니다.\n${what.join('\n')}`);
 	}
-	return { changes: [...changes, ...refs], notice };
+	// 화면 id(컴포넌트·데이터)를 바꾸면 Script의 그 id 참조와 그 컴포넌트에 걸린 scwin 핸들러 이름도
+	const target = root && changes.length ? idRename(root, msg) : undefined;
+	let edits = [...changes, ...refs];
+	if (target) {
+		const { node, path, from, to } = target;
+		const plan = renameIdRefs(text, root!, node, from, to, !isDataKind(node));
+		const attrChanges = [...plan.attrs].flatMap(([n, attrs]) => {
+			// 바꾸는 노드의 시작 태그는 id 편집과 같은 자리라 한 편집으로 합친다
+			const named: [string, string][] = n === node ? [['id', to], ...attrs] : attrs;
+			const change = setAttributes(text, n, named, n === node ? path.slice(0, -1) : pathTo(root!, n.index)?.slice(0, -1));
+			return change ? [change] : [];
+		});
+		if (plan.attrs.has(node)) { edits = edits.filter(e => !changes.includes(e)); }
+		edits.push(...attrChanges, ...plan.script);
+		if (plan.notes.length) { notices.push(`Script도 함께 확인했습니다.\n${plan.notes.join('\n')}`); }
+	}
+	return { changes: edits, notice: notices.join('\n\n') || undefined };
+}
+
+/** 화면 범위 id(컴포넌트·데이터 노드, 그리드 칸·데이터 컬럼 제외)를 하나만 바꾸는 편집이면 그 노드와 옛·새 id */
+function idRename(root: XmlNode, msg: NodeEdit): { node: XmlNode; path: XmlNode[]; from: string; to: string } | undefined {
+	if (msg.type !== 'setAttr' || msg.name !== 'id' || msg.also?.length || msg.more?.length || !msg.value) {
+		return undefined;
+	}
+	const path = pathTo(root, msg.index), node = path?.at(-1), from = node?.attrs.id;
+	return path && node && from && from !== msg.value && screenScoped(path) ? { node, path, from, to: msg.value } : undefined;
 }
 
 /** 데이터 노드(dataList·dataMap 등)나 그 컬럼·키의 id를 바꾸는 편집이면 무엇을 바꾸는지 */

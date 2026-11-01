@@ -8,6 +8,9 @@ const SCOPE = /:(gridView|header|gBody|footer|subTotal|columnInfo|keyInfo)$/;
 /** 노드의 id 범위(path: 그 노드까지) */
 const scopeOf = (path: XmlNode[]) => path.slice(0, -1).reverse().find(n => SCOPE.test(n.tag)) ?? path[0];
 
+/** 화면 전체에서 겹치면 안 되는 id인지(그리드 칸·데이터 컬럼처럼 안쪽 범위 id가 아님) */
+export const screenScoped = (path: XmlNode[]) => scopeOf(path) === path[0];
+
 /** 범위마다 id → 노드들 */
 function idGroups(root: XmlNode): Map<string, XmlNode[]>[] {
 	const groups = new Map<XmlNode, Map<string, XmlNode[]>>();

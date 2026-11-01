@@ -139,7 +139,8 @@ function App() {
 				setActiveTab(active => msg.select ?? renamed(active) ?? active);
 			}
 			if (msg.type === 'reveal') {
-				// 정의로 이동: 그 편집기 탭을 보인다(자리 이동은 편집기가 같은 메시지로)
+				// 정의로 이동: 그 편집기 탭을 보인다(자리 이동은 편집기가 같은 메시지로. 처음 보는 탭이면 편집기가 생길 때 보관한 것으로)
+				useEditorStore.setState({ pendingReveal: { msg, at: Date.now() } });
 				const label = useEditorStore.getState().linkTabs.find(t => linkTarget(t.id) === msg.target)?.label;
 				if (label) {
 					setActiveTab(label);

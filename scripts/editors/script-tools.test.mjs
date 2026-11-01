@@ -43,4 +43,15 @@ export default async function ({ page }) {
 		return { first, repeated, definition, changed, moduleBefore: original.signature(call, 8)?.label, moduleAfter: replaced.signature(call, 8)?.label };
 	}), { first: 'local(value)', repeated: 'local(value)', definition: { from: 27, to: 32 }, changed: 'local(changed)', moduleBefore: 'run(old)', moduleAfter: 'run(newValue)' });
 	console.log('Script tools: 문서 캐시 갱신·공통 JS 교체·힌트 지연 응답·Esc 취소 passed');
+	// `scwin.` 자동완성: 이 Script에서 선언한 멤버(변수·익명 함수·화살표 함수·함수 안 대입)는 공통 JS 멤버보다 위(boost)
+	assert.deepEqual(await page.evaluate(async () => {
+		const { EditorState, scriptTools, scriptLanguage, CompletionContext } = window.testTools;
+		const text = 'scwin.today = 1;\nscwin.testFunc = () => {};\nscwin.onpageload = function (a) {\n  scwin.nested = 2;\n  scwin.';
+		const state = EditorState.create({ doc: text, extensions: [scriptLanguage] });
+		const tools = scriptTools(undefined, [], {}, [{ path: '/common.js', text: 'scwin.aaa_common = function() {};\nscwin.bbb_common = 1;' }]);
+		const result = await tools.complete(new CompletionContext(state, text.length, true));
+		return result.options.map(o => [o.label, o.type, o.boost ?? 0, o.detail]).sort((a, b) => a[0].localeCompare(b[0]));
+	}), [['aaa_common', 'function', 0, '()'], ['bbb_common', 'property', 0, null], ['nested', 'property', 50, null], ['onpageload', 'function', 50, '(a)'],
+		['testFunc', 'function', 50, '()'], ['today', 'property', 50, null]]);
+	console.log('Script tools: scwin. 자동완성 Script 선언 멤버 우선 passed');
 }

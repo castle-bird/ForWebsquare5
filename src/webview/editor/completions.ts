@@ -465,6 +465,9 @@ function hoverDom({ label, detail, info }: Completion): HTMLElement | undefined 
 	return undefined;
 }
 
+/** 이 Script에서 선언한 멤버(`scwin.x = …`)는 공통 JS·API 멤버보다 위에 */
+const LOCAL_BOOST = 50;
+
 function scriptCompletions(members: () => Members): CompletionSource {
 	const browser = scopeCompletionSource(globalThis);
 	return async context => {
@@ -472,6 +475,10 @@ function scriptCompletions(members: () => Members): CompletionSource {
 		if (!path) { return null; }
 		const owner = path.path.join('.');
 		const options = new Map(members().get(owner));
+		// 같은 Script의 맨 위 정의(JSDoc·파라미터 포함)와 함수 안 등 어디든 대입한 `owner.x = …`는 위로(boost)
+		const local = (option: Completion) => ({ ...option, boost: LOCAL_BOOST });
+		for (const [label, option] of localMembers(context.state).members.get(owner) ?? []) { options.set(label, local(option)); }
+		let source: string | undefined;
 		syntaxTree(context.state).iterate({ enter(node) {
 			if (node.name !== 'AssignmentExpression') { return; }
 			const left = node.node.firstChild;
@@ -480,7 +487,9 @@ function scriptCompletions(members: () => Members): CompletionSource {
 			const dot = name.lastIndexOf('.');
 			if (name.slice(0, dot) !== owner || !/^[\w$]+$/.test(name.slice(dot + 1))) { return; }
 			const label = name.slice(dot + 1);
-			if (!options.has(label)) { options.set(label, { label, type: 'property' }); }
+			if (options.get(label)?.boost === LOCAL_BOOST) { return; }
+			// 함수·객체·값 종류와 함수 파라미터가 보이도록 맨 위 정의와 같은 모양으로
+			options.set(label, local(memberOption(source ??= context.state.doc.toString(), label, node.node.lastChild !== left ? node.node.lastChild : null)));
 		} });
 		let standard;
 		try { standard = await browser(context); } catch { /* 브라우저의 접근 제한 getter는 건너뛴다. */ }

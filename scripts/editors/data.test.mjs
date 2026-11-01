@@ -173,7 +173,7 @@ export default async function ({ page }) {
 		assert.equal(await page.$$eval('.popup[open]', popups => popups.length), 2, 'DataEditor와 SubmissionEditor가 동시에 2개 이상 띄워짐');
 		// ref 데이터 선택: 체크리스트로 여러 개를 고르고(기존 값 유지·고른 순서), DataList는 action도 정한다
 		await page.type('#submission-ref', 'data:json,dma_old');
-		await page.$eval('.submission-editor .field-action', b => b.click());
+		await page.$eval('.submission-editor .field-action[aria-expanded]', b => b.click());
 		await page.waitForSelector('.data-ref-picker');
 		assert.deepEqual(await page.$$eval('.data-ref-id', ls => ls.map(l => [l.querySelector('span').textContent, l.querySelector('input').checked])),
 			[['dataList1', false], ['dma_old', true]], '화면의 데이터 + 기존 값에만 있는 id');
@@ -249,6 +249,15 @@ export default async function ({ page }) {
 		await page.evaluate(() => window.send({ type: 'popupAck', popup: window.sent.findLast(m => m.type === 'addSubmission' || m.type === 'editSubmission').popup, ok: true }));
 		await page.waitForFunction(() => !document.querySelector('.submission-editor'));
 		console.log('Data: Submission 더블클릭 → 수정 팝업·값 채움·수정 요청 passed');
+		// 요청 URL의 "Controller 이동": 확장에 그 URL의 Controller 메서드 열기 요청, 화면이 옮겨 가므로 팝업은 닫음
+		await page.evaluate(() => [...document.querySelectorAll('.pane .tree-row')].find(r => r.textContent.includes('sbm_sel1')).dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
+		await page.waitForSelector('.submission-editor[open]');
+		await new Promise(r => setTimeout(r, 300));
+		await page.screenshot({ path: path.join(tmpdir(), 'ws5-submission-url.png'), clip: await page.$eval('.submission-editor', e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: Math.min(r.height, 170) }; }) });
+		assert.equal(await page.$eval('.submission-editor .field-action[title^="이 요청 URL"]', b => b.textContent), 'Controller 이동');
+		await page.$eval('.field-head button.field-action[title^="이 요청 URL"]', b => b.click());
+		assert.deepEqual(await page.evaluate(() => window.sent.findLast(m => m.type === 'openAction')), { type: 'openAction', action: '/api/sel' });
+		await page.waitForFunction(() => !document.querySelector('.submission-editor'));
 		// 값 바인딩: Data 트리의 dataMap key를 캔버스 컴포넌트에 떨구면 그 컴포넌트 ref에 data:{map}.{key}
 		await page.evaluate(() => {
 			const text = '<html xmlns:w2="urn:test" xmlns:xf="http://www.w3.org/2002/xforms"><body><w2:input id="ipt_bind" label="B"/></body><head><xf:model><dataCollection xmlns="http://www.inswave.com/websquare" baseNode="map"><dataMap id="dataMap1"><keyInfo><key id="m_bucd_from" name="from"/></keyInfo></dataMap></dataCollection></xf:model></head></html>';
