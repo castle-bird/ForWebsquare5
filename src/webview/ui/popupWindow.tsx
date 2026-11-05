@@ -5,9 +5,10 @@ import { capturePointer } from './pointerCapture';
 
 let globalPopupZIndex = 100;
 
-export function usePopupWindow(options: { initialOffset?: number; onClose?(): void } = {}) {
-	const { initialOffset = 0, onClose } = options;
+export function usePopupWindow(options: { initialOffset?: number; autoHeight?: boolean; onClose?(): void } = {}) {
+	const { initialOffset = 0, autoHeight = false, onClose } = options;
 	const [box, setBox] = useState<Box>();
+	const [resized, setResized] = useState(false);
 	const [zIndex, setZIndex] = useState(() => ++globalPopupZIndex);
 	const dialog = useRef<HTMLDialogElement>(null);
 	const windowDrag = useRef<{ x: number; y: number } | undefined>(undefined);
@@ -66,8 +67,10 @@ export function usePopupWindow(options: { initialOffset?: number; onClose?(): vo
 			onPointerDown={e => {
 				if (e.button !== 0 || !dialog.current) { return; }
 				e.preventDefault();
+				setResized(true);
 				bringToFront();
 				const rect = dialog.current.getBoundingClientRect();
+				if (autoHeight && !resized) { setBox(current => current && { ...current, width: rect.width, height: rect.height }); }
 				resizeDrag.current = { edge, startX: e.clientX, startY: e.clientY, box: { x: rect.left, y: rect.top, width: rect.width, height: rect.height } };
 				capturePointer(e);
 			}}
@@ -93,7 +96,7 @@ export function usePopupWindow(options: { initialOffset?: number; onClose?(): vo
 	};
 
 	const style: CSSProperties | undefined = box
-		? { inset: 'auto', left: box.x, top: box.y, width: box.width, height: box.height, margin: 0, zIndex }
+		? { inset: 'auto', left: box.x, top: box.y, width: box.width, height: autoHeight && !resized ? 'auto' : box.height, margin: 0, zIndex }
 		: { zIndex };
 
 	const popupProps = {

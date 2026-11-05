@@ -11,9 +11,11 @@ import { addSubmissionNode, editSubmissionNode } from './submission';
 import { editChoices } from './choices';
 import { editHistory } from './info';
 import { addGridColumn, addGridPart, addGridRow, bindGridView, deleteGridColumns, editGridCells, moveGridColumn } from './grid';
+import { createGrid } from './gridCreate';
+import { insertTarget } from './palette';
 import type { ToExtension } from './protocol';
 
-export type NodeEdit = Extract<ToExtension, { type: 'wrap' | 'setAttr' | 'setText' | 'paste' | 'delete' | 'move' | 'addData' | 'editDataFields' | 'addSubmission' | 'editSubmission' | 'editChoices' | 'editGridCells' | 'editHistory' | 'bindGrid' | 'addGridPart' | 'mergeCells' | 'unmergeCells' | 'gridColumns' }>;
+export type NodeEdit = Extract<ToExtension, { type: 'wrap' | 'setAttr' | 'setText' | 'paste' | 'delete' | 'move' | 'addData' | 'editDataFields' | 'addSubmission' | 'editSubmission' | 'editChoices' | 'editGridCells' | 'editHistory' | 'bindGrid' | 'createGrid' | 'addGridPart' | 'mergeCells' | 'unmergeCells' | 'gridColumns' }>;
 
 /** XML 편집 계획: 규칙·검증·연관 바인딩을 계산한다. 문서 적용과 성공 알림은 호출자가 맡는다. */
 export function prepareNodeEdit(text: string, msg: NodeEdit): { changes: TextEdit[]; notice?: string } | { error: string } | undefined {
@@ -122,6 +124,11 @@ function nodeChanges(text: string, root: XmlNode, msg: NodeEdit): TextEdit[] | u
 		return undefined;
 	}
 	switch (msg.type) {
+		case 'createGrid': {
+			if (insertTarget(root, path)?.index !== node.index) { throw new Error('화면 안에 그리드를 넣어 주세요.'); }
+			const list = msg.options.list === undefined ? undefined : find(msg.options.list);
+			return [createGrid(text, root, node, msg.position, msg.options, list)];
+		}
 		case 'wrap': {
 			const nodes = all([msg.index, ...msg.more ?? []]);
 			return nodes && wrapComponents(text, root, nodes).changes;

@@ -365,7 +365,7 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 				} else if (msg.type === 'setAnimation') {
 					void saveAnimation(msg.on);
 					broadcast(panel, { type: 'animation', on: msg.on });
-				} else if (msg.type === 'editDataFields' || msg.type === 'addSubmission' || msg.type === 'editSubmission' || msg.type === 'editChoices' || msg.type === 'editGridCells') {
+				} else if (msg.type === 'editDataFields' || msg.type === 'addSubmission' || msg.type === 'editSubmission' || msg.type === 'editChoices' || msg.type === 'editGridCells' || msg.type === 'createGrid') {
 					void queue('source', async () => {
 						const ok = msg.version === document.version && await applyNodeEdit(document, msg, toast);
 						await post({ type: 'popupAck', popup: msg.popup, ok, ...!ok && { error: '문서가 바뀌었습니다. 팝업을 다시 열어 주세요.' } });

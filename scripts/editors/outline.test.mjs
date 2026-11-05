@@ -77,6 +77,7 @@ export default async function ({ page }) {
 		await page.waitForFunction(id => [...document.querySelectorAll('.pane .tree-row .id')].some(el => el.textContent === id), {}, id);
 		await page.evaluate(id => [...document.querySelectorAll('.pane .tree-row')].find(row => row.querySelector('.id')?.textContent === id).click(), id);
 		await page.waitForFunction(id => document.querySelector('.pane .tree-row.selected .id')?.textContent === id, {}, id);
+		let searchLeft;
 		for (const ratio of [0, .5, 1]) {
 			await page.evaluate(id => [...document.querySelectorAll('.pane .tree-row')].find(row => row.querySelector('.id')?.textContent === id).click(), id);
 			await page.evaluate(ratio => { const pane = document.querySelector('.pane [role="tree"]').closest('.tab-body'); pane.scrollLeft = (pane.scrollWidth - pane.clientWidth) * ratio; }, ratio);
@@ -86,6 +87,9 @@ export default async function ({ page }) {
 				return { max: pane.scrollWidth - pane.clientWidth, end: clip.left + pane.clientLeft + pane.clientWidth - 5, right: row.getBoundingClientRect().right, x: clip.left + pane.clientLeft + pane.clientWidth - 10, y: row.getBoundingClientRect().top + 12 };
 			}, id);
 			assert.ok(state.max > 100, tab + ': 가로 스크롤 재현');
+			const left = await page.$eval('.pane .tab-body:not([hidden]) .tree-search input', el => el.getBoundingClientRect().left);
+			if (ratio === 0) { searchLeft = left; }
+			assert.ok(Math.abs(left - searchLeft) < 1, `${tab}: 검색창 가로 위치 고정 (${ratio}, ${left}, ${searchLeft})`);
 			assert.ok(state.right >= state.end - 1, tab + ': 선택 배경이 보이는 오른쪽 끝까지 채움, scroll=' + ratio);
 			await page.mouse.move(state.x, state.y);
 			assert.equal(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('.tree-row')?.querySelector('.id')?.textContent, state), id, tab + ': 오른쪽 빈 공간도 같은 행');
@@ -238,6 +242,7 @@ export default async function ({ page }) {
 		await page.evaluate(text => window.send({ type: 'document', version: 400001, text, root: window.parseXml(text), script: { text: '' } }), text);
 		await page.evaluate(() => window.tab('Data', '.pane').click());
 		await page.evaluate(() => [...document.querySelectorAll('.pane .codicon-collapse-all')].find(b => b.offsetParent)?.click());
+		assert.deepEqual(await page.$eval('.pane .tree-row[aria-expanded="false"] .chevron', e => [getComputedStyle(e).position, getComputedStyle(e).zIndex]), ['relative', '1'], 'Data 화살표도 안내선 위');
 		const input = '.pane .tab-body:not([hidden]) .tree-search input';
 		const rows = () => page.evaluate(() => [...document.querySelectorAll('.pane .tab-body:not([hidden]) .tree-row')].map(r => r.querySelector('.id')?.textContent ?? r.querySelector('.tag').textContent));
 		await page.waitForSelector(input);
@@ -259,19 +264,32 @@ export default async function ({ page }) {
 		await page.evaluate(() => window.tab('Outline', '.pane').click());
 		await page.evaluate(() => [...document.querySelectorAll('.pane .codicon-expand-all')].find(b => b.offsetParent)?.click());
 		await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row .id')].some(s => s.textContent === 'gd_4'));
-		const guides = () => page.evaluate(() => [...document.querySelectorAll('.pane [role="tree"] .tree-row')].map(r => {
-			const s = getComputedStyle(r, '::before');
-			return { depth: Number(r.dataset.depth), width: s.width, left: s.left, lines: s.backgroundImage.startsWith('repeating-linear-gradient'), color: s.backgroundImage };
-		}));
+		const guides = () => page.evaluate(() => [...document.querySelectorAll('.pane [role="tree"] .tree-row')].map(r => ({
+			depth: Number(r.dataset.depth), lines: [...r.querySelectorAll('.tree-guide')].map(e => ({ left: getComputedStyle(e).left, color: getComputedStyle(e).backgroundColor })),
+		})));
 		assert.deepEqual(await page.$$eval('.pane [role="tree"] .tree-row:not([aria-expanded="false"]) .chevron:not(.hidden)', es => [...new Set(es.map(e => getComputedStyle(e).fontFamily + ' ' + e.className.includes('codicon-chevron-down')))]), ['codicon true'], '펼침 화살표는 VS Code Codicon(펼침: 아래)');
 		await page.mouse.move(2, 2);
 		const idle = await guides();
-		assert.deepEqual(idle.map(g => [g.depth, g.width]), idle.map(g => [g.depth, `${g.depth * 10}px`]), '안내선 너비는 깊이 × 들여쓰기');
-		assert.ok(idle.length >= 5 && idle.every(g => g.lines && g.left === '12px'), '모든 줄에 안내선 배경');
+		assert.ok(idle.length >= 5 && idle.every(g => g.lines.length === g.depth && g.lines.every((line, i) => line.left === `${12 + i * 10}px`)), '깊이마다 안내선 하나');
 		const row = await page.evaluate(() => { const r = [...document.querySelectorAll('.pane .tree-row')].find(r => r.querySelector('.id')?.textContent === 'gd_3').getBoundingClientRect(); return { x: r.x + 80, y: r.y + r.height / 2 }; });
 		await page.mouse.move(row.x, row.y);
 		const hover = await guides();
-		assert.notEqual(hover[2].color, idle[2].color, '트리 위에 마우스를 올리면 안내선이 진해짐');
+		assert.notEqual(hover[2].lines[0].color, idle[2].lines[0].color, '트리 위에 마우스를 올리면 안내선이 진해짐');
+		const originalViewport = page.viewport();
+		for (const scale of [1, 1.25, 1.5]) {
+			await page.setViewport({ ...originalViewport, deviceScaleFactor: scale });
+			const gaps = await page.evaluate(() => {
+				const rows = [...document.querySelectorAll('.pane [role="tree"] .tree-row')];
+				return rows.flatMap((r, index) => [...r.querySelectorAll('.tree-guide')].map((line, depth) => {
+					const ancestor = rows.slice(0, index).reverse().find(a => Number(a.dataset.depth) === depth);
+					const arrow = ancestor.querySelector('.chevron').getBoundingClientRect(), guide = line.getBoundingClientRect();
+					return Math.abs(guide.left - (arrow.left + arrow.width / 2));
+				}));
+			});
+			assert.ok(gaps.length && gaps.every(g => g < 0.1), `${scale * 100}%에서 부모 화살표 중심과 안내선 일치: ${gaps}`);
+		}
+		await page.setViewport(originalViewport);
+		assert.deepEqual(await page.$eval('.pane .tree-row[aria-expanded="true"] .chevron', e => [getComputedStyle(e).position, getComputedStyle(e).zIndex]), ['relative', '1'], '안내선보다 화살표를 위에 표시');
 		await page.screenshot({ path: path.join(tmpdir(), 'ws5-tree-guides.png'), clip: await page.$eval('.pane [role="tree"]', e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: Math.min(r.width, 160), height: Math.min(r.height, 130), scale: 3 }; }) });
 		console.log('Outline: 들여쓰기 안내선 passed');
 	}

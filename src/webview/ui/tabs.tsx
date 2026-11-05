@@ -27,7 +27,7 @@ function place(pill: HTMLElement, button: HTMLElement | null | undefined, snap: 
 	}
 }
 
-export function Tabs({ items, actions, start, end, beforePinned, pinned = [], position = 'top', keepMounted = [], active: activeProp, onActive, order, onReorder, hints, onTabMenu, onAdd, keys = {} }: {
+export function Tabs({ items, actions, start, end, beforePinned, pinned = [], pinnedIcons = {}, position = 'top', keepMounted = [], active: activeProp, onActive, order, onReorder, hints, onTabMenu, onAdd, keys = {} }: {
 	items: Record<string, ReactNode>; actions?: Record<string, ReactNode>;
 	/** 탭 줄 맨 앞(탭 앞)에 둘 것 */
 	start?: ReactNode; end?: ReactNode;
@@ -35,6 +35,7 @@ export function Tabs({ items, actions, start, end, beforePinned, pinned = [], po
 	beforePinned?: ReactNode; position?: 'top' | 'bottom'; keepMounted?: string[];
 	/** 탭 줄 오른쪽(end 앞)에 고정할 탭(ERD 등). 끌어 순서 바꾸기·저장 순서에서 빠진다 */
 	pinned?: string[];
+	pinnedIcons?: Record<string, string>;
 	active?: string; onActive?(name: string): void;
 	/** onReorder가 있으면 탭을 끌어 순서를 바꾼다 */
 	order?: readonly string[]; onReorder?(order: string[]): void;
@@ -81,7 +82,7 @@ export function Tabs({ items, actions, start, end, beforePinned, pinned = [], po
 	const hoverPill = useRef<HTMLSpanElement>(null);
 	const hovered = useRef<HTMLElement | null>(null);
 	const refresh = (snap = false) => {
-		const current = barRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+		const current = barRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]:not(.tab-pinned)');
 		const hover = hovered.current?.isConnected ? hovered.current : null;
 		place(currentPill.current!, current, snap || currentPill.current!.style.opacity !== '1');
 		place(hoverPill.current!, hover, snap || hoverPill.current!.style.opacity !== '1');
@@ -109,7 +110,7 @@ export function Tabs({ items, actions, start, end, beforePinned, pinned = [], po
 		}
 	};
 	const bar = (
-		<nav ref={barRef} className="tab-bar" role="tablist" onPointerOver={e => e.target !== e.currentTarget && hover((e.target as HTMLElement).closest<HTMLElement>('[role="tab"]'))} onPointerLeave={() => hover(null)}>
+		<nav ref={barRef} className="tab-bar" role="tablist" onPointerOver={e => e.target !== e.currentTarget && hover((e.target as HTMLElement).closest<HTMLElement>('[role="tab"]:not(.tab-pinned)'))} onPointerLeave={() => hover(null)}>
 			{start}
 			<span ref={hoverPill} className="tab-pill hover" aria-hidden />
 			<span ref={currentPill} className="tab-pill current" aria-hidden />
@@ -121,7 +122,7 @@ export function Tabs({ items, actions, start, end, beforePinned, pinned = [], po
 			{onAdd && <button className="tab-add codicon codicon-add" title="탭 추가" aria-label="탭 추가" onClick={onAdd} />}
 			<span className="tab-actions">{actions?.[active]}</span>
 			{beforePinned}
-			{all.slice(names.length).map(n => <button key={n} role="tab" aria-selected={n === active} className={clsx('tab-pinned', { active: n === active })} onClick={() => setActive(n)}>{n}</button>)}
+			{all.slice(names.length).map(n => <button key={n} role="tab" aria-selected={n === active} aria-label={n} title={n} className={clsx('tab-pinned', { active: n === active, 'tab-pinned-icon': !!pinnedIcons[n] })} onClick={() => setActive(n)}>{pinnedIcons[n] && <span className={`codicon codicon-${pinnedIcons[n]}`} aria-hidden="true" />}<span className={pinnedIcons[n] ? 'tab-icon-label' : undefined}>{n}</span></button>)}
 			{end}
 		</nav>
 	);

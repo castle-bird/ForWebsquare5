@@ -12,6 +12,9 @@ import { PropertyPane } from './ui/properties';
 
 import { useEditorPopups } from './ui/editorPopups';
 import { GridBindDialog } from './ui/gridBindDialog';
+import { GridCreateDialog } from './ui/gridCreateDialog';
+import { DataFlowDialog } from './ui/dataFlowDialog';
+import { dataFlow } from '../core/dataFlow';
 
 import { InfoPane } from './ui/infoPane';
 import { UsedTablesPane } from './ui/usedTablesPane';
@@ -38,6 +41,7 @@ import { canMerge, canUnmerge, gridOfCells, post, targets, useEditorStore } from
 import { wrapProblem } from '../core/wrap';
 import { isMergeCell } from '../core/merge';
 import { inScreenBody } from '../core/paste';
+import { insertTarget } from '../core/palette';
 import '@vscode/codicons/dist/codicon.css';
 import './style.css';
 
@@ -122,6 +126,8 @@ function App() {
 		cssRules?: number[];
 		grid?: { hasFooter: boolean; at: number; onColumn: boolean; column?: { index: number; cells: number[]; left: boolean; right: boolean } } }>();
 	const [gridBind, setGridBind] = useState<{ grid: number; list: number }>();
+	const [gridCreate, setGridCreate] = useState<{ target: XmlNode; version: number }>();
+	const [dataFlowOpen, setDataFlowOpen] = useState(false);
 	const linkTabs = useLinkTabs(activeTab, LOADING);
 	// 보고 있던 연결 탭이 지워지면 Design으로
 	const shownTab = FIXED_TABS.includes(activeTab) || activeTab === ERD_TAB || linkTabs.labels.includes(activeTab) ? activeTab : 'Design';
@@ -311,8 +317,12 @@ function App() {
 						onClick={() => { if (rightPanel.current?.isCollapsed()) { rightPanel.current.expand(); } else { rightPanel.current?.collapse(); } }} /></>} start={<><button className={`tab-palette codicon codicon-layout-sidebar-left${paletteOpen ? ' active' : ''}`}
 						title={paletteOpen ? '팔레트 접기' : '팔레트 펼치기'} aria-label="팔레트" aria-expanded={paletteOpen} draggable={false} disabled={shownTab !== 'Design'} onClick={() => setPaletteOpen(open => !open)} />
 						<button draggable={false} className={`tab-move codicon codicon-arrow-${otherSide === 'top' ? 'up' : 'down'}`}
-						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} /></>} beforePinned={<button className="tab-run codicon codicon-play" title="현재 화면 브라우저로 보기" aria-label="현재 화면 브라우저로 보기" draggable={false} disabled={shownTab !== 'Design' || !body}
-							onClick={() => { const page = pageSnapshot(styles?.css, styles?.imports); if (page) { previewStyles.current = styles; post({ type: 'openInBrowser', ...page }); } }} />} pinned={[ERD_TAB]} keepMounted={['Script', 'Source', ERD_TAB, ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={showTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
+						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} /></>} beforePinned={<><button className={`tab-data-flow codicon codicon-repo-forked${dataFlowOpen ? ' active' : ''}`} title="데이터 흐름 (dataList·dataMap ↔ Submission ↔ Controller)" aria-label="데이터 흐름" aria-pressed={dataFlowOpen} draggable={false} disabled={!model}
+								onClick={() => setDataFlowOpen(open => !open)} /><button className="tab-grid-create codicon codicon-table" title="그리드 만들기" aria-label="그리드 만들기" disabled={shownTab !== 'Design' || !body || !doc} onClick={() => {
+								const target = root && insertTarget(root, selected === undefined ? undefined : pathTo(root, selected));
+								if (target && doc) { setGridCreate({ target, version: doc.version }); }
+							}} /><button className="tab-run codicon codicon-play" title="현재 화면 브라우저로 보기" aria-label="현재 화면 브라우저로 보기" draggable={false} disabled={shownTab !== 'Design' || !body}
+							onClick={() => { const page = pageSnapshot(styles?.css, styles?.imports); if (page) { previewStyles.current = styles; post({ type: 'openInBrowser', ...page }); } }} /></>} pinned={[ERD_TAB]} pinnedIcons={{ [ERD_TAB]: 'type-hierarchy' }} keepMounted={['Script', 'Source', ERD_TAB, ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={showTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
 						Design: doc?.error ? <p className="error">{doc.error}</p>
 							: body && defs ? <Group orientation="horizontal" className="design-layout">
 								{paletteOpen && <Panel key="palette" id="palette" defaultSize={220} minSize={150} maxSize={360}><PalettePane /></Panel>}
@@ -422,6 +432,9 @@ function App() {
 		<Toast />
 		{linkTabs.menu}
 		{editors}
+		{dataFlowOpen && <DataFlowDialog flows={dataFlow(root)} onSelect={setSelected} onClose={() => setDataFlowOpen(false)}
+			onOpen={index => { const n = root && nodeAt(root, index); if (n) { openDataEditor(n); } }} />}
+		{gridCreate && <GridCreateDialog target={gridCreate.target} version={gridCreate.version} lists={dataCollection?.children.filter(n => isWs(n, 'dataList') && !!n.attrs.id) ?? []} onClose={() => setGridCreate(undefined)} />}
 		{gridBind && root && (() => {
 			const grid = nodeAt(root, gridBind.grid), list = nodeAt(root, gridBind.list);
 			if (!grid || !list) { return null; }

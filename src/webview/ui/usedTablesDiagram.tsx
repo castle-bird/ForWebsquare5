@@ -118,6 +118,16 @@ function Diagram({ data, onChange, onUndo, onRedo, canUndo, canRedo }: { data: U
 	const [editing, setEditing] = useState<string>();
 	const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] }>();
 	const [help, setHelp] = useState(false);
+	useEffect(() => {
+		if (!help) { return; }
+		const close = (e: PointerEvent) => {
+			const target = e.target;
+			if (target instanceof Element && target.closest('.flow-help, .flow-toolbar button[aria-label="도움말"]')) { return; }
+			setHelp(false);
+		};
+		document.addEventListener('pointerdown', close, true);
+		return () => document.removeEventListener('pointerdown', close, true);
+	}, [help]);
 	// 그림만 웹뷰 전체로(Esc나 같은 버튼으로 돌아옴)
 	const [full, setFull] = useState(false);
 	/** 고른 도구(그림을 클릭하면 그 자리에 놓고 풀림) */
@@ -527,19 +537,30 @@ function Diagram({ data, onChange, onUndo, onRedo, canUndo, canRedo }: { data: U
 						aria-label={full ? '원래 크기로' : '전체 화면'} aria-pressed={full} onClick={() => setFull(f => !f)} />
 				</Panel>
 				{help && <Panel position="top-left" className="flow-help">
-					<ul>
-						<li><b>도구(숫자 키 1~8) → 그림 클릭</b> 그 자리에 추가 · <b>Esc</b> 도구 풀기 · <b>빈 곳 더블클릭</b> 테이블</li>
-						<li><b>우클릭</b> 메뉴(추가·색·화살표·삭제·이미지로 저장)</li>
-						<li><b>방향키</b> 고른 것 한 칸씩(Shift: 네 칸) · 끌면 다른 박스와 줄 맞춤</li>
-						<li><b>글자 더블클릭</b> 편집 · <b>Enter</b> 반영 · <b>Tab</b> 다음 칸 · <b>Esc</b> 취소</li>
-						<li><b>PK</b> 칸 클릭으로 PK 켜고 끄기 · 마지막 칸에서 Tab: 컬럼 하나 더</li>
-						<li><b>박스·도형 옆 점 → 다른 박스·도형</b> 선 잇기 · 선 우클릭: 화살표 · 선 더블클릭: 글자</li>
-						<li><b>도형</b> 더블클릭: 글자 · 끝 손잡이: 크기 · 우클릭: 모양·색</li>
-						<li><b>빈 곳 끌기</b> 여러 개 고르기 → 우클릭 그룹으로 묶기</li>
-						<li><b>그룹 이름 줄 끌기</b> 안에 든 것과 같이 옮기기</li>
-						<li><b>휠</b> 화면 이동(가운데 버튼·Space+끌기도) · <b>Ctrl+휠</b> 확대·축소</li>
-						<li><b>Delete</b> 지우기 · <b>Ctrl+C/X/V/D</b> 복사·잘라내기·붙여넣기(마우스 자리에)·복제 · <b>Ctrl+Z/Y</b> 되돌리기·다시</li>
-					</ul>
+					<header className="flow-help-header"><span className="codicon codicon-lightbulb" aria-hidden="true" /><div><strong>ERD 사용 안내</strong><span>주요 조작과 단축키</span></div></header>
+					<div className="flow-help-content">
+						<section><h3>시작하기</h3>
+							<p><b>도구 선택 후 클릭</b><span><kbd>1–8</kbd> 선택 · <kbd>Esc</kbd> 해제</span></p>
+							<p><b>빈 곳 더블클릭</b><span>테이블 추가</span></p>
+							<p><b>우클릭</b><span>추가 · 색 · 화살표 · 삭제 · 이미지로 저장</span></p>
+						</section>
+						<section><h3>편집과 연결</h3>
+							<p><b>글자 더블클릭</b><span><kbd>Enter</kbd> 반영 · <kbd>Tab</kbd> 다음 칸 · <kbd>Esc</kbd> 취소</span></p>
+							<p><b>테이블 컬럼</b><span>PK 클릭으로 전환 · 마지막 칸에서 <kbd>Tab</kbd> 추가</span></p>
+							<p><b>박스·도형 연결</b><span>옆 점에서 끌어 연결 · 선 우클릭으로 화살표, 더블클릭으로 글자 편집</span></p>
+							<p><b>도형 편집</b><span>더블클릭: 글자 · 손잡이: 크기 · 우클릭: 모양과 색</span></p>
+						</section>
+						<section><h3>선택과 화면 이동</h3>
+							<p><b>여러 개 선택</b><span>빈 곳 끌기 · 우클릭으로 그룹화 · 그룹 이름을 끌어 함께 이동</span></p>
+							<p><b>위치 조정</b><span>방향키: 한 칸 · <kbd>Shift</kbd> + 방향키: 네 칸 · 끌어서 정렬</span></p>
+							<p><b>화면 이동</b><span>휠 · 가운데 버튼 / <kbd>Space</kbd> + 끌기 · <kbd>Ctrl</kbd> + 휠: 확대·축소</span></p>
+						</section>
+						<section><h3>단축키</h3>
+							<p><b><kbd>Delete</kbd></b><span>선택 항목 삭제</span></p>
+							<p><b><kbd>Ctrl</kbd> + <kbd>C / X / V / D</kbd></b><span>복사 · 잘라내기 · 마우스 위치에 붙여넣기 · 복제</span></p>
+							<p><b><kbd>Ctrl</kbd> + <kbd>Z / Y</kbd></b><span>되돌리기 · 다시 실행</span></p>
+						</section>
+					</div>
 				</Panel>}
 				{guides && <Guides x={guides.x} y={guides.y} />}
 				{!nodes.length && <Panel position="top-center" className="flow-empty">

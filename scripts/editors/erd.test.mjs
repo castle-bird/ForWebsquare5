@@ -7,10 +7,12 @@ export default async function ({ page }) {
 		// ERD > 사용 테이블: 처음엔 저장 위치 고르기 → 그림 안에서 테이블·컬럼·메모·그룹 만들기, 선 잇기(화살표·글자), 되돌리기·복붙, Delete가 디자인 컴포넌트를 안 지움
 		{
 			assert.equal(await page.$eval('.canvas-frame .tab-bar', bar => { const tabs = [...bar.querySelectorAll('button[role="tab"]')]; return tabs.at(-1).textContent; }), 'ERD', 'ERD는 탭 줄 맨 오른쪽');
-			await page.evaluate(() => { window.sent.length = 0; window.tab('ERD').click(); });
+			assert.ok(await page.$('.canvas-frame .tab-bar [role="tab"][aria-label="ERD"] .codicon-type-hierarchy'), 'ERD 탭은 아이콘과 접근성 이름을 사용');
+			await page.evaluate(() => { document.body.style.setProperty('--vscode-font-family', 'sans-serif'); document.body.style.setProperty('--vscode-editor-font-family', 'monospace'); window.sent.length = 0; window.tab('ERD').click(); });
 			await page.waitForFunction(() => window.sent.some(m => m.type === 'loadUsedTables'));
 			await page.evaluate(() => window.send({ type: 'usedTables' }));
 			await page.waitForSelector('.used-tables-setup');
+			assert.equal(await page.$eval('.used-tables-setup p', e => getComputedStyle(e).fontFamily), 'sans-serif', '저장 위치 안내는 UI 글꼴');
 			await page.$$eval('.used-tables-setup button', bs => bs.find(b => b.textContent === '기본 위치 사용').click());
 			assert.deepEqual(await page.evaluate(() => window.sent.findLast(m => m.type === 'chooseTablesFolder')), { type: 'chooseTablesFolder', pick: false });
 			// 위아래로 겹쳐 마주 보는 박스(가로가 조금 어긋나도)는 꺾이지 않은 곧은 선, 많이 어긋나면 꺾인 선
@@ -18,6 +20,9 @@ export default async function ({ page }) {
 				const box = (id, x, y) => ({ id, name: id, desc: '', crud: [], columns: [], keysOnly: false, x, y });
 				const show = tables => page.evaluate(tables => window.send({ type: 'usedTables', folder: 'C:/x', file: 'C:/x/ui/a.json', data: { tables, links: [{ from: 'A', to: 'B', arrow: 'end', label: '' }], memos: [], groups: [], shapes: [] } }), tables);
 				await show([box('A', 0, 0), box('B', 40, 300)]);
+				await page.waitForSelector('.react-flow__node-table .name');
+				assert.equal(await page.$eval('.react-flow__node-table .name', e => getComputedStyle(e).fontFamily), 'monospace', '테이블 데이터는 편집기 글꼴');
+				assert.equal(await page.$eval('.used-tables-bar .title', e => getComputedStyle(e).fontFamily), 'sans-serif', '상단 안내는 UI 글꼴');
 				await page.waitForFunction(() => /^M ([\d.-]+),[\d.-]+ ?L ?\1,[\d.-]+$/.test(document.querySelector('.react-flow__edge-path')?.getAttribute('d') ?? ''), { timeout: 3000 })
 					.catch(async () => assert.fail(`겹쳐 마주 보면 곧은 선: ${await page.$eval('.react-flow__edge-path', p => p.getAttribute('d'))}`));
 				// 마우스 모양: 바닥은 화살표, 테이블·선 위는 손가락
@@ -34,6 +39,28 @@ export default async function ({ page }) {
 			}
 			await page.evaluate(() => window.send({ type: 'usedTables', folder: 'C:/x', file: 'C:/x/ui/a.json', data: { tables: [], links: [], memos: [], groups: [], shapes: [] } }));
 			await page.waitForSelector('.used-tables-flow .flow-empty');
+			assert.equal(await page.$eval('.flow-empty p', e => getComputedStyle(e).fontFamily), 'sans-serif', '빈 그림 안내는 UI 글꼴');
+			await page.click('.flow-toolbar button[aria-label="도움말"]');
+			await page.waitForSelector('.flow-help');
+			assert.equal(await page.$eval('.flow-help', e => getComputedStyle(e).fontFamily), 'sans-serif', '도움말은 UI 글꼴');
+			assert.deepEqual(await page.$$eval('.flow-help-content h3', es => es.map(e => e.textContent)), ['시작하기', '편집과 연결', '선택과 화면 이동', '단축키']);
+			assert.ok(await page.$eval('.flow-help', e => e.getBoundingClientRect().bottom <= e.closest('.used-tables-flow').getBoundingClientRect().bottom), '도움말은 그림 영역을 넘지 않음');
+			assert.ok(await page.evaluate(() => { const a = document.querySelector('.flow-help').getBoundingClientRect(), b = document.querySelector('.flow-empty').getBoundingClientRect();
+				const x = Math.max(a.left, b.left) + 2, y = Math.max(a.top, b.top) + 2; return x < Math.min(a.right, b.right) && y < Math.min(a.bottom, b.bottom) && !!document.elementFromPoint(x, y)?.closest('.flow-help'); }), '빈 화면 안내가 겹쳐도 도움말이 위에 표시됨');
+			await page.screenshot({ path: path.join(tmpdir(), 'ws5-erd-help.png') });
+			await page.click('.flow-help-header strong');
+			assert.ok(await page.$('.flow-help'), '도움말 안 클릭은 유지');
+			await page.click('.used-tables-bar .title');
+			await page.waitForFunction(() => !document.querySelector('.flow-help'));
+			await page.click('.flow-toolbar button[aria-label="도움말"]');
+			await page.waitForSelector('.flow-help');
+			await page.click('.flow-toolbar button[aria-label="도움말"]');
+			await page.waitForFunction(() => !document.querySelector('.flow-help'));
+			await page.click('.flow-toolbar button[aria-label="도움말"]');
+			await page.waitForSelector('.flow-help');
+			await page.click('.flow-toolbar button[aria-label="테이블"]');
+			await page.waitForFunction(() => !document.querySelector('.flow-help') && document.querySelector('.flow-toolbar button[aria-label="테이블"]').getAttribute('aria-pressed') === 'true');
+			await page.keyboard.press('Escape');
 			// 저장은 잠깐 모았다가 보내므로 조금 기다린 뒤 마지막 저장 내용
 			const saved = async () => { await new Promise(r => setTimeout(r, 500)); return page.evaluate(() => window.sent.findLast(m => m.type === 'saveUsedTables')?.data); };
 			const until = (test, message) => page.waitForFunction(test, { timeout: 3000 }).catch(async () => assert.fail(`${message}: ${JSON.stringify(await saved())}`));

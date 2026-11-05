@@ -123,7 +123,7 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 			const rows = [...head.rows];
 			if (rows.length < 2) { return; }
 			rows.forEach(r => r.style.height = '');
-			const tallest = Math.max(...rows.map(r => r.getBoundingClientRect().height));
+			const tallest = Math.max(...rows.map(r => r.offsetHeight));
 			rows.forEach(r => r.style.height = `${tallest}px`);
 		}));
 		return () => cancelAnimationFrame(frame);

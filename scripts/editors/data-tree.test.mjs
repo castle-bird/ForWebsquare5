@@ -16,6 +16,16 @@ export default async function ({ page }) {
 		.catch(() => assert.fail('Data 초기에는 DataCollection·Submission 한 단계 펼침'));
 	await page.evaluate(() => [...document.querySelectorAll('.pane .codicon-expand-all')].at(-1)?.click());
 	await page.waitForFunction(() => [...document.querySelectorAll('.pane .tree-row .id')].some(e => e.textContent === 's2'));
+	const viewport = page.viewport();
+	await page.setViewport({ ...viewport, deviceScaleFactor: 1.25 });
+	const gap = await page.evaluate(() => {
+		const rows = [...document.querySelectorAll('.pane [role="tree"] .tree-row')];
+		const i = rows.findIndex(r => r.querySelector('.id')?.textContent === 'dm1');
+		const arrow = rows.slice(0, i).reverse().find(r => r.dataset.depth === '0').querySelector('.chevron').getBoundingClientRect();
+		return Math.abs(rows[i].querySelector('.tree-guide').getBoundingClientRect().left - arrow.left - arrow.width / 2);
+	});
+	assert.ok(gap < .1, `Data 125% 안내선 정렬: ${gap}`);
+	await page.setViewport(viewport);
 	// Data 루트 Delete·잘라내기는 XML 요청도 선택 변경도 하지 않는다. 하위 항목은 계속 삭제 가능하다.
 	const row = index => page.locator('.pane .tree-row[data-index="' + index + '"]');
 	for (const index of [dataIds['w2:dataCollection'], -1]) {

@@ -176,6 +176,7 @@ export type ToExtension =
 	| { type: 'editHistory'; version: number; index: number; rows: HistoryRow[] } // head(index)의 개정 이력(Info 탭)
 	| { type: 'editGridCells'; version: number; index: number; popup: string; cells: GridCellEdit[] } // 그리드(index) 칸 속성 표 팝업
 	| { type: 'bindGrid'; version: number; index: number; list: number; mode: GridBindMode; extras: GridExtras }
+	| { type: 'createGrid'; version: number; index: number; popup: string; position: import('./paste').InsertPosition; options: import('./gridCreate').GridCreateOptions }
 	| { type: 'addGridPart'; version: number; index: number; part: GridPart | 'column' | 'columnLeft' | 'row'; at?: number }
 	| { type: 'openFrame'; index: number }
 	| { type: 'openAction'; action: string } // Submission 요청 URL → Controller 메서드 열기

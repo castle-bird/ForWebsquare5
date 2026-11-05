@@ -184,6 +184,21 @@ export default async function ({ page, pickProperty, clickTab }) {
 			return hover && Math.abs(hover.width - head.width) < 2 && Math.abs(hover.height - head.height) < 2;
 		});
 		console.log('Design: 다단 헤더 높이·번호/상태 칸 hover passed');
+		// 배율과 무관하게 셀 높이를 기준으로 추가된 헤더 행도 같은 높이가 된다.
+		for (const scale of [0.5, 2]) {
+			await page.evaluate(async scale => {
+				const zoom = document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-zoom');
+				zoom.style.transform = `scale(${scale})`;
+				const text = '<html xmlns:w2="urn:test"><body><w2:gridView><w2:header><w2:row><w2:column style="height:40px"/></w2:row><w2:row><w2:column/></w2:row></w2:header></w2:gridView></body></html>';
+				const root = window.parseXml(text);
+				root.children[0].children[0].def = 2;
+				window.send({ type: 'document', version: 92, text, root, script: { text: '' } });
+				await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+			}, scale);
+			const heights = await page.evaluate(() => [...document.querySelector('.canvas-host').shadowRoot.querySelectorAll('.w2grid thead tr')].map(r => r.offsetHeight));
+			assert.ok(Math.abs(heights[0] - heights[1]) <= 1 && heights[0] >= 40, `배율 ${scale}: ${heights}`);
+		}
+		await page.evaluate(() => { document.querySelector('.canvas-host').shadowRoot.querySelector('.wse-zoom').style.transform = ''; });
 		// inputType 아이콘: 스킨에 없는 타입은 codicon, radio는 실제 입력 모양, select는 스킨 클래스만
 		await page.evaluate(() => {
 			const text = '<html xmlns:w2="urn:test"><body><w2:gridView id="grd"><w2:gBody id="b"><w2:row id="r"><w2:column id="a" inputType="link"/><w2:column id="c" inputType="radio"/><w2:column id="d" inputType="select"/><w2:column id="e" inputType="secret"/></w2:row></w2:gBody></w2:gridView></body></html>';

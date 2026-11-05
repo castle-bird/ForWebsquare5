@@ -109,7 +109,7 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onRange, onCo
 			<div ref={setRow} role="treeitem" aria-expanded={hasChildren && !filter ? open : undefined}
 				data-index={node.index} data-depth={depth} data-container={container || undefined} data-open={open && hasChildren || undefined} data-hit={hit ? '' : undefined}
 				className={clsx('tree-row', { selected: isSelected || isExtra, dragging: drag.isDragging, 'drop-inside': dropHere && dropParent.inside, 'drop-parent': dropHere && !dropParent.inside }, nativeZone && `drop-${nativeZone}`)}
-				style={{ paddingLeft: 4 + depth * INDENT, '--depth': depth, '--indent': `${INDENT}px` } as CSSProperties} onClick={e => e.shiftKey && onRange ? onRange(node.index, e.currentTarget) : onSelect(node.index, e.ctrlKey || e.metaKey)}
+				style={{ paddingLeft: 4 + depth * INDENT } as CSSProperties} onClick={e => e.shiftKey && onRange ? onRange(node.index, e.currentTarget) : onSelect(node.index, e.ctrlKey || e.metaKey)}
 				onContextMenu={e => onContextMenu?.(e, node)}
 				onDoubleClick={() => onDoubleClick?.(node)}
 				draggable={ref || movable ? true : undefined}
@@ -139,6 +139,7 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onRange, onCo
 					if (z) { e.preventDefault(); reorder.drop(node, z); }
 				} : undefined}
 				{...(draggable ? drag.listeners : undefined)} {...(draggable ? drag.attributes : undefined)}>
+				{Array.from({ length: depth }, (_, i) => <span key={i} className="tree-guide" aria-hidden="true" style={{ left: 12 + i * INDENT }} />)}
 				<span className={clsx('chevron codicon', open ? 'codicon-chevron-down' : 'codicon-chevron-right', { hidden: !hasChildren || !!filter })} onClick={e => { e.stopPropagation(); fold.toggle(node, !open); }} />
 				{defs && <span className={`codicon codicon-${outlineIcon(node, defs)} tree-icon`} />}
 				<span className="tag" title={node.tag}><Hit text={name} terms={hit} />{node.attrs.tagname && <Hit text={`:${node.attrs.tagname}`} terms={hit} />}</span>

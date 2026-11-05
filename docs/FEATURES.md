@@ -22,7 +22,14 @@
 
 XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그대로 동작합니다.
 
+## 데이터 흐름
+
+- **데이터 흐름**: 탭 줄 오른쪽 그리드 만들기 왼쪽의 버튼을 누르면 현재 화면의 Submission 관계를 팝업으로 보여 줍니다. 한 줄이 Submission 하나이고 번호가 붙습니다. 칸은 Submission(메서드·`submit`·`submitdone`·`submiterror` 핸들러) · 요청 데이터(ref) · 응답 데이터(target) · Controller(요청 URL) 순이며, 머리글은 스크롤해도 고정되고 줄에 마우스를 올리면 강조됩니다. dataList와 dataMap은 요청·응답 어느 쪽에도 올 수 있어 종류(List·Map 표시)와 action(modified 등)을 그대로 보여 줍니다. 화면에 없는 id는 빨간 점선 밑줄, 해석하지 못한 ref·target 값은 원문으로 보여 줍니다.
+- 데이터·Submission 이름을 누르면 선택, 바로 옆 연필 버튼을 누르면 편집 팝업이 열립니다. Controller 칸의 이동 아이콘을 누르면 그 URL을 처리하는 Controller 메서드를 엽니다. 팝업은 열어 둔 채 Script·Java 탭을 오가며 볼 수 있고, 화면을 고치면 내용이 따라 바뀝니다. 이 화면 안의 관계만 보며 다른 화면과의 관계는 다루지 않습니다. XML에 선언된 항목만 읽으므로 Script에서 동적으로 만든 dataList·dataMap·Submission은 보이지 않을 수 있고(팝업 아래에 안내), 그런 데이터를 ref·target이 가리키면 "없는 데이터"로 표시됩니다.
+
 ## 그리드
+
+- **그리드 만들기**: Design 탭 도구줄에서 dataList 연결 여부, 열 수, Header·Body·subTotal·footer 생성 여부와 구역별 행 수, 삽입 위치를 정합니다. dataList를 선택하면 열 수를 자동으로 채우며, 수정할 수 있습니다. 컬럼은 첫 Header와 Body 행에 순서대로 반영합니다.
 
 - **칸 여러 개 고르기**: 칸을 누른 채 끌면 직사각형 안의 칸을 모두 고릅니다(같은 header·본문 안). 가로 스크롤이 있는 그리드는 가장자리로 끌면 스크롤하며 가려진 칸까지 고릅니다
 - **그리드 우클릭 메뉴**: 캔버스뿐 아니라 Outline에서 gridView나 그 안의 노드를 우클릭해도 같은 메뉴(Column·Row·Header·subTotal·footer 추가, 열 이동·삭제, 칸 속성 표, 병합)가 뜹니다
