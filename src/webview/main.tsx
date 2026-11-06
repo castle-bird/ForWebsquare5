@@ -101,6 +101,11 @@ function App() {
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const rightPanel = usePanelRef();
 	const [rightOpen, setRightOpen] = useState(true);
+	/** 고른 노드를 우측 패널(Property·Data)에 보인다: 접혀 있으면 펼치고 두 패널이 탭을 바꿔 그 줄까지 간다 */
+	const revealPanels = () => {
+		if (rightPanel.current?.isCollapsed()) { rightPanel.current.expand(); }
+		useEditorStore.setState({ panelReveal: Date.now() });
+	};
 	// ERD(그림이 넓어야 함)에 들어가면 우측 패널을 접고, 나오면 들어가기 전 상태로
 	const reopenRight = useRef(false);
 	const showTab = (name: string) => {
@@ -432,7 +437,7 @@ function App() {
 		<Toast />
 		{linkTabs.menu}
 		{editors}
-		{dataFlowOpen && <DataFlowDialog flows={dataFlow(root)} onSelect={setSelected} onClose={() => setDataFlowOpen(false)}
+		{dataFlowOpen && <DataFlowDialog flows={dataFlow(root)} onSelect={index => { setSelected(index); revealPanels(); }} onClose={() => setDataFlowOpen(false)}
 			onOpen={index => { const n = root && nodeAt(root, index); if (n) { openDataEditor(n); } }} />}
 		{gridCreate && <GridCreateDialog target={gridCreate.target} version={gridCreate.version} lists={dataCollection?.children.filter(n => isWs(n, 'dataList') && !!n.attrs.id) ?? []} onClose={() => setGridCreate(undefined)} />}
 		{gridBind && root && (() => {

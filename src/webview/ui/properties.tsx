@@ -91,6 +91,10 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 }) {
 	const tabOrder = useEditorStore(s => s.tabOrder);
 	const setTabOrder = useEditorStore(s => s.setTabOrder);
+	const panelReveal = useEditorStore(s => s.panelReveal);
+	const [activeTab, setActiveTab] = useState<string>();
+	// 패널 보이기 요청(데이터 흐름 팝업 등): 이벤트 탭에 있었어도 속성 탭으로
+	useEffect(() => { if (panelReveal) { setActiveTab('Property'); } }, [panelReveal]);
 	const [help, setHelp] = useState<Help>();
 	const [keyWidth, setKeyWidth] = useState<number>();
 	const [search, setSearch] = useState<Search>({ field: 'name', text: '' });
@@ -150,7 +154,7 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 				setFading(false);
 			}}>
 			{warning && <p className="warning" title={warning}>{warning}</p>}
-			<Tabs order={tabOrder} onReorder={setTabOrder} items={{
+			<Tabs order={tabOrder} onReorder={setTabOrder} active={activeTab} onActive={setActiveTab} items={{
 				Property: propGroups ? <PropertyTable nodeIndex={node?.index} groups={propGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} /> : noSelection,
 				Event: evGroups ? <PropertyTable nodeIndex={node?.index} groups={evGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} isEvent onScript={onScript} /> : noSelection,
 			}} />

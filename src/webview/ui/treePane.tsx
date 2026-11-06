@@ -99,6 +99,18 @@ export function TreePane({ body, dataRoots, model, dataCollection, outline, data
 	const tabOrder = useEditorStore(s => s.tabOrder);
 	const setTabOrder = useEditorStore(s => s.setTabOrder);
 	const root = doc?.root;
+	const panelReveal = useEditorStore(s => s.panelReveal);
+	const [activeTab, setActiveTab] = useState<string>();
+	// 패널 보이기 요청(데이터 흐름 팝업 등): Data 탭으로 바꾸고 고른 노드까지 펼친다(줄이 새로 그려질 때 보이는 자리로 스크롤)
+	useEffect(() => {
+		if (!panelReveal) { return; }
+		const path = selected === undefined ? undefined : dataRoots.map(t => pathTo(t, selected)).find(Boolean);
+		if (path) {
+			setActiveTab('Data');
+			data.reveal(path.slice(0, -1));
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- 요청이 올 때만 실행(data 객체는 매 렌더 새로 만들어짐)
+	}, [panelReveal]);
 
 	useEffect(() => {
 		const path = body && pathTo(body, selected);
@@ -223,7 +235,7 @@ export function TreePane({ body, dataRoots, model, dataCollection, outline, data
 
 	return (
 		<div className="pane">
-			<Tabs order={tabOrder} onReorder={setTabOrder} items={{
+			<Tabs order={tabOrder} onReorder={setTabOrder} active={activeTab} onActive={setActiveTab} items={{
 				Outline: <>
 					<TreeSearch value={queries.outline} onChange={search('outline', outline, outlineTops)} onPick={pickFirst} />
 					<DndContext sensors={sensors} onDragStart={outlineDrag.start} onDragMove={outlineDrag.moveTo} onDragEnd={outlineDrag.end} onDragCancel={outlineDrag.cancel}>

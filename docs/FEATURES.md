@@ -24,8 +24,8 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 
 ## 데이터 흐름
 
-- **데이터 흐름**: 탭 줄 오른쪽 그리드 만들기 왼쪽의 버튼을 누르면 현재 화면의 Submission 관계를 팝업으로 보여 줍니다. 한 줄이 Submission 하나이고 번호가 붙습니다. 칸은 Submission(메서드·`submit`·`submitdone`·`submiterror` 핸들러) · 요청 데이터(ref) · 응답 데이터(target) · Controller(요청 URL) 순이며, 머리글은 스크롤해도 고정되고 줄에 마우스를 올리면 강조됩니다. dataList와 dataMap은 요청·응답 어느 쪽에도 올 수 있어 종류(List·Map 표시)와 action(modified 등)을 그대로 보여 줍니다. 화면에 없는 id는 빨간 점선 밑줄, 해석하지 못한 ref·target 값은 원문으로 보여 줍니다.
-- 데이터·Submission 이름을 누르면 선택, 바로 옆 연필 버튼을 누르면 편집 팝업이 열립니다. Controller 칸의 이동 아이콘을 누르면 그 URL을 처리하는 Controller 메서드를 엽니다. 팝업은 열어 둔 채 Script·Java 탭을 오가며 볼 수 있고, 화면을 고치면 내용이 따라 바뀝니다. 이 화면 안의 관계만 보며 다른 화면과의 관계는 다루지 않습니다. XML에 선언된 항목만 읽으므로 Script에서 동적으로 만든 dataList·dataMap·Submission은 보이지 않을 수 있고(팝업 아래에 안내), 그런 데이터를 ref·target이 가리키면 "없는 데이터"로 표시됩니다.
+- **데이터 흐름**: 탭 줄 오른쪽 그리드 만들기 왼쪽의 버튼을 누르면 현재 화면의 Submission 관계를 팝업으로 보여 줍니다. 카드 하나가 Submission 하나이고 번호가 붙습니다. 카드 머리줄에 Submission 이름을, 본문에 요청 데이터(ref) → Controller(메서드·요청 URL) → 응답 데이터(target)를 화살표로 이어 보여 줍니다. `submit`·`submitdone`·`submiterror` 핸들러는 그 아래에 한 줄씩 나열해 길어도 줄이 겹치지 않습니다. 세 칸은 모든 카드가 같은 너비로 맞춰집니다. dataList와 dataMap은 요청·응답 어느 쪽에도 올 수 있어 종류(List·Map 표시)와 action(modified 등)을 그대로 보여 줍니다. 화면에 없는 id는 "잘못된 형식", 해석하지 못한 ref·target 값은 "문법 오류" 안내와 원문으로 보여 줍니다. Submission 이름 앞에는 "Submission ID", 요청·응답 상자 왼쪽 위에는 "요청"·"응답" 힌트가 붙습니다.
+- 데이터·Submission 이름을 누르면 선택하고, 우측 패널이 접혀 있으면 펼친 뒤 Property 탭과 Data 탭으로 바꿔 그 항목 줄까지 펼쳐 보여 줍니다. 더블클릭하거나 바로 옆 연필 버튼을 누르면 Data 탭에서 더블클릭한 것과 같은 편집 팝업이 열립니다. Controller 칸의 이동 아이콘을 누르면 그 URL을 처리하는 Controller 메서드를 엽니다. 팝업은 열어 둔 채 Script·Java 탭을 오가며 볼 수 있고, 화면을 고치면 내용이 따라 바뀝니다. 이 화면 안의 관계만 보며 다른 화면과의 관계는 다루지 않습니다. XML에 선언된 항목만 읽으므로 Script에서 동적으로 만든 dataList·dataMap·Submission은 보이지 않을 수 있고(팝업 아래에 안내), 그런 데이터를 ref·target이 가리키면 "잘못된 형식"으로 표시됩니다.
 
 ## 그리드
 
