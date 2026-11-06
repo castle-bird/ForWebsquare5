@@ -12,7 +12,7 @@
   },
   "homepage": "https://github.com/castle-bird/ForWebsquare5#readme",
   "description": "VS Code에서 WebSquare5 에디터를 사용할 수 있게 해주는 비공식 확장",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "icon": "media/logo.png",
   "engines": {
     "vscode": "^1.125.0"
@@ -454,6 +454,7 @@
     "check-types": "tsc --noEmit && tsc --noEmit -p src/webview",
     "lint": "eslint src",
     "knip": "knip",
+    "perf": "node esbuild.js --production && node scripts/perf.mjs",
     "test": "node scripts/test-unit.mjs",
     "test:vscode": "npm run compile-tests && npm run compile && vscode-test"
   },
@@ -522,7 +523,6 @@
     "react-resizable-panels": "^4.14.1",
     "saxes": "^6.0.0",
     "style-to-js": "^2.0.2",
-    "thememirror": "^2.0.1",
     "zustand": "^5.0.15"
   }
 }

@@ -3,11 +3,10 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { EditorView, basicSetup } from 'codemirror';
 import { search } from '@codemirror/search';
 import { ChangeSet, Compartment, EditorSelection, EditorState, Prec, Transaction, countColumn, type Extension, type Text } from '@codemirror/state';
-import { hoverTooltip, keymap, type Command, type Tooltip } from '@codemirror/view';
+import { hoverTooltip, keymap, scrollPastEnd, type Command, type Tooltip } from '@codemirror/view';
 import { indentLess, indentMore, redo } from '@codemirror/commands';
 import { acceptCompletion, autocompletion, type CompletionSource } from '@codemirror/autocomplete';
 import { getIndentUnit, indentUnit, type LanguageSupport } from '@codemirror/language';
-import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { diff } from '@codemirror/merge';
 import type { CodeChange, CodeTarget, SignatureInfo, ToExtension, ToWebview } from '../../core/protocol';
 import type { LintSource } from '@codemirror/lint';
@@ -17,6 +16,7 @@ import { baseEffect, gitChanges } from './changes';
 import { markdownDoc, remoteCompletion, remoteHover, remoteSignature } from './remoteCompletion';
 import { signatureHelp } from './signatureHelp';
 import { minimap } from './minimap';
+import { indentGuides } from './indentGuides';
 import { searchCount } from './searchCount';
 import { blame, blameEffect } from './blame';
 import { jumped } from './jumps';
@@ -54,11 +54,6 @@ const changesTo = (editor: EditorView, next: string) => {
 	const doc = editor.state.doc.toString(), target = editor.state.toText(next).toString();
 	return diff(doc, target, { timeout: 300 }).map(c => ({ from: c.fromA, to: c.toA, insert: target.slice(c.fromB, c.toB) }));
 };
-
-// 들여쓰기 가이드 색은 VS Code 테마 색(밝음·어두움 모두 같은 변수). 옛 VS Code는 번호 없는 이름만 있다
-const GUIDE = 'var(--vscode-editorIndentGuide-background1, var(--vscode-editorIndentGuide-background))';
-const ACTIVE_GUIDE = 'var(--vscode-editorIndentGuide-activeBackground1, var(--vscode-editorIndentGuide-activeBackground))';
-const indentGuides = indentationMarkers({ colors: { light: GUIDE, dark: GUIDE, activeLight: ACTIVE_GUIDE, activeDark: ACTIVE_GUIDE } });
 
 /** Tab(VS Code처럼): 선택이 없으면 커서 자리에 다음 들여쓰기 칸까지 공백, 선택이 있으면 그 줄들을 들여쓴다. Shift+Tab은 줄 내어쓰기 */
 const insertIndent: Command = view => {
@@ -270,7 +265,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 			parent: host.current!,
 			doc: text,
 			extensions: [
-				basicSetup, searchTop, selectionClass, keys, completion, indent, indentGuides, lintFor(lint, remoteLint), gitChanges,
+				basicSetup, scrollPastEnd(), searchTop, selectionClass, keys, completion, indent, indentGuides(), lintFor(lint, remoteLint), gitChanges,
 				langConf.of(languageOf.current(lang)),
 				wrapConf.of(wordWrap ? EditorView.lineWrapping : []),
 				minimapConf.of(minimapOn ? minimap : []),

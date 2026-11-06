@@ -23,6 +23,25 @@ import moveIcon from '@vscode/codicons/src/icons/move.svg';
 const MOVE_MIME = 'application/x-websquare5-canvas-move';
 let renders = 0;
 
+const sheet = (text: string) => {
+	const s = new CSSStyleSheet();
+	s.replaceSync(text);
+	return s;
+};
+let canvasSheet: CSSStyleSheet | undefined;
+const parsedSheets = new WeakMap<string[], CSSStyleSheet[]>();
+/** CSP상 <style> 태그는 막혀 있어서 생성한 스타일시트(adoptedStyleSheets)로 붙인다. 같은 styles 메시지의 CSS는 한 번만 파싱한다(Design 탭에 돌아올 때 큰 프로젝트 CSS를 다시 읽지 않게) */
+function styleSheets(sheets: string[] | undefined): CSSStyleSheet[] {
+	canvasSheet ??= sheet(canvasCss);
+	if (!sheets) { return [canvasSheet]; }
+	let parsed = parsedSheets.get(sheets);
+	if (!parsed) {
+		parsed = sheets.map(sheet);
+		parsedSheets.set(sheets, parsed);
+	}
+	return [...parsed, canvasSheet];
+}
+
 /** 편집 상자에 보일 글자: <br/>은 줄바꿈으로(그리드 칸 편집은 그대로) */
 const editValue = (editing: { target: TextTarget; form?: unknown }) => editing.form ? editing.target.value ?? '' : breaksToNewlines(editing.target.value ?? '');
 
@@ -97,14 +116,9 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 	};
 	const handleGrid = gridOf(hoverGrid) ?? gridOf(selected);
 	useEffect(() => setShadow(host.current!.shadowRoot ?? host.current!.attachShadow({ mode: 'open' })), []);
-	// CSP상 <style> 태그는 막혀 있어서 생성한 스타일시트(adoptedStyleSheets)로 붙인다.
 	useEffect(() => {
 		if (shadow) {
-			shadow.adoptedStyleSheets = [...sheets ?? [], canvasCss].map(text => {
-				const sheet = new CSSStyleSheet();
-				sheet.replaceSync(text);
-				return sheet;
-			});
+			shadow.adoptedStyleSheets = styleSheets(sheets);
 		}
 	}, [shadow, sheets]);
 	const [tree, generation] = useMemo(() => [render(body, defs), ++renders], [body, defs]);

@@ -1,28 +1,41 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 
 export default async function ({ clickTab, page, reset, modifiedKey }) {
+	const github = {};
+	for (const mode of ['light', 'dark']) {
+		const theme = JSON.parse(readFileSync(new URL(`../../media/themes/github-${mode}.json`, import.meta.url), 'utf8'));
+		github[mode] = await page.evaluate(theme => {
+			const { dark, ...imported } = window.fromVsCodeTheme(theme);
+			return { type: 'codeTheme', theme: 'vscode', id: `bundled:github-${dark ? 'dark' : 'light'}`, label: theme.name, dark, imported };
+		}, theme);
+	}
 	// 코드 편집기 테마: 확장이 고른 테마를 보내면 모든 코드 편집기에 적용, VS Code 밝음/어두움 전환에는 안 바뀜. 'vscode'면 다시 따라간다
 	await clickTab('Script');
 	const editorBg = () => page.evaluate(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor);
 	const vsDarkBg = await editorBg();
-	await page.evaluate(() => window.send({ type: 'codeTheme', theme: 'dracula' }));
-	await page.waitForFunction(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor === 'rgb(45, 47, 63)', {timeout: 3000})
-		.catch(async () => assert.fail(`Dracula 배경 아님: ${await editorBg()}`));
+	await page.evaluate(theme => window.send(theme), github.light);
+	await page.waitForFunction(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).color === 'rgb(31, 35, 40)');
+	assert.equal(await editorBg(), 'rgb(255, 255, 255)', 'GitHub Light Default 배경');
+	await page.screenshot({path:path.join(tmpdir(), 'ws5-theme-github-light.png'), clip: await page.$eval('.tab-body:not([hidden]) .code-editor', e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: Math.min(r.width, 700), height: 120 }; })});
+	await page.evaluate(theme => window.send(theme), github.dark);
+	await page.waitForFunction(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor === 'rgb(13, 17, 23)', {timeout: 3000})
+		.catch(async () => assert.fail(`GitHub Dark Default 배경 아님: ${await editorBg()}`));
 	assert.ok(await page.$eval('.tab-body:not([hidden]) .code-editor', e => e.classList.contains('custom-theme')));
 	await reset('selected text'); await modifiedKey('Control', 'a');
 	await page.waitForSelector('.tab-body:not([hidden]) .cm-selectionBackground');
 	const selection = await page.$eval('.tab-body:not([hidden]) .cm-selectionBackground', e => getComputedStyle(e).backgroundColor);
 	assert.notEqual(selection, 'rgba(0, 0, 0, 0)', `선택 표시: ${selection}`);
 	await reset('function f() {\n    return "text"; // note\n}'); await page.keyboard.down('Shift'); await page.keyboard.press('ArrowUp'); await page.keyboard.up('Shift');
-	await page.screenshot({path:path.join(tmpdir(), 'ws5-theme-dracula.png'), clip: await page.$eval('.tab-body:not([hidden]) .code-editor', e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: Math.min(r.width, 700), height: 120 }; })});
+	await page.screenshot({path:path.join(tmpdir(), 'ws5-theme-github-dark.png'), clip: await page.$eval('.tab-body:not([hidden]) .code-editor', e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: Math.min(r.width, 700), height: 120 }; })});
 	await page.evaluate(() => { document.body.className = 'vscode-light'; });
 	await new Promise(resolve => setTimeout(resolve, 100));
-	assert.equal(await editorBg(), 'rgb(45, 47, 63)', '고른 테마는 VS Code 밝음 전환에 안 바뀜');
+	assert.equal(await editorBg(), 'rgb(13, 17, 23)', '고른 테마는 VS Code 밝음 전환에 안 바뀜');
 	await page.evaluate(() => { document.body.className = 'vscode-dark'; });
 	await clickTab('Source');
-	assert.equal(await editorBg(), 'rgb(45, 47, 63)', '다른 코드 탭도 같은 테마');
+	assert.equal(await editorBg(), 'rgb(13, 17, 23)', '다른 코드 탭도 같은 테마');
 	// 검색창(Ctrl+F)도 고른 테마의 배경·글자색
 	await page.click('.tab-body:not([hidden]) .cm-content'); await modifiedKey('Control', 'f');
 	await page.waitForSelector('.tab-body:not([hidden]) .cm-search .cm-textfield');
@@ -30,7 +43,7 @@ export default async function ({ clickTab, page, reset, modifiedKey }) {
 		const q = s => getComputedStyle(document.querySelector('.tab-body:not([hidden]) ' + s));
 		return { panels: q('.cm-panels').backgroundColor, field: q('.cm-search .cm-textfield').color, editor: q('.cm-editor').color };
 	});
-	assert.deepEqual({ panels: search.panels, field: search.field }, { panels: 'rgb(45, 47, 63)', field: search.editor }, `검색창 테마: ${JSON.stringify(search)}`);
+	assert.deepEqual({ panels: search.panels, field: search.field }, { panels: 'rgb(13, 17, 23)', field: search.editor }, `검색창 테마: ${JSON.stringify(search)}`);
 	await page.keyboard.press('Escape');
 	await page.evaluate(() => window.send({ type: 'codeTheme', theme: 'vscode' }));
 	await page.waitForFunction(bg => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor === bg, {timeout: 3000}, vsDarkBg);
@@ -73,7 +86,7 @@ export default async function ({ clickTab, page, reset, modifiedKey }) {
 		const style = getComputedStyle(span);
 		return [style.color, style.fontStyle];
 	});
-	await page.evaluate(() => window.send({ type: 'codeTheme', theme: 'dracula', own: { colors: { background: '#102030', selection: '#ff000080' }, tokens: { keyword: { color: '#ff8800', fontStyle: 'italic' } } } }));
+	await page.evaluate(theme => window.send({ ...theme, own: { colors: { background: '#102030', selection: '#ff000080' }, tokens: { keyword: { color: '#ff8800', fontStyle: 'italic' } } } }), github.dark);
 	await page.waitForFunction(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor === 'rgb(16, 32, 48)', { timeout: 3000 })
 		.catch(async () => assert.fail(`덮어쓴 배경 아님: ${await editorBg()}`));
 	assert.deepEqual(await keywordStyle(), ['rgb(255, 136, 0)', 'italic'], '덮어쓴 키워드 색·기울임이 테마보다 우선');
@@ -191,9 +204,9 @@ export default async function ({ clickTab, page, reset, modifiedKey }) {
 		const st = getComputedStyle(node.nodeType === Node.TEXT_NODE ? node.parentElement : node);
 		return [st.color, st.fontStyle];
 	}, text);
-	await page.evaluate(() => window.send({ type: 'codeTheme', theme: 'dracula', id: 'dracula', label: 'Dracula' }));
-	await page.waitForFunction(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor === 'rgb(45, 47, 63)');
-	const draculaKeyword = await spanStyle('return');
+	await page.evaluate(theme => window.send(theme), github.dark);
+	await page.waitForFunction(() => getComputedStyle(document.querySelector('.tab-body:not([hidden]) .cm-editor')).backgroundColor === 'rgb(13, 17, 23)');
+	const githubKeyword = await spanStyle('return');
 	const openThemeColors = async () => {
 		await page.click('.canvas-frame .tab-settings');
 		await page.evaluate(() => [...document.querySelectorAll('.context-menu [role="menuitem"]')].find(b => b.textContent === '테마 색 덮어쓰기…').click());
@@ -202,10 +215,10 @@ export default async function ({ clickTab, page, reset, modifiedKey }) {
 	const hex = name => `.theme-colors-editor .theme-hex[data-name="${name}"]`;
 	const themeRow = name => `.theme-colors-editor .theme-row:has(.theme-hex[data-name="${name}"])`;
 	await openThemeColors();
-	assert.equal(await page.$eval('.theme-colors-editor .popup-title .mono', e => e.textContent), 'Dracula');
+	assert.equal(await page.$eval('.theme-colors-editor .popup-title .mono', e => e.textContent), 'GitHub Dark Default');
 	assert.equal(await page.$eval(hex('keyword'), e => e.placeholder), '테마 기본');
-	assert.equal(await page.$eval(`${themeRow('keyword')} .theme-swatch`, e => getComputedStyle(e).backgroundColor), draculaKeyword[0], '안 바꾼 칸에도 테마의 실제 색');
-	assert.equal(await page.$eval(`${themeRow('background')} .theme-swatch`, e => getComputedStyle(e).backgroundColor), 'rgb(45, 47, 63)');
+	assert.equal(await page.$eval(`${themeRow('keyword')} .theme-swatch`, e => getComputedStyle(e).backgroundColor), githubKeyword[0], '안 바꾼 칸에도 테마의 실제 색');
+	assert.equal(await page.$eval(`${themeRow('background')} .theme-swatch`, e => getComputedStyle(e).backgroundColor), 'rgb(13, 17, 23)');
 	await page.click(hex('keyword')); await page.keyboard.type('#ff8800'); await page.keyboard.press('Enter');
 	await page.waitForFunction(() => { const s = [...document.querySelectorAll('.tab-body:not([hidden]) .cm-content span')].find(s => s.textContent === 'return'); return getComputedStyle(s).color === 'rgb(255, 136, 0)'; }, { timeout: 3000 });
 	assert.ok(await page.$eval('.theme-colors-editor .theme-preview', p => [...p.querySelectorAll('.cm-content span')].some(s => s.textContent === 'return' && getComputedStyle(s).color === 'rgb(255, 136, 0)')), '팝업 미리 보기도');
@@ -215,7 +228,7 @@ export default async function ({ clickTab, page, reset, modifiedKey }) {
 	await page.evaluate(() => { window.sent.length = 0; });
 	await page.evaluate(() => [...document.querySelectorAll('.theme-colors-editor .data-editor-actions button')].find(b => b.textContent === '닫기').click());
 	await page.waitForFunction(() => !document.querySelector('.theme-colors-editor'));
-	assert.deepEqual(await spanStyle('return'), draculaKeyword, '닫기는 원래대로');
+	assert.deepEqual(await spanStyle('return'), githubKeyword, '닫기는 원래대로');
 	assert.equal(await page.evaluate(() => window.sent.some(m => m.type === 'saveThemeCustomizations')), false, '닫기는 저장 안 함');
 	await openThemeColors();
 	await page.click(hex('keyword')); await page.keyboard.type('#ff8800'); await page.keyboard.press('Enter');

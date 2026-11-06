@@ -92,12 +92,23 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 	const tabOrder = useEditorStore(s => s.tabOrder);
 	const setTabOrder = useEditorStore(s => s.setTabOrder);
 	const panelReveal = useEditorStore(s => s.panelReveal);
+	const problemReveal = useEditorStore(s => s.problemReveal);
 	const [activeTab, setActiveTab] = useState<string>();
 	// 패널 보이기 요청(데이터 흐름 팝업 등): 이벤트 탭에 있었어도 속성 탭으로
 	useEffect(() => { if (panelReveal) { setActiveTab('Property'); } }, [panelReveal]);
 	const [help, setHelp] = useState<Help>();
 	const [keyWidth, setKeyWidth] = useState<number>();
 	const [search, setSearch] = useState<Search>({ field: 'name', text: '' });
+	const [highlight, setHighlight] = useState<{ attr: string; key: number }>();
+	const highlightKey = useRef(0);
+	useEffect(() => {
+		if (!problemReveal || problemReveal.index !== node?.index) { setHighlight(undefined); return; }
+		setActiveTab(problemReveal.attr.startsWith(EV) ? 'Event' : 'Property');
+		setSearch({ field: 'name', text: '' });
+		setHighlight({ attr: problemReveal.attr, key: ++highlightKey.current });
+		const timer = window.setTimeout(() => setHighlight(undefined), 2400);
+		return () => window.clearTimeout(timer);
+	}, [problemReveal, node?.index]);
 	const [fading, setFading] = useState(false);
 	const fadeTimer = useRef<number>(undefined);
 	// 누른 Key 칸 왼쪽(자리가 없으면 오른쪽), 위아래는 화면 안으로
@@ -155,8 +166,8 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 			}}>
 			{warning && <p className="warning" title={warning}>{warning}</p>}
 			<Tabs order={tabOrder} onReorder={setTabOrder} active={activeTab} onActive={setActiveTab} items={{
-				Property: propGroups ? <PropertyTable nodeIndex={node?.index} groups={propGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} /> : noSelection,
-				Event: evGroups ? <PropertyTable nodeIndex={node?.index} groups={evGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} isEvent onScript={onScript} /> : noSelection,
+				Property: propGroups ? <PropertyTable nodeIndex={node?.index} groups={propGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} highlight={highlight} /> : noSelection,
+				Event: evGroups ? <PropertyTable nodeIndex={node?.index} groups={evGroups} search={search} onSearch={setSearch} keyWidth={keyWidth} onKeyWidth={setKeyWidth} onKeyClick={showHelp} onEdit={onEdit} isEvent onScript={onScript} highlight={highlight} /> : noSelection,
 			}} />
 			<div className="style-area">
 				<span>Style</span>
@@ -173,14 +184,21 @@ export function PropertyPane({ node, def, choices, warning, onEdit, onScript }: 
 	);
 }
 
-function PropertyTable({ nodeIndex, groups: all, search, onSearch, keyWidth, onKeyWidth, onKeyClick, onEdit, isEvent, onScript }: {
+function PropertyTable({ nodeIndex, groups: all, search, onSearch, keyWidth, onKeyWidth, onKeyClick, onEdit, isEvent, onScript, highlight }: {
 	/** 지금 고른 노드 번호: 바뀌면 칸을 새로 만들어 열어 둔 편집을 닫는다 */
 	nodeIndex?: number; groups: RowGroup[]; search: Search; onSearch(s: Search): void; keyWidth?: number; onKeyWidth(w: number): void; onKeyClick(e: ReactMouseEvent<HTMLElement>, row: Row): void; onEdit: Edit;
-	isEvent?: boolean; onScript?(eventName: string): void;
+	isEvent?: boolean; onScript?(eventName: string): void; highlight?: { attr: string; key: number };
 }) {
 	const match = useMemo(() => matcher(search.text), [search.text]);
 	const groups = match ? all.map(g => ({ ...g, rows: g.rows.filter(r => match(r[search.field])) })).filter(g => g.rows.length) : all;
 	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+	const highlightedRow = useRef<HTMLTableRowElement>(null);
+	useEffect(() => {
+		if (!highlight) { return; }
+		const category = all.find(g => g.rows.some(r => r.attr === highlight.attr))?.category;
+		if (category !== undefined) { setCollapsed(s => { const next = new Set(s); next.delete(category); return next; }); }
+	}, [highlight, all]);
+	useEffect(() => { highlightedRow.current?.scrollIntoView({ block: 'nearest' }); }, [highlight, collapsed, groups]);
 	const toggle = (c: string) => setCollapsed(s => {
 		const next = new Set(s);
 		if (!next.delete(c)) {
@@ -206,8 +224,8 @@ function PropertyTable({ nodeIndex, groups: all, search, onSearch, keyWidth, onK
 						)}
 						{/* 노드가 바뀌면 칸을 새로 만들어, 열어 둔 편집(목록 포함)이 새로 고른 노드로 넘어가 반영되지 않게 한다 */}
 						{open(g.category) && g.rows.map(r => (
-							<tr key={`${nodeIndex}:${r.name}`} className={clsx({ set: r.value !== undefined })}>
-								<td className={clsx('key', { 'has-help': !!r.description })} onClick={e => onKeyClick(e, r)}>{r.display ?? r.name}</td>
+							<tr key={`${nodeIndex}:${r.name}`} ref={highlight?.attr === r.attr ? highlightedRow : undefined} className={clsx({ set: r.value !== undefined, 'problem-highlight': highlight?.attr === r.attr })}>
+								<td key={highlight?.attr === r.attr ? highlight.key : 'key'} className={clsx('key', { 'has-help': !!r.description })} onClick={e => onKeyClick(e, r)}>{r.display ?? r.name}</td>
 								<td>
 									{isEvent
 										? <div className="value-cell">

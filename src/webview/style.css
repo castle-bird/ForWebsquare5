@@ -231,7 +231,7 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .code-editor .cm-change.cm-change-deleted { height: 0; border-top: 3px solid var(--change); }
 .code-editor .cm-change-ruler { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; z-index: 3; pointer-events: none; }
 .code-editor .cm-change-mark { position: absolute; left: 0; right: 0; min-height: 2px; background: var(--change); opacity: .8; }
-/* 고른 테마(thememirror): 선택 색 규칙이 그려지는 선택 레이어에 안 먹고 현재 줄 배경은 불투명해서, 테마 글자색을 옅게 섞어 쓴다 */
+/* 고른 테마: 선택 색을 지정하지 않았으면 테마 글자색을 옅게 섞어 쓴다 */
 .code-editor.custom-theme .cm-selectionBackground, .code-editor.custom-theme .cm-focused .cm-selectionBackground { background: var(--code-selection, color-mix(in srgb, currentColor 25%, transparent)) !important; }
 .code-editor.custom-theme .cm-activeLine { background-color: var(--code-line, color-mix(in srgb, currentColor 7%, transparent)) !important; }
 /* 선택 중에는 현재 줄 배경을 걷는다(불투명한 현재 줄 색이 뒤 층의 선택을 가림, codeEditor selectionClass) */
@@ -777,6 +777,10 @@ button.flow-data:hover { background: var(--vscode-toolbar-hoverBackground); }
 .kv tr:not(.set):not(.category) td:first-child { opacity: .75; }
 .kv tr.set td:first-child { font-weight: 600; color: var(--vscode-foreground); opacity: 1; box-shadow: inset 2px 0 0 var(--vscode-focusBorder); }
 .kv tr.set td:last-child { font-weight: 500; }
+.kv tr.problem-highlight .key { background: color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 35%, transparent); animation: problem-pulse .6s ease-in-out 3; }
+@keyframes problem-pulse { 50% { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .kv tr.problem-highlight .key { animation: none; } }
+[data-animation="off"] .kv tr.problem-highlight .key { animation: none; }
 .kv td.has-help { cursor: help; }
 
 .warning {
@@ -1111,7 +1115,7 @@ textarea.edit.style-value {
 .code-editor .cm-blame { padding-left: 3em; white-space: pre; pointer-events: none; user-select: none;
 	color: var(--vscode-git-blame-editorDecorationForeground, var(--vscode-editorCodeLens-foreground, var(--vscode-descriptionForeground))); }
 /* 코드 편집기 미니맵(막대형, editor/minimap.ts): 스크롤바 왼쪽, 지금 보이는 곳은 슬라이더 */
-.code-editor .cm-minimap { position: absolute; top: 0; bottom: 0; width: 72px; z-index: 2; cursor: default; }
+.code-editor .cm-minimap { position: absolute; top: 0; bottom: 0; width: 72px; z-index: 2; cursor: default; background: var(--vscode-minimap-background, color-mix(in srgb, currentColor 5%, transparent)); }
 .code-editor .cm-minimap { --minimap-added: var(--vscode-minimapGutter-addedBackground, var(--vscode-editorGutter-addedBackground, #2ea043));
 	--minimap-modified: var(--vscode-minimapGutter-modifiedBackground, var(--vscode-editorGutter-modifiedBackground, #0078d4));
 	--minimap-deleted: var(--vscode-minimapGutter-deletedBackground, var(--vscode-editorGutter-deletedBackground, #f85149)); }

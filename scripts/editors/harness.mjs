@@ -38,6 +38,8 @@ const bundle = await build({
 		import {toSnippet} from './src/webview/editor/remoteCompletion';
 		window.toSnippet = toSnippet;
 		import {parseXml} from './src/core/xmlModel';
+		import {fromVsCodeTheme} from './src/core/codeTheme';
+		window.fromVsCodeTheme = fromVsCodeTheme;
 		window.parseXml = parseXml;
 		window.editor = () => EditorView.findFromDOM(document.querySelector('.tab-body:not([hidden]) .cm-content'));
 		window.indentUnit = indentUnit;

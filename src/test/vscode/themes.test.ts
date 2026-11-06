@@ -17,12 +17,13 @@ suite('코드 편집기 테마 (VS Code)', () => {
 	test('확장에 든 테마(media/themes): 모두 읽히고 편집기 색·문법 색 14종이 다 있다', () => {
 		const dir = path.join(vscode.extensions.all.find(e => e.packageJSON.name === 'for-websquare5')!.extensionPath, 'media', 'themes');
 		const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
-		assert.deepStrictEqual(files.filter(f => f.startsWith('intellij-') || f.startsWith('one-')).sort(), ['intellij-dark.json', 'intellij-light.json', 'one-dark.json', 'one-light.json']);
+		assert.deepStrictEqual(CODE_THEMES.map(t => t.id), ['vscode']);
+		assert.deepStrictEqual(files.sort(), ['github-dark.json', 'github-light.json', 'intellij-dark.json', 'intellij-light.json', 'one-dark.json', 'one-light.json']);
 		for (const file of files) {
 			const theme = parseJsonc(fs.readFileSync(path.join(dir, file), 'utf8')) as VsTheme;
 			const converted = fromVsCodeTheme(theme);
 			assert.ok(theme.name, `${file}: 목록에 보일 이름`);
-			assert.strictEqual(Object.keys(converted.colors ?? {}).length, 7, `${file}: 편집기 색`);
+			assert.strictEqual(Object.keys(converted.colors ?? {}).length, file.startsWith('github-') ? 6 : 7, `${file}: 편집기 색`);
 			assert.strictEqual(Object.keys(converted.tokens ?? {}).length, 14, `${file}: 문법 색`);
 		}
 	});

@@ -54,6 +54,12 @@ export async function loadDefinitions(uri: vscode.Uri, webRoot?: string): Promis
 	}
 }
 
+/**
+ * 파일별 CSS 변환 결과. 글자와 웹뷰 주소 모양이 그대로면 다시 파싱하지 않는다
+ * (큰 테마 CSS는 변환에 수백 ms가 걸리고 그동안 확장 호스트가 멈춘다. 화면을 열 때마다 반복하지 않게)
+ */
+const scopedCss = new Map<string, { text: string; uriBase: string; css: string; imports: string[]; errors: string[]; rules: CssRuleSource[] }>();
+
 export async function loadStyles(document: vscode.TextDocument, webview: vscode.Webview, webRoot: string): Promise<Extract<ToWebview, { type: 'styles' }>> {
 	const css: string[] = [], rules: CssRuleSource[] = [], imports: string[] = [], failed: string[] = [], broken: string[] = [];
 	try {
@@ -66,10 +72,17 @@ export async function loadStyles(document: vscode.TextDocument, webview: vscode.
 				failed.push(path.relative(webRoot, file));
 				continue;
 			}
-			const errors: string[] = [], fileRules: CssRuleSource[] = [];
-			css.push(scopeCss(text, file, webRoot, toUri, imports, errors, fileRules));
-			rules.push(...fileRules);
-			broken.push(...errors.map(e => `${path.relative(webRoot, file)} ${e}`));
+			const key = `${webRoot}\n${file}`, uriBase = toUri(webRoot);
+			let scoped = scopedCss.get(key);
+			if (scoped?.text !== text || scoped.uriBase !== uriBase) {
+				const fileImports: string[] = [], errors: string[] = [], fileRules: CssRuleSource[] = [];
+				scoped = { text, uriBase, css: scopeCss(text, file, webRoot, toUri, fileImports, errors, fileRules), imports: fileImports, errors, rules: fileRules };
+				scopedCss.set(key, scoped);
+			}
+			css.push(scoped.css);
+			imports.push(...scoped.imports);
+			rules.push(...scoped.rules);
+			broken.push(...scoped.errors.map(e => `${path.relative(webRoot, file)} ${e}`));
 		}
 	} catch (e) {
 		return { type: 'styles', css, rules, imports, error: `websquare/config.xml 읽기 실패: ${errorMessage(e)}` };

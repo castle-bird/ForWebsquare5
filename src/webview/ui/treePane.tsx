@@ -3,11 +3,11 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEve
 import { DndContext, PointerSensor, useSensor, useSensors, type DragMoveEvent, type DragStartEvent } from '@dnd-kit/core';
 import { findNode, isWs, pathTo, type XmlNode } from '../../core/xmlModel';
 import { isDataNode } from '../../core/data';
-import { problemAncestors, screenProblems } from '../../core/check';
+import { problemAncestors, screenProblemDetails } from '../../core/check';
 import { useEditorStore } from '../store';
 import { Tabs } from './tabs';
 import { INDENT, projectDrop, type FlatRow, type OutlineDrop } from '../../core/outlineDrop';
-import { TreeItem, nodeLabels, useDataReorder, useTreeRename, type DragData, type Fold, type Problems } from './tree';
+import { TreeItem, nodeLabels, useDataReorder, useTreeRename, type DragData, type Fold } from './tree';
 import { filterTree, type TreeFilter } from '../../core/treeFilter';
 import { outlineChildren } from '../design/renderers';
 import { EmptyState } from './emptyState';
@@ -131,10 +131,11 @@ export function TreePane({ body, dataRoots, model, dataCollection, outline, data
 	const rename = useTreeRename(root, selected, (id, index) => editAttr('id', id, index));
 	// 화면 점검(겹치는 id·없는 컬럼 바인딩·Script에 없는 이벤트 함수): 줄에 경고 표시
 	const scriptText = doc?.script.text;
-	const problems = useMemo((): Problems | undefined => {
+	const problems = useMemo(() => {
 		if (!root) { return undefined; }
-		const of = screenProblems(root, scriptText);
-		return { of, inside: problemAncestors(root, of) };
+		const details = screenProblemDetails(root, scriptText);
+		const of = new Map([...details].map(([index, entries]) => [index, entries.map(e => e.message)]));
+		return { of, inside: problemAncestors(root, of), details };
 	}, [root, scriptText]);
 	const outlineDrag = useOutlineDrag(move);
 	// 트리 검색: 탭마다 따로. 검색 중에는 맞는 노드와 조상만 보인다(core/treeFilter)
@@ -218,7 +219,7 @@ export function TreePane({ body, dataRoots, model, dataCollection, outline, data
 		const i = (rows.findIndex(r => r.node.index === selected) + 1) % rows.length, { node, path } = rows[i];
 		fold.reveal(path);
 		setSelected(node.index);
-		useEditorStore.setState({ toast: { message: `경고 ${i + 1}/${rows.length}\n${problems!.of.get(node.index)!.join('\n')}`, key: Date.now() } });
+		useEditorStore.setState({ problemReveal: { index: node.index, attr: problems!.details.get(node.index)![0].attr }, toast: { message: `경고 ${i + 1}/${rows.length}\n${problems!.of.get(node.index)!.join('\n')}`, key: Date.now() } });
 	};
 	const foldButtons = (fold: Fold, tops: XmlNode[]) => {
 		const rows = problemRows(tops);

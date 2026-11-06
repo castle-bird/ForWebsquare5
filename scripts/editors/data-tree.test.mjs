@@ -86,9 +86,14 @@ export default async function ({ page }) {
 		return page.evaluate(() => ({ id: document.querySelector('.pane .tree-row.selected .id')?.textContent, toast: document.querySelector('.toast')?.textContent }));
 	};
 	assert.deepEqual(await nextProblemRow(), { id: 'dm1', toast: '경고 1/3\nID가 중복되었습니다. dm1 (2곳)' });
+	await page.waitForFunction(() => document.querySelector('.kv tr.problem-highlight .key')?.textContent === 'id');
 	assert.deepEqual(await nextProblemRow(), { id: 'dm1', toast: '경고 2/3\nID가 중복되었습니다. dm1 (2곳)' });
 	await page.screenshot({path:path.join(tmpdir(), 'ws5-problem-toast.png')});
+	await page.locator('.kv-search input').fill('찾을수없는속성');
 	assert.deepEqual(await nextProblemRow(), { id: 's1', toast: '경고 3/3\n등록되지 않은 handler가 적용되어 있습니다. scwin.s1_done' }, '접힌 Submission을 펼쳐 선택');
+	await page.waitForFunction(() => document.querySelector('.kv tr.problem-highlight .key')?.textContent === 'submitdone');
+	assert.equal(await page.$eval('.kv tr.problem-highlight .value', e => e.textContent), 'scwin.s1_done');
+	assert.equal(await page.$eval('.kv-search input', e => e.value), '', '문제 속성이 검색에 가려지지 않음');
 	assert.equal((await nextProblemRow()).toast, '경고 1/3\nID가 중복되었습니다. dm1 (2곳)', '마지막 다음은 처음');
 	await page.evaluate(() => window.tab('Outline', '.pane').click());
 	console.log('Data: 트리 끌어 옮기기, 화면 점검 경고 passed');

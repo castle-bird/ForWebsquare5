@@ -18,7 +18,7 @@ import { addLinkTab, LINK_EXTS_SETTING, linkExts, linkTab, linkTabs, onTabsChang
 
 type Saved = Record<string, string>;
 /** LinkedFiles.handle이 맡는 메시지 */
-type LinkMessage = Extract<ToExtension, { type: 'link' | 'unlink' | 'openLink' | 'saveLink' | 'addTab' | 'renameTab' | 'removeTab' | 'complete' | 'hover' | 'signature' | 'definition' | 'findFiles' }>;
+export type LinkMessage = Extract<ToExtension, { type: 'link' | 'unlink' | 'openLink' | 'saveLink' | 'addTab' | 'renameTab' | 'removeTab' | 'complete' | 'hover' | 'signature' | 'definition' | 'findFiles' }>;
 
 const KEY = 'for-websquare5.links:';
 /** 경로 입력 파일 검색: 확장자별 최대 개수 */

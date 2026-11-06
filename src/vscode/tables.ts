@@ -9,7 +9,7 @@ import type { ToExtension, ToWebview } from '../core/protocol';
 
 const FOLDER_KEY = 'for-websquare5.usedTablesFolder';
 const folderChanged = new vscode.EventEmitter<void>();
-type TablesMessage = Extract<ToExtension, { type: 'loadUsedTables' | 'saveUsedTables' | 'chooseTablesFolder' | 'saveTablesImage' }>;
+export type TablesMessage = Extract<ToExtension, { type: 'loadUsedTables' | 'saveUsedTables' | 'chooseTablesFolder' | 'saveTablesImage' }>;
 
 export class UsedTablesStore {
 	/** 저장·다시 읽기는 차례로(빠르게 연달아 고쳐도 옛 내용이 새 내용을 덮지 않게) */

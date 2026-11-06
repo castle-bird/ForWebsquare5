@@ -1,0 +1,40 @@
+# main 푸시·PR마다 검사와 VSIX 빌드(비공개 저장소는 Windows 러너 시간이 2배로 계산돼 작업 브랜치 푸시에는 돌리지 않는다). 웹뷰(Chrome)·VS Code 통합 테스트가 화면 없이 도는 Windows 러너를 쓴다(Linux는 xvfb 준비가 필요)
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check-types
+      - run: npm run lint
+      - run: npm run knip
+      - run: npm test
+      - run: npm run test:editors
+      - run: npm run test:vscode
+      - name: VSIX
+        run: npx @vscode/vsce package --no-dependencies --out for-websquare5.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: for-websquare5.vsix
+          retention-days: 14

@@ -26,6 +26,7 @@ const CLASS: Record<string, string> = { gridView: 'grid', tabControl: 'tabcontro
 const CONTAINERS = new Set(['group', 'section', 'article', 'nav', 'aside']);
 const ATTR: Record<string, string> = { colspan: 'colSpan', rowspan: 'rowSpan', for: 'htmlFor', value: 'defaultValue', readonly: 'readOnly', maxlength: 'maxLength' };
 const XHTML = 'http://www.w3.org/1999/xhtml';
+const DOCUMENT_TAGS = new Set(['html', 'head', 'body']);
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
 
 type Renderer = (node: XmlNode, className: string, defs: ComponentDef[]) => ReactNode;
@@ -93,7 +94,9 @@ const RENDERERS: Record<string, Renderer> = {
 export function render(node: XmlNode, defs: ComponentDef[]): ReactNode {
 	const def = defOf(node, defs);
 	if (!def && node.ns === XHTML) {
-		return el(node, localName(node.tag).toLowerCase(), node.attrs.class ?? '', children(node, defs));
+		// html·head·body는 React 19가 문서에 하나뿐인 요소로 다뤄 캔버스 밖(웹뷰 문서)에 붙이려 한다 → 정의가 없을 때(불러오는 중·정의 파일 없음) 화면이 통째로 빈다
+		const tag = localName(node.tag).toLowerCase();
+		return el(node, DOCUMENT_TAGS.has(tag) ? 'div' : tag, node.attrs.class ?? '', children(node, defs));
 	}
 	if (!def) {
 		return engineIgnores(node, defs) ? null : el(node, 'div', 'wse-unknown', children(node, defs), { 'data-tag': node.tag });

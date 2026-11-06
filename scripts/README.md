@@ -13,6 +13,7 @@
 | 마우스 앞뒤 탐색 | `npm run test:editors -- mouse-history script-navigation themes` |
 | CSS 보기 하위 메뉴·우클릭 대상 | `npm run test:editors -- css-navigation canvas-context` |
 | 우측 패널 글꼴 선택 | `npm run test:editors -- panel-font property` |
+| 들여쓰기 안내선 배율별 두께 | `npm run test:editors -- indent-guides` (100·125·150·175·200% 화면 픽셀 검사) |
 | Outline 이동만 | `npm run test:editors -- outline` |
 | 여러 웹뷰 기능 | `npm run test:editors -- grid-edit property` |
 | 웹뷰 묶음 목록 | `npm run test:editors -- --list` |
@@ -21,12 +22,17 @@
 | 타입·lint | `npm run check-types` / `npm run lint` |
 | 안 쓰는 코드·의존성 | `npm run knip` |
 | 선택 실행기 자체 검사 | `node --test scripts/test-selection.test.mjs` |
+| 성능 측정(테스트 아님) | `npm run perf` / `npm run perf -- 3000` (운영 빌드 후 합성 화면 컴포넌트 수별 측정) |
+
+CI(`.github/workflows/ci.yml`)는 Windows 러너에서 타입·lint·knip·단위·웹뷰 전체·VS Code 통합 테스트를 돌리고 VSIX를 산출물로 올린다.
+
+테스트는 기능과 규모에 맞게 쓴다. 데이터 손실·XML 원문 보존·동기화와 버전 검사·보안 경계는 정확히 검증하고, 모양·색·글꼴·커서 같은 세부는 검사하지 않는다. 고정 대기(`setTimeout`) 대신 조건을 기다리고, 고정 대기가 꼭 필요하면 기다리는 이유(디바운스 값 등)를 적는다.
 
 단위: `src/test/*.test.ts`. esbuild가 선택한 파일과 의존 코드만 `out/test`에 만들고 Node Mocha로 실행한다. Chrome·VS Code를 띄우거나 확장 전체를 tsc로 컴파일하지 않는다. 타입 검사는 별도다. 이름 오타나 없는 파일은 실패하며, 전체 실행으로 바꾸지 않는다.
 
 웹뷰: `scripts/editors/*.test.mjs`. 번들·브라우저는 실행당 한 번 준비하고 각 파일은 새 브라우저 context/page에서 시작한다. 파일끼리 문서·선택·접힘·클립보드·코드 버전을 공유하지 않는다. 파일 안의 연속 조작은 하나의 시나리오다. CSP·에러 수집과 실제 마우스/키보드 검증을 유지한다. Chrome/Edge가 필요하며 `CHROME_PATH`로 지정할 수 있다.
 
-웹뷰 묶음: badges, browser-preview, canvas-context, css-navigation, data, data-tree, design, distance, editor-basic, editor-state, erd, git, grid-dialogs, grid-edit, info, link-reveal, links, minimap, mouse-history, outline, palette, panel-font, property, script-navigation, script-tools, tab-highlight, themes, wrap.
+웹뷰 묶음: badges, browser-preview, canvas-context, css-navigation, data, data-tree, design, distance, editor-basic, editor-state, erd, git, grid-dialogs, grid-edit, indent-guides, info, link-reveal, links, minimap, mouse-history, outline, palette, panel-font, property, script-navigation, script-tools, tab-highlight, themes, wrap.
 
 VS Code 통합: `src/test/vscode/*.test.ts`. 기존 컴파일·번들 빌드 후 테스트 호스트를 실행한다. `npm test`의 의미가 순수 단위 테스트로 바뀌었으므로 배포 전에는 이 명령을 별도로 실행한다.
 

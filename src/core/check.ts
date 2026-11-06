@@ -79,13 +79,13 @@ function dataRefs(value: string): { id: string; column?: string }[] {
  * 화면 점검 결과: 노드 index → 문제들. 겹치는 id(같은 범위), 화면에 있는 데이터의 없는 컬럼을 가리키는 "data:" 바인딩,
  * 이벤트 값 scwin.함수가 Script에 없음. 화면에 없는 데이터는 안 본다: 공통 코드 등은 스크립트에서 만들어 바인딩하는 일이 많아 오류로 착각한다
  */
-export function screenProblems(root: XmlNode, script = ''): Map<number, string[]> {
-	const problems = new Map<number, string[]>();
-	const add = (n: XmlNode, message: string) => problems.set(n.index, [...problems.get(n.index) ?? [], message]);
+export function screenProblemDetails(root: XmlNode, script = ''): Map<number, { message: string; attr: string }[]> {
+	const problems = new Map<number, { message: string; attr: string }[]>();
+	const add = (n: XmlNode, message: string, attr: string) => problems.set(n.index, [...problems.get(n.index) ?? [], { message, attr }]);
 	for (const group of idGroups(root)) {
 		for (const [id, nodes] of group) {
 			if (nodes.length > 1) {
-				nodes.forEach(n => add(n, `ID가 중복되었습니다. \`${id}\` (${nodes.length}곳)`));
+				nodes.forEach(n => add(n, `ID가 중복되었습니다. \`${id}\` (${nodes.length}곳)`, 'id'));
 			}
 		}
 	}
@@ -97,19 +97,23 @@ export function screenProblems(root: XmlNode, script = ''): Map<number, string[]
 				for (const ref of dataRefs(value)) {
 					const target = data.get(ref.id);
 					if (ref.column && target?.columns && !target.columns.has(ref.column)) {
-						add(n, `${target.kind}에 존재하지 않는 ID입니다. \`${ref.id}.${ref.column}\``);
+						add(n, `${target.kind}에 존재하지 않는 ID입니다. \`${ref.id}.${ref.column}\``, name);
 					}
 				}
 			}
 			const handler = name.startsWith(EV) ? /^scwin\.([\w$]+)$/.exec(value.trim())?.[1] : undefined;
 			if (handler && !defined.has(handler)) {
-				add(n, `등록되지 않은 handler가 적용되어 있습니다. \`scwin.${handler}\``);
+				add(n, `등록되지 않은 handler가 적용되어 있습니다. \`scwin.${handler}\``, name);
 			}
 		}
 		n.children.forEach(visit);
 	};
 	visit(root);
 	return problems;
+}
+
+export function screenProblems(root: XmlNode, script = ''): Map<number, string[]> {
+	return new Map([...screenProblemDetails(root, script)].map(([index, details]) => [index, details.map(d => d.message)]));
 }
 
 /** 문제가 있는 노드의 조상들(접힌 줄에도 안쪽 문제를 표시) */

@@ -1,38 +1,20 @@
-import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { isScreen, nodeAt, parseXml, type XmlNode } from './core/xmlModel';
-import { editableScript } from './core/edit';
-import { errorMessage } from './core/errors';
-import type { CodeTarget, SettingsMenuItem, ToExtension, ToWebview } from './core/protocol';
-import { ENGINE_PAGE, GENERATED_DIRS, findWebRoot, fromWebPath, serial } from './project/paths';
-import { BrowserPreview, disposeBrowserPreviews } from './vscode/browserPreview';
-import { openCss } from './vscode/css';
-import { resolveSrc } from './project/frames';
-import { loadApiDocs } from './project/apiDocs';
-import { udcNames } from './project/modules';
-import type { ComponentDef } from './project/components';
-import { disposeWpack, warmWpack } from './project/wpack';
-import { offerSetup, onDidChangeInstall, registerSetup, resolvePath, type SetupKey } from './vscode/setup';
-import { applyCodeEdit, applyNodeEdit, formatCode } from './vscode/documentEdit';
-import { LinkedFiles, registerLinks } from './vscode/links';
-import { UsedTablesStore } from './vscode/tables';
-import { saveTabOrder, tabOrder } from './vscode/linkTabs';
-import { blameOn, minimapOn, onBlameToggled, panelFont, registerViewSettings, saveBlame, saveMinimap, savePanelFont, saveAnimation, saveTabPosition, animationOn, tabPosition } from './vscode/viewSettings';
-import { linkIdOf } from './core/links';
-import { findPaletteDef } from './core/palette';
-import { codeTheme, registerCodeTheme, saveCustomizations } from './vscode/codeTheme';
-import { affectsCodeOptions, codeOptions } from './vscode/codeOptions';
-import { blameFeed, blameText, onGitChange, stagedText } from './vscode/gitBase';
-import { lineOfOffset, sliceBlame } from './core/blame';
-import { insertFromPalette, paletteFavorites, savePaletteFavorite, reorderPaletteFavorites } from './vscode/palette';
+import { isScreen, parseXml, type XmlNode } from './core/xmlModel';
+import type { ToWebview } from './core/protocol';
+import { findWebRoot } from './project/paths';
+import { disposeBrowserPreviews } from './vscode/browserPreview';
+import { disposeWpack } from './project/wpack';
+import { registerSetup } from './vscode/setup';
+import { registerLinks } from './vscode/links';
+import { registerViewSettings } from './vscode/viewSettings';
+import { registerCodeTheme } from './vscode/codeTheme';
 import { createScreen } from './vscode/createScreen';
-import { openAction } from './vscode/actionMapping';
 import { registerSqlCompletion } from './vscode/sqlCompletion';
 import { registerScreenOpen, rememberScreenEditor } from './vscode/screenOpen';
 import { registerWpack } from './vscode/wpack';
-import { documentMessage, loadDefinitions, loadStyles, loadModules } from './vscode/resources';
+import { ScreenSession, VIEW_TYPE } from './vscode/screenSession';
 
-export const VIEW_TYPE = 'for-websquare5.designer';
+export { openFrame, VIEW_TYPE } from './vscode/screenSession';
 
 export function activate(context: vscode.ExtensionContext) {
 	registerSetup(context);
@@ -56,19 +38,6 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 const panels = new Set<vscode.WebviewPanel>();
-
-/** 톱니바퀴 메뉴 → VS Code 명령. 웹뷰는 이 목록에 있는 것만 부른다 */
-const SETTINGS_MENU: Record<SettingsMenuItem, [string, ...unknown[]]> = {
-	codeTheme: ['for-websquare5.codeTheme'],
-	importCodeTheme: ['for-websquare5.importCodeTheme'],
-	themeColors: ['workbench.action.openSettingsJson', { revealSetting: { key: 'for-websquare5.codeThemeCustomizations', edit: true } }],
-	sqlDialect: ['workbench.action.openSettings', '@id:for-websquare5.sqlDialect'],
-	setup: ['for-websquare5.setup'],
-	settings: ['workbench.action.openSettings', '@ext:castle-bird.for-websquare5'],
-};
-
-/** 웹 루트 바로 아래의 생성 폴더는 공통 JS 다시 읽기에서 제외 */
-const NOT_MODULE_DIR = new RegExp(`^[\\\\/]?(${GENERATED_DIRS}|_wpack)[\\\\/_]`, 'i');
 
 /** 모든 화면 공통 설정(탭 순서·위치)을 바꾼 화면 말고 다른 화면에 */
 function broadcast(from: vscode.WebviewPanel, msg: ToWebview) {
@@ -98,323 +67,15 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		}
 
 		rememberScreenEditor(document);
-		// 저장하자마자 변환되게 wpack 상주 변환을 미리 띄운다
-		void resolvePath('wpackExecutable', document.uri, webRoot).then(warmWpack).catch(() => undefined);
 		panels.add(panel);
+		panel.onDidDispose(() => panels.delete(panel));
 		const dist = vscode.Uri.joinPath(this.extensionUri, 'dist');
 		panel.webview.options = { enableScripts: true, localResourceRoots: [dist, vscode.Uri.file(webRoot)] };
 		panel.webview.html = html(panel.webview, dist);
-
-		// 닫힌 뒤 늦게 끝난 작업(문서 전송·Git 기준 등)이 보내도 오류 없이 버린다
-		let disposed = false;
-		const post = async (msg: ToWebview) => {
-			try {
-				return !disposed && await panel.webview.postMessage(msg);
-			} catch {
-				return false;
-			}
-		};
-		const toast = (message: string) => void post({ type: 'toast', message });
-		const browserPreview = new BrowserPreview(document, panel.webview, webRoot, on => void post({ type: 'browserPreview', on }));
-		// defsNow: 마지막으로 다 읽은 정의(아직이면 undefined). 문서는 이것으로 보내고, 첫 정의를 기다리다 먼저 보냈으면(earlySent) 빈 목록으로 보낸다
-		let defsNow: ComponentDef[] | undefined, earlySent = false;
-		const trackDefinitions = () => {
-			const loading = loadDefinitions(document.uri, webRoot);
-			void loading.then(d => { if (definitions === loading) { defsNow = d.defs; } });
-			return loading;
-		};
-		let definitions = trackDefinitions();
-		const loadApi = () => resolvePath('apiDocumentationPath', document.uri, webRoot).then(loadApiDocs);
-		let api = loadApi();
-		const styles = loadStyles(document, panel.webview, webRoot);
-		let modules = loadModules(webRoot);
-		// 공통 JS(config.xml engine module)·config.xml이 저장되면 다시 읽어 자동완성·설명에 반영. 어떤 .js가 공통인지는 config.xml이 정하므로 다 받고 모아서 다시 읽는다
-		const moduleWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(webRoot), '{**/*.js,websquare/config.xml}'));
-		let moduleTimer: NodeJS.Timeout | undefined;
-		const reloadModules = (uri: vscode.Uri) => {
-			if (NOT_MODULE_DIR.test(path.relative(webRoot, uri.fsPath))) {
-				return;
-			}
-			clearTimeout(moduleTimer);
-			moduleTimer = setTimeout(() => {
-				modules = loadModules(webRoot);
-				void modules.then(post);
-			}, 300);
-		};
-		moduleWatcher.onDidChange(reloadModules);
-		moduleWatcher.onDidCreate(reloadModules);
-		moduleWatcher.onDidDelete(reloadModules);
-		const udcs = udcNames(webRoot).catch(() => new Set<string>());
-		// 문서 보내기는 wframe 화면 읽기 등으로 걸리는 시간이 다르다: 늦게 끝난 옛 요청이 새 문서를 덮지 않게 마지막 요청만 보낸다
-		let latest = 0;
-		const sendDocument = async () => {
-			const request = ++latest;
-			const defs = defsNow ?? (earlySent ? [] : (await definitions).defs);
-			const msg = await documentMessage(document, panel.webview, webRoot, defs, await udcs);
-			if (request === latest && msg.version === document.version) { await post(msg); }
-		};
-
-		let timer: NodeJS.Timeout | undefined;
-		const refresh = () => {
-			clearTimeout(timer);
-			return sendDocument();
-		};
-		const links = new LinkedFiles(document, post);
-		const usedTables = new UsedTablesStore(document.uri, this.workspaceState, vscode.Uri.joinPath(this.tablesFolder, 'used-tables'), post);
-		// 변경 표시 기준(Git 스테이지 내용): Source는 화면 XML 전체, Script는 그 안의 Script 본문. 바뀐 것만 보낸다
-		let bases: { source?: string; script?: string } = {};
-		const sendBases = async () => {
-			const staged = await stagedText(document.uri);
-			let script: string | undefined;
-			try {
-				script = staged === undefined ? undefined : editableScript(staged)?.text;
-			} catch {
-			}
-			const next = { source: staged, script };
-			for (const target of ['source', 'script'] as const) {
-				if (next[target] !== bases[target]) {
-					await post({ type: 'gitBase', target, text: next[target] });
-				}
-			}
-			bases = next;
-		};
-		// Git blame(켰을 때만): Source는 화면 XML 전체, Script는 그 안 Script 본문 줄만. 그 사이 문서가 바뀌었으면 보내지 않는다(다음 차례에)
-		const xmlBlame = blameFeed(async () => {
-			if (!blameOn()) { return; }
-			const version = document.version, text = document.getText();
-			const data = await blameText(document.uri, text);
-			if (document.version !== version) { return; }
-			let script: typeof data;
-			try {
-				const body = data && editableScript(text);
-				script = body ? sliceBlame(data, lineOfOffset(text, body.start), lineOfOffset(body.text, body.text.length) + 1) : undefined;
-			} catch {
-			}
-			await post({ type: 'blame', target: 'source', version, data });
-			await post({ type: 'blame', target: 'script', version, data: script });
-		});
-		let gitTimer: NodeJS.Timeout | undefined;
-		// 편집기 변경분은 문서마다 받은 순서대로 하나씩: 버전 확인과 적용 사이에 다른 편집이 끼지 않게.
-		// 화면 XML(Source·Script)과 연결 파일은 따로 줄 세운다(느린 Java 포맷이 화면 편집을 막지 않게)
-		const codeQueues = new Map<string, Promise<unknown>>();
-		const queue = (target: CodeTarget, job: () => Promise<void>) => serial(codeQueues, linkIdOf(target) === undefined ? 'xml' : target, job);
-		const reloadDefinitions = () => {
-			definitions = trackDefinitions();
-			void definitions.then(d => post({ type: 'definitions', ...d })).then(() => sendDocument());
-		};
-		const reloadApi = () => {
-			api = loadApi();
-			void api.then(result => post({ type: 'scriptApi', ...result }));
-		};
-		const subs = [
-			moduleWatcher,
-			vscode.workspace.onDidChangeConfiguration(e => {
-				const changed = (key: SetupKey) => e.affectsConfiguration(`for-websquare5.${key}`, document.uri);
-				if (affectsCodeOptions(e)) {
-					void post({ type: 'codeOptions', ...codeOptions() });
-				}
-				const eclipse = changed('eclipseInstallPath');
-				if (eclipse || changed('componentDefinitionFile')) {
-					reloadDefinitions();
-				}
-				if (eclipse || changed('apiDocumentationPath')) {
-					reloadApi();
-				}
-			}),
-			// 설정 없이 설치 폴더를 자동으로 찾았거나 기억한 위치가 바뀌면: 정의·API를 다시 읽고 변환기를 미리 띄운다
-			onDidChangeInstall(() => {
-				reloadDefinitions();
-				reloadApi();
-				void resolvePath('wpackExecutable', document.uri, webRoot).then(warmWpack).catch(() => undefined);
-			}),
-			// Git 상태는 저장할 때마다도 바뀌어 자주 불린다 → 모아서
-			onGitChange(() => {
-				clearTimeout(gitTimer);
-				gitTimer = setTimeout(() => void sendBases().then(() => links.sendBases()), 500);
-				// 커밋·체크아웃하면 blame도 바뀐다
-				xmlBlame.schedule();
-				links.scheduleBlame();
-			}),
-			vscode.workspace.onDidChangeTextDocument(e => {
-				if (e.document === document) {
-					clearTimeout(timer);
-					timer = setTimeout(() => void sendDocument(), 300);
-					xmlBlame.schedule();
-				}
-			}),
-			onBlameToggled(on => { if (on) { xmlBlame.schedule(0); links.scheduleBlame(0); } }),
-			panel.webview.onDidReceiveMessage((msg: ToExtension) => {
-				if (msg.type === 'ready') {
-					void post({ type: 'tabOrder', order: tabOrder() ?? [] });
-					void post({ type: 'tabPosition', position: tabPosition() });
-					void post({ type: 'panelFont', font: panelFont() });
-					void post({ type: 'minimap', on: minimapOn() });
-					void post({ type: 'animation', on: animationOn() });
-					void post({ type: 'codeBlame', on: blameOn() });
-					xmlBlame.schedule(0);
-					void post({ type: 'paletteFavorites', keys: paletteFavorites(this.globalState) });
-					void post({ type: 'codeTheme', ...codeTheme() });
-					void post({ type: 'codeOptions', ...codeOptions() });
-					bases = {};
-					void sendBases();
-					void links.reload(undefined, true);
-					void api.then(result => post({ type: 'scriptApi', ...result }));
-					void modules.then(post);
-					// 정의가 늦으면(설치 폴더 자동 탐색·디스크가 바쁠 때) 기다리지 않고 문서부터 보여 준다. 정의가 오면 아래에서 다시 보낸다
-					const early = setTimeout(() => void styles.then(s => {
-						if (defsNow) { return; }
-						earlySent = true;
-						void post(s);
-						void post({ type: 'definitions', defs: [], error: 'WebSquare5 컴포넌트 정의를 불러오는 중입니다…' });
-						return sendDocument();
-					}), 1000);
-					void Promise.all([definitions, styles]).then(([d, s]) => {
-						clearTimeout(early);
-						void post({ type: 'definitions', ...d });
-						void post(s);
-						return sendDocument();
-					});
-				} else if (msg.type === 'setCode') {
-					const { target } = msg, linkId = linkIdOf(target);
-					const ack = (ok: boolean, version = document.version) => post({ type: 'codeAck', target, ok, version });
-					void queue(target, async () => {
-						if (linkId !== undefined) {
-							const result = await links.edit(linkId, msg.version, msg.changes);
-							await ack(result.ok, result.version);
-						} else {
-							await ack(msg.version === document.version && await applyCodeEdit(document, target, msg.changes));
-						}
-					}).catch(e => {
-						void ack(false, linkId !== undefined ? msg.version : document.version);
-						void vscode.window.showErrorMessage(`변경 실패: ${errorMessage(e)}`);
-					});
-				} else if (msg.type === 'setPaletteFavorite' || msg.type === 'reorderPaletteFavorites') {
-					// 순서 변경은 정의가 필요 없다. 추가·해제는 이 화면 정의에 있는 컴포넌트만
-					const save = msg.type === 'reorderPaletteFavorites'
-						? Array.isArray(msg.keys) && msg.keys.every(key => typeof key === 'string') ? reorderPaletteFavorites(this.globalState, msg.keys) : Promise.resolve()
-						: definitions.then(({ defs }) => {
-							const def = findPaletteDef(defs, msg.component);
-							return def && typeof msg.favorite === 'boolean' ? savePaletteFavorite(this.globalState, def, msg.favorite) : undefined;
-						});
-					void save.then(async () => {
-						const state: ToWebview = { type: 'paletteFavorites', keys: paletteFavorites(this.globalState) };
-						await post(state);
-						broadcast(panel, state);
-					}).catch(e => {
-						void post({ type: 'paletteFavorites', keys: paletteFavorites(this.globalState) });
-						void vscode.window.showErrorMessage(`즐겨찾기 저장 실패: ${errorMessage(e)}`);
-					});
-				} else if (msg.type === 'insertComponent') {
-					void queue('source', async () => {
-						const def = findPaletteDef((await definitions).defs, msg.component);
-						if (def && msg.version === document.version) {
-							const id = await insertFromPalette(document, def, msg.index, webRoot, msg.position, msg.version);
-							if (id) { await post({ type: 'select', id }); }
-						} else {
-							void vscode.window.showWarningMessage(def ? '문서가 바뀌었습니다. 다시 넣어 주세요.' : '팔레트 컴포넌트 정의를 찾지 못했습니다.');
-						}
-						await refresh();
-					}).catch(e => { void vscode.window.showErrorMessage(`컴포넌트 넣기 실패: ${errorMessage(e)}`); });
-				} else if (msg.type === 'saveThemeCustomizations') {
-					void saveCustomizations(msg.common, msg.own).catch(e => vscode.window.showErrorMessage(`테마 색 저장 실패: ${errorMessage(e)}`));
-				} else if (msg.type === 'settingsMenu') {
-					const command = SETTINGS_MENU[msg.item];
-					if (command) { void vscode.commands.executeCommand(...command); }
-				} else if (msg.type === 'warn') {
-					void vscode.window.showWarningMessage(msg.message);
-				} else if (msg.type === 'openCss') {
-					void styles.then(s => openCss(s.rules ?? [], msg.rules)).catch(e => vscode.window.showErrorMessage(`CSS 이동 실패: ${errorMessage(e)}`));
-				} else if (msg.type === 'openInBrowser') {
-					void browserPreview.open(msg).catch(e => vscode.window.showErrorMessage(`브라우저로 열기 실패: ${errorMessage(e)}`));
-				} else if (msg.type === 'updateBrowserPreview') {
-					browserPreview.update(msg);
-				} else if (msg.type === 'openFrame') {
-					void openFrame(document, msg.index, webRoot);
-				} else if (msg.type === 'openAction') {
-					void openAction(document, msg.action, (uri, range) => links.reveal(uri, range), message => void post({ type: 'toast', message })).catch(e => vscode.window.showErrorMessage(`Controller 열기 실패: ${errorMessage(e)}`));
-				} else if (msg.type === 'openModule') {
-					// Script 정의로 이동(공통 JS): config.xml에서 읽은 공통 JS 목록에 있는 경로만 연다
-					void modules.then(async ({ files }) => {
-						if (!files.some(f => f.path === msg.path)) { return; }
-						const range = new vscode.Range(msg.line, msg.ch, msg.endLine, msg.endCh);
-						await vscode.window.showTextDocument(vscode.Uri.file(fromWebPath(webRoot, msg.path, ENGINE_PAGE)), { selection: range });
-					}).catch(e => vscode.window.showErrorMessage(`공통 JS 열기 실패: ${errorMessage(e)}`));
-				} else if (usedTables.handle(msg)) {
-					// ERD 사용 테이블(읽기·저장·저장 폴더 고르기)
-				} else if (links.handle(msg)) {
-					// 연결 탭(연결·해제·열기·저장·탭 추가/이름/삭제·자동완성)
-				} else if (msg.type === 'setTabOrder') {
-					void saveTabOrder(msg.order);
-					broadcast(panel, { type: 'tabOrder', order: msg.order });
-				} else if (msg.type === 'setTabPosition') {
-					void saveTabPosition(msg.position);
-					broadcast(panel, { type: 'tabPosition', position: msg.position });
-				} else if (msg.type === 'navigate') {
-					void vscode.commands.executeCommand(msg.back ? 'workbench.action.navigateBack' : 'workbench.action.navigateForward');
-				} else if (msg.type === 'setCodeBlame') {
-					void saveBlame(msg.on);
-					broadcast(panel, { type: 'codeBlame', on: msg.on });
-				} else if (msg.type === 'setPanelFont') {
-					if (msg.font === 'ui' || msg.font === 'editor') {
-						void savePanelFont(msg.font);
-						broadcast(panel, { type: 'panelFont', font: msg.font });
-					}
-				} else if (msg.type === 'setMinimap') {
-					void saveMinimap(msg.on);
-					broadcast(panel, { type: 'minimap', on: msg.on });
-				} else if (msg.type === 'setAnimation') {
-					void saveAnimation(msg.on);
-					broadcast(panel, { type: 'animation', on: msg.on });
-				} else if (msg.type === 'editDataFields' || msg.type === 'addSubmission' || msg.type === 'editSubmission' || msg.type === 'editChoices' || msg.type === 'editGridCells' || msg.type === 'createGrid') {
-					void queue('source', async () => {
-						const ok = msg.version === document.version && await applyNodeEdit(document, msg, toast);
-						await post({ type: 'popupAck', popup: msg.popup, ok, ...!ok && { error: '문서가 바뀌었습니다. 팝업을 다시 열어 주세요.' } });
-						await refresh();
-					}).catch(e => { void post({ type: 'popupAck', popup: msg.popup, ok: false, error: errorMessage(e) }); });
-				} else if (msg.type === 'format') {
-					void queue(msg.target, async () => {
-						const linkId = linkIdOf(msg.target);
-						const text = linkId !== undefined ? await (msg.imports ? links.addImports(linkId, msg.version) : links.format(linkId, msg.version))
-							: msg.version === document.version && !msg.imports ? await formatCode(document, msg.target) : undefined;
-						await post({ type: 'formatted', target: msg.target, text });
-					}).catch(e => {
-						void post({ type: 'formatted', target: msg.target });
-						if (msg.imports) { return; }
-						const reason = errorMessage(e).split('\n')[0];
-						void vscode.window.showErrorMessage(`포맷 실패: ${reason}`);
-					});
-				} else {
-					// 웹뷰가 옛 버전을 보고 보낸 편집은 버린다. 어느 쪽이든 최신 문서를 디바운스 없이 바로 다시 보낸다.
-					void queue('source', async () => {
-						if (msg.version === document.version) { await applyNodeEdit(document, msg, toast); }
-						await refresh();
-					}).catch(e => vscode.window.showErrorMessage(`변경 실패: ${errorMessage(e)}`));
-				}
-			}),
-		];
-		panel.onDidDispose(() => {
-			disposed = true;
-			panels.delete(panel);
-			clearTimeout(timer);
-			clearTimeout(gitTimer);
-			clearTimeout(moduleTimer);
-			xmlBlame.dispose();
-			browserPreview.dispose();
-			subs.forEach(s => s.dispose());
-			void links.dispose();
-			usedTables.dispose();
-		});
-	}
-}
-
-export async function openFrame(document: vscode.TextDocument, index: number, webRoot?: string): Promise<void> {
-	const root = parseXml(document.getText());
-	const src = (root && nodeAt(root, index))?.attrs.src;
-	const target = src && await resolveSrc(src, document.uri.fsPath, webRoot);
-	if (target) {
-		await vscode.commands.executeCommand('vscode.openWith', vscode.Uri.file(target), VIEW_TYPE, { preview: false });
-	} else {
-		void vscode.window.showWarningMessage(src ? `연결 화면을 찾지 못했습니다: ${src}` : '연결된 화면(src)이 없습니다.');
+		new ScreenSession(document, panel, webRoot, {
+			globalState: this.globalState, workspaceState: this.workspaceState, tablesFolder: this.tablesFolder,
+			broadcast: msg => broadcast(panel, msg),
+		}).warmWpack();
 	}
 }
 

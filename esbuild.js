@@ -2,6 +2,7 @@ const esbuild = require("esbuild");
 const fs = require('node:fs');
 const path = require('node:path');
 const cspPatchesPlugin = require('./scripts/csp-patches-plugin.cjs');
+const sqlDialectsPlugin = require('./scripts/sql-dialects-plugin.cjs');
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
@@ -53,6 +54,7 @@ async function main() {
 	const contexts = await Promise.all([
 		esbuild.context({
 			...common,
+			plugins: [...common.plugins, sqlDialectsPlugin],
 			entryPoints: ['src/extension.ts'],
 			format: 'cjs',
 			platform: 'node',

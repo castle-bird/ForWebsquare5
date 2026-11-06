@@ -1,27 +1,11 @@
-// 코드 편집기(Script·Source·연결 탭) 테마: VS Code 테마 따라가기 + thememirror(MIT) 테마. 모든 화면 공통
+// 코드 편집기(Script·Source·연결 탭) 테마: VS Code 따라가기 + media/themes의 내장 테마. 모든 화면 공통
 import { parse, printParseErrorCode, type ParseError } from 'jsonc-parser';
 
 export const CODE_THEMES = [
 	{ id: 'vscode', label: 'VS Code 테마 따라가기 (기본)' },
-	{ id: 'amy', label: 'Amy', dark: true },
-	{ id: 'ayuLight', label: 'Ayu Light', dark: false },
-	{ id: 'barf', label: 'Barf', dark: true },
-	{ id: 'bespin', label: 'Bespin', dark: true },
-	{ id: 'birdsOfParadise', label: 'Birds of Paradise', dark: true },
-	{ id: 'boysAndGirls', label: 'Boys and Girls', dark: true },
-	{ id: 'clouds', label: 'Clouds', dark: false },
-	{ id: 'cobalt', label: 'Cobalt', dark: true },
-	{ id: 'coolGlow', label: 'Cool Glow', dark: true },
-	{ id: 'dracula', label: 'Dracula', dark: true },
-	{ id: 'espresso', label: 'Espresso', dark: false },
-	{ id: 'noctisLilac', label: 'Noctis Lilac', dark: false },
-	{ id: 'rosePineDawn', label: 'Rosé Pine Dawn', dark: false },
-	{ id: 'smoothy', label: 'Smoothy', dark: false },
-	{ id: 'solarizedLight', label: 'Solarized Light', dark: false },
-	{ id: 'tomorrow', label: 'Tomorrow', dark: false },
 ] as const;
 
-export type CodeThemeId = typeof CODE_THEMES[number]['id'];
+type CodeThemeId = typeof CODE_THEMES[number]['id'];
 
 /*
  * 사용자 테마: 바탕 테마 위에 덧칠하는 층(ThemeOverlay).

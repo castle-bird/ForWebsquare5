@@ -17,4 +17,15 @@ export default async function ({ page, clickTab }) {
 	assert.equal(await page.evaluate(() => window.editor().scrollDOM.scrollTop), 0, '스크롤 없이 미니맵 아래쪽까지 문법 색칠');
 	assert.equal(await page.evaluate(() => window.editor().state.doc.lines), 3000, '문서 내용 유지');
 	console.log('Minimap: 긴 코드 첫 로드에서 스크롤 없이 문법 색칠 passed');
+	await page.evaluate(() => { const sc = window.editor().scrollDOM; sc.scrollTop = sc.scrollHeight; });
+	await page.waitForFunction(() => {
+		const v = window.editor(), end = v.coordsAtPos(v.state.doc.length), sc = v.scrollDOM.getBoundingClientRect();
+		return end && end.top >= sc.top - 1 && end.bottom < sc.top + v.defaultLineHeight * 2;
+	});
+	assert.equal(await page.evaluate(() => window.editor().state.doc.lines), 3000, '하단 여백은 문서 줄을 추가하지 않음');
+	assert.ok(await page.evaluate(() => {
+		const mm = document.querySelector('.tab-body:not([hidden]) .cm-minimap'), slider = mm.querySelector('.cm-minimap-slider');
+		return slider.getBoundingClientRect().bottom <= mm.getBoundingClientRect().bottom + 1;
+	}), '하단 여백에서도 미니맵 슬라이더는 영역 안에 유지');
+	console.log('Editor: 마지막 줄을 위로 올리고 번호 없는 하단 여백 표시 passed');
 }

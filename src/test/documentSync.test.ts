@@ -1,13 +1,33 @@
 import * as assert from 'assert';
-import * as fs from 'fs';
 import * as path from 'path';
-import { webcrypto } from 'crypto';
 import { runInNewContext } from 'vm';
-import { transformSync } from 'esbuild';
-import * as model from '../core/xmlModel';
-import { errorMessage } from '../core/errors';
-import { serial } from '../project/paths';
+import { build, type Plugin } from 'esbuild';
 import type { ToExtension, ToWebview } from '../core/protocol';
+
+const src = path.resolve(__dirname, '../../src');
+
+/**
+ * ScreenSession을 실제 core·resources와 함께 묶고, VS Code API와 디스크를 읽는 모듈(project/*, 다른 vscode/*)만 mocks로 바꾼다.
+ * mocks에 없는 모듈은 빈 객체다(부르면 그 자리에서 실패)
+ */
+async function loadSession(mocks: Record<string, unknown>) {
+	const real = new Set(['vscode/screenSession', 'vscode/resources', 'project/paths']);
+	const mock: Plugin = {
+		name: 'mock',
+		setup(build) {
+			build.onResolve({ filter: /.*/ }, args => {
+				const key = args.path === 'vscode' ? 'vscode'
+					: args.path.startsWith('.') ? path.relative(src, path.resolve(args.resolveDir, args.path)).replaceAll('\\', '/') : undefined;
+				return key && (key === 'vscode' || /^(project|vscode)\//.test(key)) && !real.has(key) ? { path: key, namespace: 'mock' } : undefined;
+			});
+			build.onLoad({ filter: /.*/, namespace: 'mock' }, args => ({ contents: `module.exports = mocks[${JSON.stringify(args.path)}] ?? {};`, loader: 'js' }));
+		},
+	};
+	const { outputFiles } = await build({ entryPoints: [path.join(src, 'vscode/screenSession.ts')], bundle: true, write: false, platform: 'node', format: 'cjs', plugins: [mock], logLevel: 'silent' });
+	const module = { exports: {} as { ScreenSession: new (...args: unknown[]) => unknown } };
+	runInNewContext(outputFiles[0].text, { module, exports: module.exports, mocks, require, setTimeout, clearTimeout, setImmediate });
+	return module.exports.ScreenSession;
+}
 
 suite('디자이너 편집 동기화', () => {
 	test('구조·팝업 편집 버전 검사를 직렬화하고 읽는 동안 바뀐 문서는 보내지 않음', async () => {
@@ -19,57 +39,37 @@ suite('디자이너 편집 동기화', () => {
 		let blockEdit = true, blockFrames = false, frameStarted = false;
 		const paused = new Promise<void>(resolve => { release = resolve; });
 		const frames = new Promise<void>(resolve => { releaseFrames = resolve; });
-		const vscode = {
-			Uri: { file: (s: string) => s, joinPath: (...s: string[]) => s.join('/') },
-			RelativePattern: class {},
-			workspace: { createFileSystemWatcher: () => ({ ...disposable, onDidChange: event, onDidCreate: event, onDidDelete: event }), onDidChangeConfiguration: event, onDidChangeTextDocument: event },
-			window: { showErrorMessage() {}, showWarningMessage() {} },
-		};
-		const mocks: Record<string, unknown> = {
-			vscode, './core/xmlModel': model, './core/errors': { errorMessage },
-			'./core/edit': { scriptBody: () => ({ text: '' }) },
-			'./core/links': { linkIdOf: () => undefined },
-			'./project/paths': { serial, findWebRoot: async () => 'C:/web' },
-			'./project/frames': { attachFrames: async () => { if (blockFrames) { frameStarted = true; await frames; } } },
-			'./project/components': { annotate() {} },
-			'./project/styles': { stylesheetFiles: async () => [] },
-			'./project/modules': { udcNames: async () => new Set(), engineModules: async () => ({ files: [], failed: [] }) },
-			'./project/apiDocs': { loadApiDocs: async () => ({ api: {} }) },
-			'./vscode/setup': { resolvePath: async () => undefined, offerSetup() {}, onDidChangeInstall: event },
-			'./vscode/links': { LinkedFiles: class { handle() { return false; } dispose() {} } },
-			'./vscode/tables': { UsedTablesStore: class { handle() { return false; } dispose() {} } },
-			'./vscode/browserPreview': { BrowserPreview: class { update() {} dispose() {} }, disposeBrowserPreviews() {} },
-			'./vscode/gitBase': { onGitChange: event, blameFeed: () => ({ schedule() {}, dispose() {} }) },
-			'./vscode/viewSettings': { onBlameToggled: event },
-		'./vscode/screenOpen': { registerScreenOpen() {}, rememberScreenEditor() {} },
-			'./vscode/documentEdit': { applyNodeEdit: async (_doc: unknown, msg: ToExtension) => {
+		const ScreenSession = await loadSession({
+			vscode: {
+				Uri: { file: (s: string) => s, joinPath: (...s: string[]) => s.join('/') },
+				RelativePattern: class {},
+				workspace: { createFileSystemWatcher: () => ({ ...disposable, onDidChange: event, onDidCreate: event, onDidDelete: event }), onDidChangeConfiguration: event, onDidChangeTextDocument: event },
+				window: { showErrorMessage() {}, showWarningMessage() {} },
+			},
+			'project/frames': { attachFrames: async () => { if (blockFrames) { frameStarted = true; await frames; } } },
+			'project/components': { annotate() {} },
+			'project/styles': { stylesheetFiles: async () => [] },
+			'project/modules': { udcNames: async () => new Set(), engineModules: async () => ({ files: [], failed: [] }) },
+			'project/apiDocs': { loadApiDocs: async () => ({ api: {} }) },
+			'vscode/setup': { resolvePath: async () => undefined, offerSetup() {}, onDidChangeInstall: event },
+			'vscode/links': { LinkedFiles: class { handle() { return false; } dispose() {} } },
+			'vscode/tables': { UsedTablesStore: class { handle() { return false; } dispose() {} } },
+			'vscode/browserPreview': { BrowserPreview: class { update() {} dispose() {} } },
+			'vscode/gitBase': { onGitChange: event, blameFeed: () => ({ schedule() {}, dispose() {} }) },
+			'vscode/viewSettings': { onBlameToggled: event },
+			'vscode/documentEdit': { applyNodeEdit: async (_doc: unknown, msg: ToExtension) => {
 				applied.push(msg);
 				if (blockEdit) { await paused; }
 				document.version++;
 				return true;
 			} },
-		};
-		const resources = { exports: {} };
-		runInNewContext(transformSync(fs.readFileSync(path.resolve(__dirname, '../../src/vscode/resources.ts'), 'utf8'), { loader: 'ts', format: 'cjs' }).code, {
-			module: resources, exports: resources.exports,
-			require: (name: string) => {
-				const key = name.startsWith('../') ? './' + name.slice(3) : name.startsWith('./') ? './vscode/' + name.slice(2) : name;
-				return mocks[key] ?? (name.startsWith('node:') ? require(name) : {});
-			},
-		});
-		mocks['./vscode/resources'] = resources.exports;
-		const source = fs.readFileSync(path.resolve(__dirname, '../../src/extension.ts'), 'utf8') + '\nexport { DesignerProvider };';
-		const module = { exports: {} as { DesignerProvider: new (...args: unknown[]) => { resolveCustomTextEditor(doc: unknown, panel: unknown): Promise<void> } } };
-		runInNewContext(transformSync(source, { loader: 'ts', format: 'cjs' }).code, {
-			module, exports: module.exports, require: (name: string) => mocks[name] ?? (name.startsWith('node:') ? require(name) : {}),
-			crypto: webcrypto, setTimeout, clearTimeout,
 		});
 		const panel = { webview: {
 			asWebviewUri: (uri: string) => uri,
 			postMessage: async (msg: ToWebview) => { sent.push(msg); return true; },
 			onDidReceiveMessage: (fn: typeof receive) => { receive = fn; return disposable; },
 		}, onDidDispose: (fn: () => void) => { dispose = fn; } };
-		await new module.exports.DesignerProvider('extension', {}, {}, 'storage').resolveCustomTextEditor(document, panel);
+		new ScreenSession(document, panel, 'C:/web', { globalState: {}, workspaceState: {}, tablesFolder: 'storage', broadcast() {} });
 		const settle = () => new Promise<void>(resolve => setImmediate(resolve));
 		try {
 			receive({ type: 'editChoices', version: 1, index: 2, popup: 'p', fields: {} } as ToExtension);

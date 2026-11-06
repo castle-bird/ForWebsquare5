@@ -4,13 +4,7 @@ import { HighlightStyle, highlightingFor, syntaxHighlighting } from '@codemirror
 import { tags as t, type Tag } from '@lezer/highlight';
 import { vsCodeDark } from '@fsegurai/codemirror-theme-vscode-dark';
 import { vsCodeLight } from '@fsegurai/codemirror-theme-vscode-light';
-import { amy, ayuLight, barf, bespin, birdsOfParadise, boysAndGirls, clouds, cobalt, coolGlow, dracula, espresso, noctisLilac, rosePineDawn, smoothy, solarizedLight, tomorrow } from 'thememirror';
-import { layersOf, TOKEN_KINDS, type CodeThemeId, type CodeThemeState, type ColorKey, type ThemeOverlay, type TokenKind, type TokenStyle } from '../../core/codeTheme';
-
-/** 목록(CODE_THEMES)의 id마다 thememirror 테마. 목록에 테마를 더하면 여기도 빠짐없이 있어야 컴파일된다 */
-const THEMES: Record<Exclude<CodeThemeId, 'vscode'>, Extension> = {
-	amy, ayuLight, barf, bespin, birdsOfParadise, boysAndGirls, clouds, cobalt, coolGlow, dracula, espresso, noctisLilac, rosePineDawn, smoothy, solarizedLight, tomorrow,
-};
+import { layersOf, TOKEN_KINDS, type CodeThemeState, type ColorKey, type ThemeOverlay, type TokenKind, type TokenStyle } from '../../core/codeTheme';
 
 /**
  * 모든 CodeMirror 편집기 공통: VS Code 편집기 글꼴·크기·합자(--code-font-features, main.tsx), 그리고 CodeMirror가 넣는 <style>에 웹뷰 CSP nonce.
@@ -72,10 +66,10 @@ function overlay({ colors: c = {}, tokens = {} }: ThemeOverlay): Extension {
 	return Prec.highest([EditorView.theme(spec), ...styles.length ? [syntaxHighlighting(HighlightStyle.define(styles))] : []]);
 }
 
-/** 바탕(VS Code 따라가기·thememirror·가져온 테마는 VS Code 기본 다크/라이트) + 덧칠 층들 */
+/** 바탕(VS Code 기본 다크/라이트) + 내장·가져온 테마와 덧칠 층들 */
 export function themeOf(s: CodeThemeState): Extension {
-	const base = s.dark !== undefined ? s.dark ? vsCodeDark : vsCodeLight : s.theme === 'vscode' ? vsTheme() : THEMES[s.theme];
-	return [base, ...layersOf(s).map(overlay)];
+	const base = s.dark !== undefined ? s.dark ? vsCodeDark : vsCodeLight : vsTheme();
+	return [base, ...layersOf(s).reverse().map(overlay)];
 }
 
 /** 선택 영역·현재 줄 색(style.css에서 !important라 테마 확장으로는 못 덮음): 뒤 층이 이긴다 */

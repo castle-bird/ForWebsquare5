@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { Activity, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
 import type { SettingsMenuItem, ToWebview } from '../core/protocol';
@@ -327,8 +327,9 @@ function App() {
 								const target = root && insertTarget(root, selected === undefined ? undefined : pathTo(root, selected));
 								if (target && doc) { setGridCreate({ target, version: doc.version }); }
 							}} /><button className="tab-run codicon codicon-play" title="현재 화면 브라우저로 보기" aria-label="현재 화면 브라우저로 보기" draggable={false} disabled={shownTab !== 'Design' || !body}
-							onClick={() => { const page = pageSnapshot(styles?.css, styles?.imports); if (page) { previewStyles.current = styles; post({ type: 'openInBrowser', ...page }); } }} /></>} pinned={[ERD_TAB]} pinnedIcons={{ [ERD_TAB]: 'type-hierarchy' }} keepMounted={['Script', 'Source', ERD_TAB, ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={showTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
-						Design: doc?.error ? <p className="error">{doc.error}</p>
+							onClick={() => { const page = pageSnapshot(styles?.css, styles?.imports); if (page) { previewStyles.current = styles; post({ type: 'openInBrowser', ...page }); } }} /></>} pinned={[ERD_TAB]} pinnedIcons={{ [ERD_TAB]: 'type-hierarchy' }} keepMounted={['Design', 'Script', 'Source', ERD_TAB, ...linkTabs.labels]} order={tabOrder} onReorder={setTabOrder} active={shownTab} onActive={showTab} hints={linkTabs.hints} keys={linkTabs.keys} onTabMenu={linkTabs.onTabMenu} onAdd={() => post({ type: 'addTab' })} items={{
+						// 숨겨도 상태·DOM을 두고(돌아올 때 다시 그리지 않음) 숨은 동안의 갱신은 낮은 우선순위로 미리 그린다. 숨은 동안 효과(관찰자·키 입력)는 멈춘다
+						Design: <Activity mode={shownTab === 'Design' ? 'visible' : 'hidden'}>{doc?.error ? <p className="error">{doc.error}</p>
 							: body && defs ? <Group orientation="horizontal" className="design-layout">
 								{paletteOpen && <Panel key="palette" id="palette" defaultSize={220} minSize={150} maxSize={360}><PalettePane /></Panel>}
 								{paletteOpen && <Separator key="palette-resizer" className="resizer" />}
@@ -341,7 +342,7 @@ function App() {
 										idChoices={i => { const at = root && pathTo(root, i); return at && boundColumnIds(root, at); }} />
 								</div></Panel>
 							</Group>
-								: LOADING,
+								: LOADING}</Activity>,
 						Info: doc?.error ? <p className="error">{doc.error}</p>
 							: head && doc ? <InfoPane head={head} onAttr={(name, value) => editAttr(name, value, head.index)}
 								onHistory={rows => post({ type: 'editHistory', version: doc.version, index: head.index, rows })} />

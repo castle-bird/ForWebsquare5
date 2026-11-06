@@ -1,11 +1,18 @@
 const fs = require('node:fs');
 
-// 웹뷰 CSP는 style 속성 문자열을 막는다. 속성으로 스타일을 넣는 CodeMirror 확장을 빌드 때 클래스로 바꾼다.
+// 웹뷰 CSP에 맞춰 style 속성을 클래스로 바꾸고, 들여쓰기 안내선은 화면 픽셀에 맞춰 그린다.
 const PATCHES = [
 	{
 		// 줄마다 다른 선 모양: 같은 모양마다 클래스를 하나 만들어 생성한 스타일시트(CSP 대상 아님)에 등록
 		filter: /[/\\]@replit[/\\]codemirror-indentation-markers[/\\].*\.js$/,
 		replace: [
+			// 반복 간격(ch)이 소수 화면 픽셀일 때 선마다 두께가 달라진다. 각 선의 자리를 화면 픽셀 경계로 맞춘다.
+			['const gradient = `repeating-linear-gradient(to right, var(${markerCssProperty}) 0 ${thickness}px, transparent ${thickness}px ${indentWidth}ch)`;\n    // Subtract one pixel from the background width to get rid of artifacts of pixel rounding\n    return `${gradient} ${startOffset * indentWidth}.5ch/calc(${indentWidth * columns}ch - 1px) no-repeat`;', `return Array.from({ length: columns }, (_, i) => {
+        const at = (startOffset + i) * indentWidth + 0.5;
+        const x = 'calc(round(nearest, calc(' + at + 'ch + var(--indent-guide-origin, 0px)), var(--indent-guide-pixel, 1px)) - var(--indent-guide-origin, 0px))';
+        const end = 'calc(' + x + ' + var(--indent-guide-pixel, 1px))';
+        return 'linear-gradient(to right, transparent ' + x + ', var(' + markerCssProperty + ') ' + x + ' ' + end + ', transparent ' + end + ')';
+    }).join(',');`],
 			[`class: 'cm-indent-markers',
                 attributes: {
                     style: \`--indent-markers: \${backgrounds}\`,

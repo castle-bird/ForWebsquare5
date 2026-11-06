@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { findNode, parseXml, type XmlNode } from '../core/xmlModel';
-import { idConflict, problemAncestors, screenProblems } from '../core/check';
+import { idConflict, problemAncestors, screenProblemDetails, screenProblems } from '../core/check';
 
 suite('화면 점검·중복 id', () => {
 	test('경고 조상: 여러 가지·부모 자체 경고·없는 index를 포함해 기존 경로 탐색과 동일', () => {
@@ -41,6 +41,9 @@ suite('화면 점검·중복 id', () => {
 		assert.strictEqual(of(byId('i2')), undefined, '컬럼을 모르는 linkedDataList는 컬럼 안 봄');
 		assert.strictEqual(of(byId('i3')), undefined);
 		assert.deepStrictEqual(of(byId('i4')), ['등록되지 않은 handler가 적용되어 있습니다. `scwin.gone`']);
+		const details = screenProblemDetails(root, 'scwin.sbm_done = function () {};\nscwin.i3_onclick = async function () {};');
+		assert.deepStrictEqual(details.get(byId('dlt', 'xf:input').index)?.map(d => d.attr), ['id', 'ref']);
+		assert.strictEqual(details.get(byId('i4').index)?.[0].attr, 'ev:onblur');
 		// 바꾸기 검사: 같은 범위만
 		assert.strictEqual(idConflict(root, byId('i2').index, 'i3'), '이미 사용 중인 ID입니다. `i3`');
 		assert.strictEqual(idConflict(root, byId('i2').index, 'a'), undefined, '그리드·데이터 컬럼 id와는 안 겹침');

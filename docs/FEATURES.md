@@ -18,7 +18,7 @@
 - **Event → Script**: 이벤트 값을 더블클릭하면 `scwin.{id}_{이벤트}` 함수 뼈대를 만들거나 해당 함수로 이동합니다
 - **id 바꾸기**: dataList·dataMap이나 그 컬럼의 id를 바꾸면 `data:` 바인딩·바인딩된 그리드 열·Submission 참조도 같이 바뀝니다. 이미 쓰는 id로는 바꾸지 않고 알려 줍니다
 - **id 바꾸기와 Script**: 컴포넌트·데이터 id를 바꾸면 Script에서 그 id를 변수로 쓴 곳(`btnSave.setValue()`), `getComponentById("btnSave")`, 그 컴포넌트에 걸린 핸들러 이름(`scwin.btnSave_onclick` → `scwin.btnNew_onclick`, 이벤트 속성과 Script의 정의·호출)도 바꿉니다. JS 문법으로 가리키는 자리만 고쳐 문자열·주석·속성 이름·더 긴 이름은 그대로입니다. Script에 같은 이름 변수가 있거나, 새 핸들러 이름이 이미 있거나, 문법 오류가 있으면 그 부분은 바꾸지 않고 알립니다
-- **화면 점검**: Outline·Data 트리에 경고 아이콘으로 겹치는 id, 없는 컬럼을 가리키는 바인딩, Script에 없는 이벤트 함수를 표시합니다(마우스를 올리면 이유). 트리 위 경고 개수 버튼을 누르면 다음 경고로 이동합니다
+- **화면 점검**: Outline·Data 트리에 경고 아이콘으로 겹치는 id, 없는 컬럼을 가리키는 바인딩, Script에 없는 이벤트 함수를 표시합니다(마우스를 올리면 이유). 경고 개수 버튼을 누르면 다음 노드로 이동하고 첫 번째 문제의 Property·Event 키를 잠시 강조합니다
 
 XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그대로 동작합니다.
 
@@ -63,12 +63,13 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 
 ## 코드 편집 (Source · Script)
 
+- 코드 편집기는 마지막 줄 아래에도 줄 번호 없는 여백이 있어, 마지막 줄을 편집기 위쪽까지 스크롤할 수 있습니다(연결 파일 탭도 동일)
 - XML·WebSquare API·공통 JS 자동완성과 마우스 오버 설명(공통 JS·같은 Script 함수의 JSDoc 포함). 공통 JS를 저장하면 바로 반영됩니다
 - 미니맵(막대형): 글자 대신 낱말마다 색 막대로 코드 흐름과 오류·경고 줄(오른쪽 끝은 파일 전체에서의 위치)을 보여 줍니다. 끌거나 클릭해 이동, 톱니바퀴 → 코드 미니맵으로 켜고 끔(모든 화면 공통, 기본 켬)
 - 정의로 이동(Ctrl+클릭·F12): 같은 Script 함수는 그 자리로, 공통 JS 함수는 그 파일을 VS Code로 엽니다. 커서 추가는 Alt+클릭
 - 파라미터 힌트: `(`·`,`를 치거나 Ctrl+Shift+Space를 누르면 함수 모양과 지금 파라미터를 보여 줍니다(WebSquare API 문서·JSDoc)
 - 문법 오류 표시, 포맷(VS Code에 설정한 포매터, 없으면 VS Code 내장), 검색(Ctrl+F, 입력칸 옆에 몇 번째/찾은 개수 예: 2/10. 편집기를 클릭해도 순번은 그대로, Enter는 커서 다음 일치로), 줄바꿈(VS Code 설정을 따름), 다시 하기 Ctrl+Y·Ctrl+Shift+Z
-- 코드 편집기 테마(탭 줄 오른쪽 톱니바퀴 메뉴): "VS Code 따라가기"(지금 VS Code 색 테마의 문법 색), "IntelliJ Dark"·"IntelliJ Light"·"One Dark"·"One Light" 등. Git 변경 줄 표시
+- 코드 편집기 테마(탭 줄 오른쪽 톱니바퀴 메뉴): "VS Code 따라가기"(지금 VS Code 색 테마의 문법 색), "IntelliJ Dark"·"IntelliJ Light"·"One Dark"·"One Light"·"GitHub Light Default"·"GitHub Dark Default". Git 변경 줄 표시
 - 테마 색 덮어쓰기: 톱니바퀴 메뉴의 "테마 색 덮어쓰기…" 팝업에서 바꾸면 바로 미리 보이고, 확인하면 저장됩니다(지금 테마만 또는 모든 테마). 설정 `for-websquare5.codeThemeCustomizations`에 직접 적어도 됩니다. 예:
   ```json
   "for-websquare5.codeThemeCustomizations": {
