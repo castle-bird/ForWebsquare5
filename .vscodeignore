@@ -19,3 +19,5 @@ GEMINI.md
 release/**
 docs/**
 .claude/**
+.idea/**
+**/.idea/**
