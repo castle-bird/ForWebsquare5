@@ -77,7 +77,7 @@ const RENDERERS: Record<string, Renderer> = {
 	inputCalendar: calendar,
 	pageList,
 	gridView: grid,
-	wframe: (n, c, d) => el(n, 'div', clsx(c, { 'wse-todo': !n.frame }), n.frame && children(n.frame, d), {
+	wframe: (n, c, d) => el(n, 'div', clsx(c, { 'wse-todo': !n.frame }), n.frame && frameChildren(n.frame, d), {
 		'data-wse-frame': '',
 		'data-tag': n.frame ? undefined : `${n.tag} ${n.attrs.src ?? ''}${n.frameError ? ' — ' + n.frameError : ''}`,
 	}),
@@ -91,7 +91,60 @@ const RENDERERS: Record<string, Renderer> = {
 	fusionchart: (n, c) => el(n, 'div', c, <FusionChart node={n} />),
 };
 
+const NODE_CACHE = 10000;
+let cachedDefs: ComponentDef[] | undefined;
+let frameDepth = 0;
+const renderedNodes = new Map<number, { node: XmlNode; element: ReactNode }>();
+
+function sameAttrs(a: Record<string, string>, b: Record<string, string>): boolean {
+	const keysA = Object.keys(a), keysB = Object.keys(b);
+	if (keysA.length !== keysB.length) { return false; }
+	for (let i = 0; i < keysA.length; i++) {
+		const k = keysA[i];
+		if (a[k] !== b[k] || (a[k] === undefined && !(k in b))) { return false; }
+	}
+	return true;
+}
+
+function sameSubtree(a: XmlNode, b: XmlNode): boolean {
+	if (a === b) { return true; }
+	if (a.index !== b.index || a.tag !== b.tag || a.ns !== b.ns || a.def !== b.def
+		|| a.udc !== b.udc || a.text !== b.text || a.url !== b.url || a.frameError !== b.frameError
+		|| a.children.length !== b.children.length || !sameAttrs(a.attrs, b.attrs)) {
+		return false;
+	}
+	if (a.frame !== b.frame && (!a.frame || !b.frame || !sameSubtree(a.frame, b.frame))) {
+		return false;
+	}
+	for (let i = 0; i < a.children.length; i++) {
+		if (!sameSubtree(a.children[i], b.children[i])) { return false; }
+	}
+	return true;
+}
+
 export function render(node: XmlNode, defs: ComponentDef[]): ReactNode {
+	if (cachedDefs !== defs) {
+		cachedDefs = defs;
+		renderedNodes.clear();
+	}
+	const cacheable = frameDepth === 0 && localName(node.tag).toLowerCase() !== 'body';
+	if (cacheable) {
+		const hit = renderedNodes.get(node.index);
+		if (hit && sameSubtree(hit.node, node)) {
+			return hit.element;
+		}
+	}
+	const element = renderNode(node, defs);
+	if (cacheable) {
+		if (renderedNodes.size >= NODE_CACHE) {
+			renderedNodes.clear();
+		}
+		renderedNodes.set(node.index, { node, element });
+	}
+	return element;
+}
+
+function renderNode(node: XmlNode, defs: ComponentDef[]): ReactNode {
 	const def = defOf(node, defs);
 	if (!def && node.ns === XHTML) {
 		// html·head·body는 React 19가 문서에 하나뿐인 요소로 다뤄 캔버스 밖(웹뷰 문서)에 붙이려 한다 → 정의가 없을 때(불러오는 중·정의 파일 없음) 화면이 통째로 빈다
@@ -299,7 +352,7 @@ function TabControl({ node, className, defs }: { node: XmlNode; className: strin
 					<div data-wse={content.index} style={style(content.attrs.style)} data-wse-frame={content.attrs.src ? '' : undefined}
 						className={clsx('w2group w2tabcontrol_contents_wrapper w2tabcontrol_contents_wrapper_selected', { 'wse-todo': !!content.frameError }, content.attrs.class)}
 						data-tag={content.frameError && `${content.tag} ${content.attrs.src} — ${content.frameError}`}>
-						{content.frame ? children(content.frame, defs) : children(content, defs)}
+						{content.frame ? frameChildren(content.frame, defs) : children(content, defs)}
 					</div>
 				</div>
 			)}
@@ -410,6 +463,15 @@ function el(n: XmlNode, tag: string, className: string, content?: ReactNode, ext
 function children(n: XmlNode, defs: ComponentDef[]) {
 	const list = n.children.filter(c => !isWs(c, 'attributes')).map(c => render(c, defs));
 	return list.length ? list : undefined;
+}
+
+function frameChildren(frame: XmlNode, defs: ComponentDef[]) {
+	frameDepth++;
+	try {
+		return children(frame, defs);
+	} finally {
+		frameDepth--;
+	}
 }
 
 function attributes(n: XmlNode) {

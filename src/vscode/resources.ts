@@ -14,25 +14,37 @@ import { offerSetup, resolvePath } from './setup';
 
 let warnedNoDefs = false;
 
-/** 웹뷰로 보낼 화면 XML: 노드 트리(정의 표시·연결 화면·이미지 주소)와 Script 본문. 읽지 못하면 이유를 담는다 */
+/** 웹뷰로 보낼 화면 XML: 원문·Script 본문과 디스크·웹뷰 주소가 필요한 부가 정보(연결 화면·이미지 주소·UDC 목록). 노드 트리는 웹뷰에서 파싱해 IPC 직렬화 크기를 줄인다 */
 export async function documentMessage(document: vscode.TextDocument, webview: vscode.Webview, webRoot: string, defs: ComponentDef[], udcs: Set<string>): Promise<Extract<ToWebview, { type: 'document' }>> {
 	const base = { type: 'document', version: document.version, text: document.getText() } as const;
 	try {
 		const root = parseXml(base.text);
 		const body = root ? scriptBody(base.text, root) : 'XML을 읽지 못했습니다.';
 		const script = typeof body === 'string' ? { text: '', note: body } : { text: body.text };
+		const frames: Record<number, { frame?: XmlNode; frameError?: string }> = {};
+		const urls: Record<number, string> = {};
 		if (root) {
 			annotate(root, defs, udcs);
 			await attachFrames(root, document.uri.fsPath, webRoot, defs, udcs);
-			const images = (n: XmlNode) => {
+			const images = (n: XmlNode, inFrame = false) => {
 				if (defOf(n, defs)?.realType === 'image' && n.attrs.src && !/^[a-z]+:/i.test(n.attrs.src)) {
-					n.url = webview.asWebviewUri(vscode.Uri.file(fromWebPath(webRoot, n.attrs.src, ENGINE_PAGE))).toString();
+					const url = webview.asWebviewUri(vscode.Uri.file(fromWebPath(webRoot, n.attrs.src, ENGINE_PAGE))).toString();
+					if (inFrame) { n.url = url; } else { urls[n.index] = url; }
 				}
-				[...n.children, ...n.frame ? [n.frame] : []].forEach(images);
+				if (!inFrame && (n.frame || n.frameError)) {
+					frames[n.index] = { ...n.frame && { frame: n.frame }, ...n.frameError && { frameError: n.frameError } };
+				}
+				n.children.forEach(c => images(c, inFrame));
+				if (n.frame) { images(n.frame, true); }
 			};
 			images(root);
 		}
-		return { ...base, root, script };
+		return {
+			...base, script,
+			...udcs.size && { udcs: [...udcs] },
+			...Object.keys(frames).length && { frames },
+			...Object.keys(urls).length && { urls },
+		};
 	} catch (e) {
 		return { ...base, error: String(e), script: { text: '', note: String(e) } };
 	}

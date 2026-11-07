@@ -16,9 +16,9 @@ export function FileInput({ files, value, onChange, onChoose, onFocus, placehold
 }) {
 	const [open, setOpen] = useState(false);
 	const [active, setActive] = useState(0);
-	const targets = useMemo(() => files?.map(file => ({ file, name: file.split(/[\\/]/).pop() ?? file })), [files]);
+	const targets = useMemo(() => files && fuzzysort.snapshot(files.map(file => ({ file, name: file.split(/[\\/]/).pop() ?? file })), { keys: ['name', 'file'] }), [files]);
 	const results = useMemo(() => value.trim() && targets
-		? fuzzysort.go(value.trim(), targets, { keys: ['name', 'file'], limit: LIMIT, threshold: 0.2 }).map(r => r.obj) : [], [value, targets]);
+		? fuzzysort.go(value.trim(), targets, { limit: LIMIT, threshold: 0.2 }).map(r => r.obj) : [], [value, targets]);
 	const shown = open && results.length > 0;
 	const choose = (file: string) => {
 		setOpen(false);

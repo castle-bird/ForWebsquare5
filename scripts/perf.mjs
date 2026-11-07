@@ -56,7 +56,7 @@ const message = (text, version) => {
 	const tree = host.parseXml(text);
 	host.annotate(tree, DEFS);
 	const body = host.scriptBody(text, tree);
-	return { type: 'document', version, text, root: tree, script: { text: typeof body === 'string' ? '' : body.text } };
+	return { type: 'document', version, text, script: { text: typeof body === 'string' ? '' : body.text } };
 };
 const median = list => [...list].sort((a, b) => a - b)[Math.floor(list.length / 2)];
 const time = (fn, n = REPEAT) => median(Array.from({ length: n }, () => { const t = performance.now(); fn(); return performance.now() - t; }));

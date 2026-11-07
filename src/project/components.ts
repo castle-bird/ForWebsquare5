@@ -2,12 +2,12 @@ import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { parseDocument } from 'htmlparser2';
 import type { Element } from 'domhandler';
-import { localName, type XmlNode } from '../core/xmlModel';
+import { annotate } from '../core/xmlModel';
 import type { ComponentDef } from '../core/protocol';
 import { childTags } from './config';
 import { cached, findDirs, numeric } from './paths';
 
-export type { ComponentDef };
+export { annotate, type ComponentDef };
 
 export function parseComponents(xml: string): ComponentDef[] {
 	const doc = parseDocument(xml, { xmlMode: true });
@@ -46,39 +46,6 @@ export function parseComponents(xml: string): ComponentDef[] {
 			return { name, signature, description: signature === name ? e.attribs.description ?? '' : `${signature}\n${e.attribs.description ?? ''}` };
 		}),
 	}));
-}
-
-export function annotate(root: XmlNode, defs: ComponentDef[], udcs: ReadonlySet<string> = new Set()): void {
-	const byKey = new Map<string, number[]>();
-	defs.forEach((d, i) => {
-		const key = d.ns + ' ' + d.id;
-		byKey.set(key, [...byKey.get(key) ?? [], i]);
-	});
-	const ancestors: string[] = [];
-	const walk = (node: XmlNode) => {
-		let candidates = byKey.get(node.ns + ' ' + localName(node.tag)) ?? [];
-		const narrow = (keep: (d: ComponentDef) => boolean) => {
-			const kept = candidates.filter(i => keep(defs[i]));
-			if (kept.length) {
-				candidates = kept;
-			}
-		};
-		if (candidates.length > 1) {
-			const parent = ancestors.at(-1);
-			if (parent) { narrow(d => d.parents.includes(parent)); }
-			narrow(d => d.bases.some(b => ancestors.includes(b)));
-			const full = node.attrs.appearance === 'full';
-			narrow(d => ['radio', 'checkbox'].includes(d.realType) === full);
-		}
-		node.def = candidates[0];
-		if (node.def === undefined && udcs.has(localName(node.tag))) {
-			node.udc = true;
-		}
-		ancestors.push(localName(node.tag));
-		node.children.forEach(walk);
-		ancestors.pop();
-	};
-	walk(root);
 }
 
 export async function findDefinitionFile(eclipseRoot: string): Promise<string | undefined> {

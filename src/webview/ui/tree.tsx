@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { clsx } from 'clsx';
 import { useDraggable } from '@dnd-kit/core';
 import { INDENT } from '../../core/outlineDrop';
@@ -25,24 +25,28 @@ export interface DragData { index: number; depth: number }
 /** openByDefault: 사용자가 펼치거나 접기 전(모두 펼치기·접기 전 포함) 처음부터 펼쳐 둘 노드(최상위 Body·Data 루트) */
 export function useFold(openByDefault?: (n: XmlNode) => boolean) {
 	const [state, setState] = useState<{ all?: boolean; overrides: Map<number, boolean> }>({ overrides: new Map() });
-	const opened = (s: typeof state, n: XmlNode) => s.overrides.get(n.index) ?? s.all ?? openByDefault?.(n) ?? false;
-	return {
-		isOpen: (n: XmlNode) => opened(state, n),
-		toggle: (n: XmlNode, open: boolean) => setState(s => ({ ...s, overrides: new Map(s.overrides).set(n.index, open) })),
-		setAll: (all: boolean) => setState({ all, overrides: new Map() }),
-		/** 문서가 바뀌어 번호가 바뀌면(옮기기) 펼침 상태도 같은 노드로 */
-		remap: (to: (index: number) => number | undefined) => setState(s => ({ ...s, overrides: new Map([...s.overrides].flatMap(([i, open]) => {
-			const next = to(i);
-			return next === undefined ? [] : [[next, open] as const];
-		})) })),
-		reveal: (nodes: XmlNode[]) => setState(s => {
-			const closed = nodes.filter(n => !opened(s, n));
-			if (!closed.length) { return s; }
-			const overrides = new Map(s.overrides);
-			closed.forEach(n => overrides.set(n.index, true));
-			return { ...s, overrides };
-		}),
-	};
+	const defaultRef = useRef(openByDefault);
+	defaultRef.current = openByDefault;
+	return useMemo(() => {
+		const opened = (s: typeof state, n: XmlNode) => s.overrides.get(n.index) ?? s.all ?? defaultRef.current?.(n) ?? false;
+		return {
+			isOpen: (n: XmlNode) => opened(state, n),
+			toggle: (n: XmlNode, open: boolean) => setState(s => ({ ...s, overrides: new Map(s.overrides).set(n.index, open) })),
+			setAll: (all: boolean) => setState({ all, overrides: new Map() }),
+			/** 문서가 바뀌어 번호가 바뀌면(옮기기) 펼침 상태도 같은 노드로 */
+			remap: (to: (index: number) => number | undefined) => setState(s => ({ ...s, overrides: new Map([...s.overrides].flatMap(([i, open]) => {
+				const next = to(i);
+				return next === undefined ? [] : [[next, open] as const];
+			})) })),
+			reveal: (nodes: XmlNode[]) => setState(s => {
+				const closed = nodes.filter(n => !opened(s, n));
+				if (!closed.length) { return s; }
+				const overrides = new Map(s.overrides);
+				closed.forEach(n => overrides.set(n.index, true));
+				return { ...s, overrides };
+			}),
+		};
+	}, [state]);
 }
 export type Fold = ReturnType<typeof useFold>;
 
@@ -53,6 +57,30 @@ export interface Rename { index?: number; commit(node: XmlNode, id: string): voi
 
 /** 화면 점검(core/check): of 노드 → 문제들, inside 안쪽에 문제가 있는 노드 */
 export interface Problems { of: Map<number, string[]>; inside: Set<number> }
+
+/** 펼쳐져 보이는 트리 한 줄 */
+export interface VisibleRow {
+	node: XmlNode;
+	depth: number;
+	children: XmlNode[];
+	open: boolean;
+}
+
+/** 펼쳐진 노드만 문서 순서대로 1차원 배열로 만든다 */
+export function flattenTree(tops: XmlNode[], fold: Fold, defs?: ComponentDef[], interactive?: boolean, filter?: TreeFilter): VisibleRow[] {
+	const out: VisibleRow[] = [];
+	const visit = (node: XmlNode, depth: number) => {
+		if (filter && !filter.keep.has(node)) { return; }
+		const children = (interactive && defs ? outlineChildren(node, defs) : node.children).filter(c => !filter || filter.keep.has(c));
+		const open = filter ? children.length > 0 : fold.isOpen(node);
+		out.push({ node, depth, children, open });
+		if (open) {
+			for (const c of children) { visit(c, depth + 1); }
+		}
+	};
+	for (const top of tops) { visit(top, 0); }
+	return out;
+}
 
 /** 줄에 보이는 글자(검색 대상): 컴포넌트 이름·태그·tagname·id·class, Data 트리는 name */
 export const nodeLabels = (n: XmlNode, defs: ComponentDef[] | undefined, interactive: boolean) =>
@@ -65,17 +93,17 @@ function Hit({ text, terms }: { text: string; terms?: string[] }) {
 	return <>{text.split(found).map((part, i) => i % 2 ? <mark key={i} className="tree-hit">{part}</mark> : part)}</>;
 }
 
-export function TreeItem({ node, depth, selected, extra, onSelect, onRange, onContextMenu, onDoubleClick, fold, defs, interactive, bindRef, reorder, rename, problems, dropParent, filter }: {
-	node: XmlNode; depth: number; selected?: number;
+export const TreeItem = memo(function TreeItem({ row: { node, depth, children, open }, isSelected, isPrimary, onSelect, onRange, onContextMenu, onDoubleClick, fold, defs, interactive, bindRef, reorder, rename, problems, dropMode, filter }: {
+	row: VisibleRow; isSelected: boolean; isPrimary: boolean;
 	/** onRange: Shift+클릭(지금 고른 줄부터 이 줄까지). row는 누른 줄 */
-	extra?: number[]; onSelect(i: number, additive?: boolean): void; onRange?(i: number, row: HTMLElement): void; onContextMenu?(e: MouseEvent<HTMLDivElement>, node: XmlNode): void; onDoubleClick?(node: XmlNode): void;
+	onSelect(i: number, additive?: boolean): void; onRange?(i: number, row: HTMLElement): void; onContextMenu?(e: MouseEvent<HTMLDivElement>, node: XmlNode): void; onDoubleClick?(node: XmlNode): void;
 	fold: Fold; defs?: ComponentDef[]; interactive?: boolean;
 	bindRef?(node: XmlNode): string | undefined;
 	reorder?: Reorder;
 	rename?: Rename;
 	problems?: Problems;
 	/** Outline 끌기 중 놓일 곳의 부모 줄(inside: 그 줄 자체에 놓임) */
-	dropParent?: { index: number; inside: boolean };
+	dropMode?: 'inside' | 'parent';
 	/** 검색 중: 맞는 노드와 조상만 보이고 모두 펼쳐 있다(접기·끌어 옮기기는 쉼) */
 	filter?: TreeFilter;
 }) {
@@ -83,80 +111,72 @@ export function TreeItem({ node, depth, selected, extra, onSelect, onRange, onCo
 	const cls = interactive ? classLabel(node) : '';
 	const name = interactive && defOf(node, defs)?.display || node.tag;
 	const hit = filter?.match.has(node) ? filter.terms : undefined;
-	const children = (interactive && defs ? outlineChildren(node, defs) : node.children).filter(c => !filter || filter.keep.has(c));
-	const open = filter ? children.length > 0 : fold.isOpen(node);
 	const hasChildren = children.length > 0;
-	const isSelected = node.index === selected;
-	const isExtra = !!extra?.includes(node.index);
 	const container = isContainer(node);
 	const draggable = !!interactive && depth > 0 && !filter;
 	const drag = useDraggable({ id: node.index, data: { index: node.index, depth } satisfies DragData, disabled: !draggable });
 	const [nativeZone, setNativeZone] = useState<DropPosition>();
 	const movable = !!reorder?.canDrag(node);
-	const dropHere = dropParent?.index === node.index;
 	const row = useRef<HTMLDivElement>(null);
 	const setRow = (el: HTMLDivElement | null) => {
 		row.current = el;
 		drag.setNodeRef(el);
 	};
 	useEffect(() => {
-		if (isSelected) {
+		if (isPrimary) {
 			row.current?.scrollIntoView({ block: 'nearest' });
 		}
-	}, [isSelected]);
+	}, [isPrimary]);
 	return (
-		<>
-			<div ref={setRow} role="treeitem" aria-expanded={hasChildren && !filter ? open : undefined}
-				data-index={node.index} data-depth={depth} data-container={container || undefined} data-open={open && hasChildren || undefined} data-hit={hit ? '' : undefined}
-				className={clsx('tree-row', { selected: isSelected || isExtra, dragging: drag.isDragging, 'drop-inside': dropHere && dropParent.inside, 'drop-parent': dropHere && !dropParent.inside }, nativeZone && `drop-${nativeZone}`)}
-				style={{ paddingLeft: 4 + depth * INDENT } as CSSProperties} onClick={e => e.shiftKey && onRange ? onRange(node.index, e.currentTarget) : onSelect(node.index, e.ctrlKey || e.metaKey)}
-				onContextMenu={e => onContextMenu?.(e, node)}
-				onDoubleClick={() => onDoubleClick?.(node)}
-				draggable={ref || movable ? true : undefined}
-				onDragStart={ref || movable ? e => {
-					if (ref) {
-						e.dataTransfer.setData(REF_MIME, ref);
-						e.dataTransfer.setData('text/plain', ref);
-					}
-					if (movable) {
-						e.dataTransfer.setData(NODE_MIME, String(node.index));
-						reorder!.start(node);
-					}
-					e.dataTransfer.effectAllowed = ref && movable ? 'linkMove' : ref ? 'link' : 'move';
-					setDragGhost(e.dataTransfer, defs ? outlineIcon(node, defs) : 'symbol-field', ref ?? node.attrs.id ?? node.tag);
-				} : undefined}
-				onDragEnd={movable ? () => reorder!.start(undefined) : undefined}
-				onDragOver={reorder ? e => {
-					const r = e.currentTarget.getBoundingClientRect();
-					const z = e.dataTransfer.types.includes(NODE_MIME) ? reorder.zone(node, (e.clientY - r.top) / r.height) : undefined;
-					if (z) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
-					setNativeZone(z);
-				} : undefined}
-				onDragLeave={reorder ? () => setNativeZone(undefined) : undefined}
-				onDrop={reorder ? e => {
-					const z = nativeZone;
-					setNativeZone(undefined);
-					if (z) { e.preventDefault(); reorder.drop(node, z); }
-				} : undefined}
-				{...(draggable ? drag.listeners : undefined)} {...(draggable ? drag.attributes : undefined)}>
-				{Array.from({ length: depth }, (_, i) => <span key={i} className="tree-guide" aria-hidden="true" style={{ left: 12 + i * INDENT }} />)}
-				<span className={clsx('chevron codicon', open ? 'codicon-chevron-down' : 'codicon-chevron-right', { hidden: !hasChildren || !!filter })} onClick={e => { e.stopPropagation(); fold.toggle(node, !open); }} />
-				{defs && <span className={`codicon codicon-${outlineIcon(node, defs)} tree-icon`} />}
-				<span className="tag" title={node.tag}><Hit text={name} terms={hit} />{node.attrs.tagname && <Hit text={`:${node.attrs.tagname}`} terms={hit} />}</span>
-				{rename?.index === node.index
-					? <EditBox value={node.attrs.id ?? ''} multiline={false} className="tree-rename" onCommit={v => rename.commit(node, v)} onClose={rename.close} />
-					: node.attrs.id && <span className="id"><Hit text={node.attrs.id} terms={hit} /></span>}
-				{cls && <span className="cls"><Hit text={cls} terms={hit} /></span>}
-				{problems?.of.has(node.index)
-					? <span className="codicon codicon-warning tree-problem" role="img" aria-label="점검 문제" title={problems.of.get(node.index)!.join('\n').replaceAll('`', '')} />
-					// 묶음 줄(Data의 Submission 등)은 문서 노드가 아니라 자식으로 본다
-					: !open && problems && [node, ...children].some(c => problems.inside.has(c.index) || c !== node && problems.of.has(c.index)) && <span className="codicon codicon-warning tree-problem inside" role="img" aria-label="안쪽 점검 문제" title="안쪽에 점검 문제가 있습니다" />}
-				{!interactive && node.attrs.name && <span className="name"><Hit text={node.attrs.name} terms={hit} /></span>}
-			</div>
-			{open && children.map(c => <TreeItem key={c.index} node={c} depth={depth + 1} selected={selected} extra={extra} onSelect={onSelect} onRange={onRange} onContextMenu={onContextMenu} onDoubleClick={onDoubleClick} fold={fold} defs={defs} interactive={interactive} bindRef={bindRef} reorder={reorder} rename={rename} problems={problems} dropParent={dropParent} filter={filter} />)}
-		</>
+		<div ref={setRow} role="treeitem" aria-expanded={hasChildren && !filter ? open : undefined}
+			data-index={node.index} data-depth={depth} data-container={container || undefined} data-open={open && hasChildren || undefined} data-hit={hit ? '' : undefined}
+			className={clsx('tree-row', { selected: isSelected, dragging: drag.isDragging, 'drop-inside': dropMode === 'inside', 'drop-parent': dropMode === 'parent' }, nativeZone && `drop-${nativeZone}`)}
+			style={{ paddingLeft: 4 + depth * INDENT } as CSSProperties} onClick={e => e.shiftKey && onRange ? onRange(node.index, e.currentTarget) : onSelect(node.index, e.ctrlKey || e.metaKey)}
+			onContextMenu={e => onContextMenu?.(e, node)}
+			onDoubleClick={() => onDoubleClick?.(node)}
+			draggable={ref || movable ? true : undefined}
+			onDragStart={ref || movable ? e => {
+				if (ref) {
+					e.dataTransfer.setData(REF_MIME, ref);
+					e.dataTransfer.setData('text/plain', ref);
+				}
+				if (movable) {
+					e.dataTransfer.setData(NODE_MIME, String(node.index));
+					reorder!.start(node);
+				}
+				e.dataTransfer.effectAllowed = ref && movable ? 'linkMove' : ref ? 'link' : 'move';
+				setDragGhost(e.dataTransfer, defs ? outlineIcon(node, defs) : 'symbol-field', ref ?? node.attrs.id ?? node.tag);
+			} : undefined}
+			onDragEnd={movable ? () => reorder!.start(undefined) : undefined}
+			onDragOver={reorder ? e => {
+				const r = e.currentTarget.getBoundingClientRect();
+				const z = e.dataTransfer.types.includes(NODE_MIME) ? reorder.zone(node, (e.clientY - r.top) / r.height) : undefined;
+				if (z) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+				setNativeZone(z);
+			} : undefined}
+			onDragLeave={reorder ? () => setNativeZone(undefined) : undefined}
+			onDrop={reorder ? e => {
+				const z = nativeZone;
+				setNativeZone(undefined);
+				if (z) { e.preventDefault(); reorder.drop(node, z); }
+			} : undefined}
+			{...(draggable ? drag.listeners : undefined)} {...(draggable ? drag.attributes : undefined)}>
+			{Array.from({ length: depth }, (_, i) => <span key={i} className="tree-guide" aria-hidden="true" style={{ left: 12 + i * INDENT }} />)}
+			<span className={clsx('chevron codicon', open ? 'codicon-chevron-down' : 'codicon-chevron-right', { hidden: !hasChildren || !!filter })} onClick={e => { e.stopPropagation(); fold.toggle(node, !open); }} />
+			{defs && <span className={`codicon codicon-${outlineIcon(node, defs)} tree-icon`} />}
+			<span className="tag" title={node.tag}><Hit text={name} terms={hit} />{node.attrs.tagname && <Hit text={`:${node.attrs.tagname}`} terms={hit} />}</span>
+			{rename?.index === node.index
+				? <EditBox value={node.attrs.id ?? ''} multiline={false} className="tree-rename" onCommit={v => rename.commit(node, v)} onClose={rename.close} />
+				: node.attrs.id && <span className="id"><Hit text={node.attrs.id} terms={hit} /></span>}
+			{cls && <span className="cls"><Hit text={cls} terms={hit} /></span>}
+			{problems?.of.has(node.index)
+				? <span className="codicon codicon-warning tree-problem" role="img" aria-label="점검 문제" title={problems.of.get(node.index)!.join('\n').replaceAll('`', '')} />
+				// 묶음 줄(Data의 Submission 등)은 문서 노드가 아니라 자식으로 본다
+				: !open && problems && [node, ...children].some(c => problems.inside.has(c.index) || c !== node && problems.of.has(c.index)) && <span className="codicon codicon-warning tree-problem inside" role="img" aria-label="안쪽 점검 문제" title="안쪽에 점검 문제가 있습니다" />}
+			{!interactive && node.attrs.name && <span className="name"><Hit text={node.attrs.name} terms={hit} /></span>}
+		</div>
 	);
-}
+});
 
 export function setDragGhost(transfer: DataTransfer, icon: string, text: string) {
 	const ghost = document.createElement('div');
@@ -174,24 +194,26 @@ export const classLabel = (n: XmlNode) => n.attrs.class?.trim().split(/\s+/).fil
  */
 export function useDataReorder(version: number | undefined, model?: XmlNode, dataCollection?: XmlNode): Reorder {
 	const dragging = useRef<XmlNode>(undefined);
-	const groupOf = (n: XmlNode) => isXf(n, 'submission') ? 'submission' : dataCollection?.children.includes(n) ? 'data' : undefined;
-	return {
-		canDrag: n => !!groupOf(n),
-		start: n => { dragging.current = n; },
-		zone: (over, ratio) => {
-			const d = dragging.current, kind = d && groupOf(d);
-			if (!d || !kind || over.index === d.index) { return undefined; }
-			if (over.index === -1) { return kind === 'submission' ? 'inside' : undefined; }
-			if (over === dataCollection) { return kind === 'data' ? 'inside' : undefined; }
-			return groupOf(over) === kind ? ratio < 0.5 ? 'before' : 'after' : undefined;
-		},
-		drop: (over, position) => {
-			const d = dragging.current;
-			dragging.current = undefined;
-			const target = over.index === -1 ? model : over;
-			if (version !== undefined && d && target) { post({ type: 'move', version, dragged: d.index, target: target.index, position }); }
-		},
-	};
+	return useMemo(() => {
+		const groupOf = (n: XmlNode) => isXf(n, 'submission') ? 'submission' : dataCollection?.children.includes(n) ? 'data' : undefined;
+		return {
+			canDrag: n => !!groupOf(n),
+			start: n => { dragging.current = n; },
+			zone: (over, ratio) => {
+				const d = dragging.current, kind = d && groupOf(d);
+				if (!d || !kind || over.index === d.index) { return undefined; }
+				if (over.index === -1) { return kind === 'submission' ? 'inside' : undefined; }
+				if (over === dataCollection) { return kind === 'data' ? 'inside' : undefined; }
+				return groupOf(over) === kind ? ratio < 0.5 ? 'before' : 'after' : undefined;
+			},
+			drop: (over, position) => {
+				const d = dragging.current;
+				dragging.current = undefined;
+				const target = over.index === -1 ? model : over;
+				if (version !== undefined && d && target) { post({ type: 'move', version, dragged: d.index, target: target.index, position }); }
+			},
+		};
+	}, [version, model, dataCollection]);
 }
 
 /**
@@ -200,6 +222,8 @@ export function useDataReorder(version: number | undefined, model?: XmlNode, dat
  */
 export function useTreeRename(root: XmlNode | undefined, selected: number | undefined, setId: (id: string, index: number) => void): Rename {
 	const [index, setIndex] = useState<number>();
+	const latest = useRef({ root, setId });
+	latest.current = { root, setId };
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			const el = e.composedPath()[0] as HTMLElement;
@@ -216,17 +240,18 @@ export function useTreeRename(root: XmlNode | undefined, selected: number | unde
 		window.addEventListener('keydown', onKey);
 		return () => window.removeEventListener('keydown', onKey);
 	}, [root, selected]);
-	return {
+	return useMemo(() => ({
 		index,
 		commit: (n, id) => {
+			const { root: r, setId: apply } = latest.current;
 			if (!VALID_ID.test(id)) {
 				post({ type: 'warn', message: `ID 형식이 아닙니다: ${id || '(비어 있음)'}` });
-			} else if (root && findNode(root, c => c !== n && c.attrs.id === id)) {
+			} else if (r && findNode(r, c => c !== n && c.attrs.id === id)) {
 				post({ type: 'warn', message: `이미 있는 ID야: ${id}` });
 			} else {
-				setId(id, n.index);
+				apply(id, n.index);
 			}
 		},
 		close: () => setIndex(undefined),
-	};
+	}), [index]);
 }

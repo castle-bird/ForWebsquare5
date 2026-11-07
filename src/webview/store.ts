@@ -5,7 +5,7 @@ import type { CodeThemeState } from '../core/codeTheme';
 import type { SiblingLink } from '../core/linkSuggest';
 import type { Blame } from '../core/blame';
 import { DEFAULT_CODE_OPTIONS, type CodeOptions } from '../core/codeOptions';
-import { findNode, isWs, isXf, localName, nodeAt, pathTo, type XmlNode } from '../core/xmlModel';
+import { annotate, findNode, isWs, isXf, localName, nodeAt, parseXml, pathTo, type XmlNode } from '../core/xmlModel';
 import type { DropPosition } from '../core/paste';
 import { selectionIndex } from '../core/selection';
 import { movedIndexes } from '../core/move';
@@ -145,6 +145,37 @@ const tagChange = (before: string, after: string): TextEdit | undefined => {
 	return change && { start: start!, end: change.end, replacement: before.slice(start, change.start) + change.replacement };
 };
 
+/** 확장이 root 없이 보낸 document 메시지를 웹뷰에서 파싱·정의 연결·부착(frames·urls)해 완성한다 */
+function hydrateDocument(raw: Doc, defs: ComponentDef[] | undefined): Doc {
+	if (raw.root || raw.error) {
+		return raw;
+	}
+	try {
+		const root = parseXml(raw.text);
+		if (root) {
+			if (defs?.length || raw.udcs?.length) {
+				annotate(root, defs ?? [], new Set(raw.udcs));
+			}
+			if (raw.frames || raw.urls) {
+				const attach = (n: XmlNode) => {
+					const f = raw.frames?.[n.index];
+					if (f) {
+						if (f.frame) { n.frame = f.frame; }
+						if (f.frameError) { n.frameError = f.frameError; }
+					}
+					const url = raw.urls?.[n.index];
+					if (url) { n.url = url; }
+					n.children.forEach(attach);
+				};
+				attach(root);
+			}
+		}
+		return { ...raw, root };
+	} catch (e) {
+		return { ...raw, error: String(e), script: { text: '', note: String(e) } };
+	}
+}
+
 export const useEditorStore = create<EditorState>((set, get) => ({
 	doc: undefined,
 	defs: undefined,
@@ -174,9 +205,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	linkExts: DEFAULT_LINK_EXTS,
 	xmlSchemas: {},
 
-	handleMessage: (data) => {
-		if (data.type === 'document') {
-			const { doc, pendingSelect, pendingMove, pendingPaste, selected } = get();
+	handleMessage: (incoming) => {
+		if (incoming.type === 'document') {
+			const { doc, defs, pendingSelect, pendingMove, pendingPaste, selected } = get();
+			const data = hydrateDocument(incoming, defs?.defs);
 			const added = pendingSelect && data.root && findNode(data.root, n => n.attrs.id === pendingSelect);
 			// 옮긴 결과 문서: 옮긴 노드가 계산한 번호에 그대로 있을 때만(다른 변경이 섞였으면 번호를 믿을 수 없다)
 			const moved = pendingMove && data.version !== pendingMove.version && data.root
@@ -195,55 +227,62 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 				...moved && { selected: selected === undefined ? undefined : moved.get(selected) },
 				...to && { remap: { to, key: Date.now() } },
 				...added && { selected: added.index, extra: [], pendingSelect: undefined } });
-		} else if (data.type === 'select') {
-			set({ pendingSelect: data.id });
-		} else if (data.type === 'definitions') {
-			set({ defs: data });
-		} else if (data.type === 'styles') {
-			set({ styles: data });
-		} else if (data.type === 'scriptApi') {
-			set({ api: data });
-		} else if (data.type === 'modules') {
-			set({ modules: data });
-		} else if (data.type === 'linked') {
-			set({ links: { ...get().links, [data.kind]: data } });
-		} else if (data.type === 'linkTabs') {
-			set({ linkTabs: data.tabs, linkExts: data.exts });
-		} else if (data.type === 'xmlSchema') {
-			set({ xmlSchemas: { ...get().xmlSchemas, [data.kind]: data.elements } });
-		} else if (data.type === 'toast') {
-			set({ toast: { message: data.message, key: Date.now() } });
-		} else if (data.type === 'linkProblem') {
-			set({ linkProblems: { ...get().linkProblems, [data.kind]: data.message } });
-		} else if (data.type === 'files') {
-			set({ linkFiles: { ...get().linkFiles, [data.kind]: data.files }, linkScreen: data.screen ?? '', linkSiblings: { ...get().linkSiblings, [data.kind]: data.siblings ?? [] } });
-		} else if (data.type === 'gitBase') {
-			set({ gitBases: { ...get().gitBases, [data.target]: data.text } });
-		} else if (data.type === 'diagnostics') {
-			set({ diagnostics: { ...get().diagnostics, [data.target]: data } });
-		} else if (data.type === 'codeTheme') {
-			const { type: _type, ...theme } = data;
+		} else if (incoming.type === 'select') {
+			set({ pendingSelect: incoming.id });
+		} else if (incoming.type === 'definitions') {
+			const { doc } = get();
+			if (doc?.root) {
+				const root = structuredClone(doc.root);
+				annotate(root, incoming.defs, new Set(doc.udcs));
+				set({ defs: incoming, doc: { ...doc, root } });
+			} else {
+				set({ defs: incoming });
+			}
+		} else if (incoming.type === 'styles') {
+			set({ styles: incoming });
+		} else if (incoming.type === 'scriptApi') {
+			set({ api: incoming });
+		} else if (incoming.type === 'modules') {
+			set({ modules: incoming });
+		} else if (incoming.type === 'linked') {
+			set({ links: { ...get().links, [incoming.kind]: incoming } });
+		} else if (incoming.type === 'linkTabs') {
+			set({ linkTabs: incoming.tabs, linkExts: incoming.exts });
+		} else if (incoming.type === 'xmlSchema') {
+			set({ xmlSchemas: { ...get().xmlSchemas, [incoming.kind]: incoming.elements } });
+		} else if (incoming.type === 'toast') {
+			set({ toast: { message: incoming.message, key: Date.now() } });
+		} else if (incoming.type === 'linkProblem') {
+			set({ linkProblems: { ...get().linkProblems, [incoming.kind]: incoming.message } });
+		} else if (incoming.type === 'files') {
+			set({ linkFiles: { ...get().linkFiles, [incoming.kind]: incoming.files }, linkScreen: incoming.screen ?? '', linkSiblings: { ...get().linkSiblings, [incoming.kind]: incoming.siblings ?? [] } });
+		} else if (incoming.type === 'gitBase') {
+			set({ gitBases: { ...get().gitBases, [incoming.target]: incoming.text } });
+		} else if (incoming.type === 'diagnostics') {
+			set({ diagnostics: { ...get().diagnostics, [incoming.target]: incoming } });
+		} else if (incoming.type === 'codeTheme') {
+			const { type: _type, ...theme } = incoming;
 			set({ codeTheme: theme });
-		} else if (data.type === 'codeOptions') {
-			set({ codeOptions: { wordWrap: data.wordWrap, sqlDialect: data.sqlDialect, fontFeatures: data.fontFeatures } });
-		} else if (data.type === 'paletteFavorites') {
-			set({ paletteFavorites: data.keys });
-		} else if (data.type === 'tabOrder') {
-			set({ tabOrder: data.order });
-		} else if (data.type === 'tabPosition') {
-			set({ tabPosition: data.position });
-		} else if (data.type === 'panelFont') {
-			set({ panelFont: data.font });
-		} else if (data.type === 'minimap') {
-			set({ minimap: data.on });
-		} else if (data.type === 'animation') {
-			set({ animation: data.on });
-		} else if (data.type === 'browserPreview') {
-			set({ browserPreview: data.on });
-		} else if (data.type === 'codeBlame') {
-			set({ codeBlame: data.on });
-		} else if (data.type === 'blame') {
-			set({ blames: { ...get().blames, [data.target]: { version: data.version, data: data.data } } });
+		} else if (incoming.type === 'codeOptions') {
+			set({ codeOptions: { wordWrap: incoming.wordWrap, sqlDialect: incoming.sqlDialect, fontFeatures: incoming.fontFeatures } });
+		} else if (incoming.type === 'paletteFavorites') {
+			set({ paletteFavorites: incoming.keys });
+		} else if (incoming.type === 'tabOrder') {
+			set({ tabOrder: incoming.order });
+		} else if (incoming.type === 'tabPosition') {
+			set({ tabPosition: incoming.position });
+		} else if (incoming.type === 'panelFont') {
+			set({ panelFont: incoming.font });
+		} else if (incoming.type === 'minimap') {
+			set({ minimap: incoming.on });
+		} else if (incoming.type === 'animation') {
+			set({ animation: incoming.on });
+		} else if (incoming.type === 'browserPreview') {
+			set({ browserPreview: incoming.on });
+		} else if (incoming.type === 'codeBlame') {
+			set({ codeBlame: incoming.on });
+		} else if (incoming.type === 'blame') {
+			set({ blames: { ...get().blames, [incoming.target]: { version: incoming.version, data: incoming.data } } });
 		}
 	},
 

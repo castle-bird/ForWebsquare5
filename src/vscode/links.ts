@@ -32,12 +32,26 @@ let workspaceState: vscode.Memento;
 const changed = new vscode.EventEmitter<string | undefined>();
 /** 열린 디자이너들이 연결 중인 파일(uri → 개수): 다른 화면이 아직 보고 있으면 닫을 때 묻지 않는다 */
 const used = new Map<string, number>();
+/** 경로 입력 파일 검색 캐시: 파일이 생기거나 지워지거나 제외·확장자 설정이 바뀔 때만 비운다 */
+let foundCache: Promise<string[]> | undefined;
+const folderFilesCache = new Map<string, { files: string[]; shown: Set<string> }>();
+const clearFoundCache = () => {
+	foundCache = undefined;
+	folderFilesCache.clear();
+};
 
 export function registerLinks(context: vscode.ExtensionContext): void {
 	workspaceState = context.workspaceState;
+	clearFoundCache();
 	registerLinkTabs(context);
 	registerAutoTabs(context, uri => used.has(uri));
-	context.subscriptions.push(changed, vscode.workspace.onDidRenameFiles(e => void followRenames(e.files)),
+	const treeWatcher = vscode.workspace.createFileSystemWatcher('**/*', false, true, false);
+	treeWatcher.onDidCreate(clearFoundCache);
+	treeWatcher.onDidDelete(clearFoundCache);
+	context.subscriptions.push(changed, treeWatcher,
+		vscode.workspace.onDidRenameFiles(e => { clearFoundCache(); void followRenames(e.files); }),
+		vscode.workspace.onDidChangeWorkspaceFolders(clearFoundCache),
+		vscode.workspace.onDidChangeConfiguration(e => (e.affectsConfiguration('files.exclude') || e.affectsConfiguration('search.exclude') || e.affectsConfiguration(LINK_EXTS_SETTING)) && clearFoundCache()),
 		// 없어진 탭의 연결은 이 작업 폴더의 모든 화면에서 지운다(디자이너들은 탭 변경 알림으로 다시 맞춘다)
 		onTabsChanged(({ tabs }) => void forgetRemovedTabs(new Set(tabs.map(t => t.id)))));
 }
@@ -490,6 +504,26 @@ export class LinkedFiles {
 		return kind === undefined ? Promise.resolve(undefined) : this.docAt(kind, version).then(doc => doc && ask(doc)).catch(() => undefined);
 	}
 
+	private async workspaceFiles(folder = this.folder?.fsPath): Promise<{ files: string[]; shown: Set<string> }> {
+		foundCache ??= (async () => {
+			const excluded = (section: string) => Object.entries(vscode.workspace.getConfiguration(section).get<Record<string, unknown>>('exclude') ?? {})
+				.filter(([, on]) => on === true).map(([glob]) => glob);
+			const globs = [...excluded('files'), ...excluded('search')];
+			// 확장자마다 따로 찾는다: 한 번에 찾으면 엔진·라이브러리의 많은 .js가 최대 개수를 채워 .java가 빠질 수 있다
+			const exclude = globs.length ? `{${globs.join(',')}}` : undefined;
+			const found = await Promise.all(linkExts().map(ext => vscode.workspace.findFiles(`**/*${ext}`, exclude, MAX_FILES_PER_EXT)));
+			return found.flat().map(u => u.fsPath);
+		})().catch(e => { clearFoundCache(); throw e; });
+		const raw = await foundCache, key = folder ?? '';
+		let entry = folderFilesCache.get(key);
+		if (!entry) {
+			const files = raw.map(f => this.shown(f, folder)).sort();
+			entry = { files, shown: new Set(files) };
+			folderFilesCache.set(key, entry);
+		}
+		return entry;
+	}
+
 	/**
 	 * 경로 입력의 파일 검색 목록: 작업 폴더에서 이 탭이 받는 확장자 파일(VS Code 파일 검색, 사용자의 files.exclude·search.exclude 제외).
 	 * 경로는 입력칸과 같은 기준(이 화면의 작업 폴더). 다른 작업 폴더 파일은 절대 경로
@@ -499,14 +533,8 @@ export class LinkedFiles {
 		if (!tab) {
 			return;
 		}
-		const excluded = (section: string) => Object.entries(vscode.workspace.getConfiguration(section).get<Record<string, unknown>>('exclude') ?? {})
-			.filter(([, on]) => on === true).map(([glob]) => glob);
-		const globs = [...excluded('files'), ...excluded('search')];
-		// 확장자마다 따로 찾는다: 한 번에 찾으면 엔진·라이브러리의 많은 .js가 최대 개수를 채워 .java가 빠질 수 있다
-		const exclude = globs.length ? `{${globs.join(',')}}` : undefined;
-		const found = await Promise.all(linkExts().map(ext => vscode.workspace.findFiles(`**/*${ext}`, exclude, MAX_FILES_PER_EXT)));
 		const folder = this.folder?.fsPath;
-		const files = found.flat().map(u => this.shown(u.fsPath, folder)).sort(), shown = new Set(files);
+		const { files, shown } = await this.workspaceFiles(folder);
 		// 같은 폴더 화면이 연결한 파일 중 지금 찾을 수 있는 것만
 		const siblings = siblingLinks(this.owner.uri.fsPath, workspaceState.keys().filter(k => k.startsWith(KEY)).map(k => [k.slice(KEY.length), workspaceState.get<Saved>(k)?.[kind]] as const))
 			.map(s => ({ ...s, file: this.shown(s.file, folder) })).filter(s => shown.has(s.file)).slice(0, SIBLING_LIMIT);

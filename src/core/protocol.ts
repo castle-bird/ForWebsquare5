@@ -14,8 +14,10 @@ import type { CodeOptions } from './codeOptions';
 
 export type PanelFont = 'ui' | 'editor';
 
+interface FrameAttachment { frame?: XmlNode; frameError?: string }
+
 export type ToWebview =
-	| { type: 'document'; version: number; text: string; script: ScriptInfo; root?: XmlNode; error?: string }
+	| { type: 'document'; version: number; text: string; script: ScriptInfo; root?: XmlNode; udcs?: string[]; frames?: Record<number, FrameAttachment>; urls?: Record<number, string>; error?: string }
 	| { type: 'popupAck'; popup: string; ok: boolean; error?: string }
 	| { type: 'codeAck'; target: CodeTarget; ok: boolean; version: number }
 	| { type: 'formatKey' }

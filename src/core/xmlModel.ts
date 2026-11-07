@@ -92,6 +92,47 @@ export const hasOnly = (n: XmlNode, children: readonly string[], attrs: readonly
 	!n.text && n.children.every(c => c.ns === n.ns && children.includes(localName(c.tag))) && Object.keys(n.attrs).every(a => attrs.includes(a));
 export const defOf = <T>(node: XmlNode, defs: readonly T[] | undefined): T | undefined => node.def === undefined ? undefined : defs?.[node.def];
 
+interface AnnotateDef {
+	id: string;
+	ns: string;
+	realType: string;
+	parents: readonly string[];
+	bases: readonly string[];
+}
+
+export function annotate(root: XmlNode, defs: readonly AnnotateDef[], udcs: ReadonlySet<string> = new Set()): void {
+	const byKey = new Map<string, number[]>();
+	defs.forEach((d, i) => {
+		const key = d.ns + ' ' + d.id;
+		byKey.set(key, [...byKey.get(key) ?? [], i]);
+	});
+	const ancestors: string[] = [];
+	const walk = (node: XmlNode) => {
+		let candidates = byKey.get(node.ns + ' ' + localName(node.tag)) ?? [];
+		const narrow = (keep: (d: AnnotateDef) => boolean) => {
+			const kept = candidates.filter(i => keep(defs[i]));
+			if (kept.length) {
+				candidates = kept;
+			}
+		};
+		if (candidates.length > 1) {
+			const parent = ancestors.at(-1);
+			if (parent) { narrow(d => d.parents.includes(parent)); }
+			narrow(d => d.bases.some(b => ancestors.includes(b)));
+			const full = node.attrs.appearance === 'full';
+			narrow(d => ['radio', 'checkbox'].includes(d.realType) === full);
+		}
+		node.def = candidates[0];
+		if (node.def === undefined && udcs.has(localName(node.tag))) {
+			node.udc = true;
+		}
+		ancestors.push(localName(node.tag));
+		node.children.forEach(walk);
+		ancestors.pop();
+	};
+	walk(root);
+}
+
 export const WEBSQUARE_NS = 'http://www.inswave.com/websquare';
 export const XFORMS_NS = 'http://www.w3.org/2002/xforms';
 /** WebSquare·XForms 요소인지: 접두어(w2:·xf:) 대신 xmlns로 푼 namespace와 로컬 이름으로 본다 */

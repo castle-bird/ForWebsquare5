@@ -122,6 +122,9 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 		}
 	}, [shadow, sheets]);
 	const [tree, generation] = useMemo(() => [render(body, defs), ++renders], [body, defs]);
+	const canvasContent = useMemo(() => (
+		<Boundary generation={generation}><DataCollection.Provider value={dataCollection}>{tree}</DataCollection.Provider></Boundary>
+	), [generation, dataCollection, tree]);
 	// 고른 것이 바뀔 때만 보이게 스크롤(새로 넣은 노드는 다음 문서에서 나타날 때). 속성만 바꾼 새 문서마다 하면 그리드 가로 스크롤이 튄다
 	const scrolledTo = useRef<number>(undefined);
 	useEffect(() => {
@@ -294,7 +297,7 @@ export function Canvas({ body, dataCollection, defs, sheets, styleRules, selecte
 					}}
 					onMouseOver={e => { setMeasuring(e.altKey); const el = target(e); setHover(el ? wseIndex(el) : undefined); keepHoverGrid(el ? gridOf(wseIndex(el))?.index : undefined); }}
 					onMouseLeave={() => { setHover(undefined); keepHoverGrid(undefined); }}>
-					<Boundary generation={generation}><DataCollection.Provider value={dataCollection}>{tree}</DataCollection.Provider></Boundary>
+					{canvasContent}
 					{editing && (
 						<EditBox key={editing.target.index} style={editing.rect} value={editValue(editing)}
 							header={editing.form && <FormHeader form={editing.form} />}
@@ -642,34 +645,54 @@ function Badges({ page, body, tree }: { page: RefObject<HTMLDivElement | null>; 
 		walk(body);
 		return out;
 	}, [body]);
+	const markedRef = useRef(marked);
+	markedRef.current = marked;
 	const [rects, setRects] = useState<{ index: number; bind: boolean; event: boolean; left: number; top: number }[]>([]);
+	const syncRef = useRef<() => void>(undefined);
 	// useLayoutEffect면 자식인 이 컴포넌트가 부모 page ref가 붙기 전에 돌아 루프가 안 시작된다(문서가 바뀌어야 나타나던 원인) → 커밋 후 useEffect
 	useEffect(() => {
 		const p = page.current;
-		if (!p || !marked.length) {
-			setRects([]);
-			return;
-		}
+		if (!p) { return; }
 		let stop: (() => void) | undefined;
+		let current: { index: number; bind: boolean; event: boolean; el: HTMLElement }[] = [];
 		const sync = () => {
-			stop?.();
+			const list = markedRef.current;
+			if (!list.length) {
+				stop?.();
+				stop = undefined;
+				current = [];
+				setRects(r => r.length ? [] : r);
+				return;
+			}
 			const elements = new Map([...p.querySelectorAll<HTMLElement>('[data-wse]:not([data-wse-frame] *)')].map(el => [wseIndex(el), el]));
-			const targets = marked.flatMap(m => {
+			const targets = list.flatMap(m => {
 				const el = elements.get(m.index);
 				return el ? [{ ...m, el }] : [];
 			});
-			const measure = () => targets.flatMap(({ el, ...m }) => {
-				const r = visibleRect(el, p);
-				return r ? [{ ...m, left: r.left, top: r.top }] : [];
-			});
+			if (stop && targets.length === current.length && targets.every((t, i) => {
+				const c = current[i];
+				return t.index === c.index && t.bind === c.bind && t.event === c.event && t.el === c.el;
+			})) {
+				return;
+			}
+			stop?.();
+			current = targets;
+			const measure = () => {
+				const clipCache = new Map<Element, ClipBox | null>();
+				return targets.flatMap(({ el, ...m }) => {
+					const r = visibleRect(el, p, clipCache);
+					return r ? [{ ...m, left: r.left, top: r.top }] : [];
+				});
+			};
 			stop = watchLayout(targets.map(t => t.el), p, measure, setRects);
 		};
+		syncRef.current = sync;
 		// 탭 content처럼 DOM만 바뀔 때도 새 요소를 찾아 감시한다.
 		const observer = new MutationObserver(sync);
 		observer.observe(p, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-wse'] });
-		sync();
-		return () => { observer.disconnect(); stop?.(); };
-	}, [page, marked, tree]);
+		return () => { syncRef.current = undefined; observer.disconnect(); stop?.(); };
+	}, [page]);
+	useEffect(() => { syncRef.current?.(); }, [marked, tree]);
 	return <>{rects.map(r => (
 		<div key={r.index} className="wse-badges" style={{ left: r.left, top: r.top }}>
 			{r.bind && <span className="bind" title="ref 바인딩 있음" />}
@@ -937,29 +960,46 @@ function relRect(el: Element, page: HTMLElement) {
 }
 
 interface Rect { left: number; top: number; width: number; height: number }
+interface ClipBox { left: number; top: number; right: number; bottom: number; originLeft: number; originTop: number }
 
-function visibleRect(el: Element, page: HTMLElement): Rect | undefined {
+function clipBoxOf(el: Element, page: HTMLElement, cache?: Map<Element, ClipBox | null>): ClipBox | null {
+	const hit = cache?.get(el);
+	if (hit !== undefined) { return hit; }
+	let box: ClipBox | null;
+	if (el === page) {
+		const b = page.getBoundingClientRect();
+		const left = b.left + page.clientLeft, top = b.top + page.clientTop, zoom = scaleOf(page);
+		box = { left, top, right: left + page.clientWidth * zoom, bottom: top + page.clientHeight * zoom, originLeft: b.left, originTop: b.top };
+	} else {
+		const parent = el.parentElement ? clipBoxOf(el.parentElement, page, cache) : null;
+		if (!parent) {
+			box = null;
+		} else if (getComputedStyle(el).overflow !== 'visible') {
+			const r = el.getBoundingClientRect();
+			const left = Math.max(parent.left, r.left), top = Math.max(parent.top, r.top);
+			const right = Math.min(parent.right, r.right), bottom = Math.min(parent.bottom, r.bottom);
+			box = right > left && bottom > top ? { left, top, right, bottom, originLeft: parent.originLeft, originTop: parent.originTop } : null;
+		} else {
+			box = parent;
+		}
+	}
+	cache?.set(el, box);
+	return box;
+}
+
+function visibleRect(el: Element, page: HTMLElement, cache?: Map<Element, ClipBox | null>): Rect | undefined {
 	if (!el.getClientRects().length) {
 		return undefined;
 	}
-	const a = el.getBoundingClientRect();
-	let left = a.left, top = a.top, right = Math.max(a.right, a.left + 6), bottom = Math.max(a.bottom, a.top + 6);
-	const clip = (c: { left: number; top: number; right: number; bottom: number }) => {
-		left = Math.max(left, c.left); top = Math.max(top, c.top);
-		right = Math.min(right, c.right); bottom = Math.min(bottom, c.bottom);
-	};
-	const b = page.getBoundingClientRect();
-	const x = b.left + page.clientLeft, y = b.top + page.clientTop;
-	const zoom = scaleOf(page);
-	clip({ left: x, top: y, right: x + page.clientWidth * zoom, bottom: y + page.clientHeight * zoom });
-	if (right <= left || bottom <= top) { return undefined; }
-	for (let p = el.parentElement; p && p !== page; p = p.parentElement) {
-		if (getComputedStyle(p).overflow !== 'visible') {
-			clip(p.getBoundingClientRect());
-		}
+	const clip = clipBoxOf(el.parentElement && page.contains(el.parentElement) ? el.parentElement : page, page, cache);
+	if (!clip) {
+		return undefined;
 	}
+	const a = el.getBoundingClientRect();
+	const left = Math.max(a.left, clip.left), top = Math.max(a.top, clip.top);
+	const right = Math.min(Math.max(a.right, a.left + 6), clip.right), bottom = Math.min(Math.max(a.bottom, a.top + 6), clip.bottom);
 	if (right <= left || bottom <= top) {
 		return undefined;
 	}
-	return { left: left - b.left, top: top - b.top, width: right - left, height: bottom - top };
+	return { left: left - clip.originLeft, top: top - clip.originTop, width: right - left, height: bottom - top };
 }
