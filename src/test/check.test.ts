@@ -24,7 +24,14 @@ suite('화면 점검·중복 id', () => {
 </body></html>`;
 		const root = parseXml(xml)!;
 		const byId = (id: string, tag?: string) => findNode(root, n => n.attrs.id === id && (!tag || n.tag === tag))!;
-		const problems = screenProblems(root, 'scwin.sbm_done = function () {};\nscwin.i3_onclick = async function () {};');
+		const script = [
+			'scwin.sbm_done = function () {};',
+			'scwin.i3_onclick = async function () {};',
+			'// scwin.gone = function () {};',
+			'/* scwin.gone = () => {}; */',
+			'const dummy = "scwin.gone = 1";',
+		].join('\n');
+		const problems = screenProblems(root, script);
 		const of = (n: XmlNode) => problems.get(n.index);
 		assert.deepStrictEqual(of(byId('dlt', 'w2:dataList')), ['ID가 중복되었습니다. `dlt` (2곳)'], '화면 전체 범위');
 		assert.deepStrictEqual(of(byId('dlt', 'xf:input')), ['ID가 중복되었습니다. `dlt` (2곳)', 'dataList에 존재하지 않는 ID입니다. `dlt.c`']);
@@ -40,8 +47,10 @@ suite('화면 점검·중복 id', () => {
 		assert.deepStrictEqual(plainProblems.get(findNode(plain, n => n.attrs.id === 'no')!.index), ['dataMap에 존재하지 않는 ID입니다. `map.x`']);
 		assert.strictEqual(of(byId('i2')), undefined, '컬럼을 모르는 linkedDataList는 컬럼 안 봄');
 		assert.strictEqual(of(byId('i3')), undefined);
-		assert.deepStrictEqual(of(byId('i4')), ['등록되지 않은 handler가 적용되어 있습니다. `scwin.gone`']);
-		const details = screenProblemDetails(root, 'scwin.sbm_done = function () {};\nscwin.i3_onclick = async function () {};');
+		assert.deepStrictEqual(of(byId('i4')), ['등록되지 않은 handler가 적용되어 있습니다. `scwin.gone`'], '주석·문자열 안 scwin.gone 대입은 무시');
+		const broken = screenProblems(root, 'scwin.sbm_done = function () {};\nfunction (');
+		assert.strictEqual(broken.get(byId('sbm').index), undefined, '문법 오류 중에도 이미 적힌 핸들러는 폴백으로 인정');
+		const details = screenProblemDetails(root, script);
 		assert.deepStrictEqual(details.get(byId('dlt', 'xf:input').index)?.map(d => d.attr), ['id', 'ref']);
 		assert.strictEqual(details.get(byId('i4').index)?.[0].attr, 'ev:onblur');
 		// 바꾸기 검사: 같은 범위만
