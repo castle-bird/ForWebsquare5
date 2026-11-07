@@ -18,7 +18,7 @@
 - **Event → Script**: 이벤트 값을 더블클릭하면 `scwin.{id}_{이벤트}` 함수 뼈대를 만들거나 해당 함수로 이동합니다
 - **id 바꾸기**: dataList·dataMap이나 그 컬럼의 id를 바꾸면 `data:` 바인딩·바인딩된 그리드 열·Submission 참조도 같이 바뀝니다. 이미 쓰는 id로는 바꾸지 않고 알려 줍니다
 - **id 바꾸기와 Script**: 컴포넌트·데이터 id를 바꾸면 Script에서 그 id를 변수로 쓴 곳(`btnSave.setValue()`), `getComponentById("btnSave")`, 그 컴포넌트에 걸린 핸들러 이름(`scwin.btnSave_onclick` → `scwin.btnNew_onclick`, 이벤트 속성과 Script의 정의·호출)도 바꿉니다. JS 문법으로 가리키는 자리만 고쳐 문자열·주석·속성 이름·더 긴 이름은 그대로입니다. Script에 같은 이름 변수가 있거나, 새 핸들러 이름이 이미 있거나, 문법 오류가 있으면 그 부분은 바꾸지 않고 알립니다
-- **화면 점검**: Outline·Data 트리에 경고 아이콘으로 겹치는 id, 없는 컬럼을 가리키는 바인딩, Script에 없는 이벤트 함수를 표시합니다(마우스를 올리면 이유). 경고 개수 버튼을 누르면 다음 노드로 이동하고 첫 번째 문제의 Property·Event 키를 잠시 강조합니다
+- **화면 점검**: Outline·Data 트리에 경고 아이콘으로 겹치는 id, 없는 컬럼을 가리키는 바인딩, Script에 없는 이벤트 함수(주석·문자열 안의 코드는 제외)를 표시합니다(마우스를 올리면 이유). 경고 개수 버튼을 누르면 다음 노드로 이동하고 첫 번째 문제의 Property·Event 키를 잠시 강조합니다
 
 XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그대로 동작합니다.
 
