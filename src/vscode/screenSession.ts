@@ -322,7 +322,7 @@ export class ScreenSession {
 		format: msg => {
 			void this.queue(msg.target, async () => {
 				const linkId = linkIdOf(msg.target);
-				const text = linkId !== undefined ? await (msg.imports ? this.links.addImports(linkId, msg.version) : this.links.format(linkId, msg.version))
+				const text = linkId !== undefined ? await (msg.imports ? this.links.addImports(linkId, msg.version) : this.links.format(linkId, msg.version, msg.range))
 					: msg.version === this.document.version && !msg.imports ? await formatCode(this.document, msg.target) : undefined;
 				await this.post({ type: 'formatted', target: msg.target, text });
 			}).catch(e => {

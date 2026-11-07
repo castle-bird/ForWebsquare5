@@ -1,6 +1,9 @@
 // 화면 XML마다 연결한 서버 쪽 파일(탭 id → 경로). 연결 정보는 개인 저장소(workspaceState). 탭 목록은 linkTabs.ts
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { formatMapper, isMapperXml } from '../core/mapperFormat';
+import { formatMapperRange } from './sqlRangeFormat';
+import { codeOptions } from './codeOptions';
 import { cleanPath, linkIdOf, linkProblem, linkTarget, type LinkTab } from '../core/links';
 import { errorMessage } from '../core/errors';
 import { SIBLING_LIMIT, siblingLinks } from '../core/linkSuggest';
@@ -428,9 +431,17 @@ export class LinkedFiles {
 		return { ok, version: this.versionOf(link, doc) };
 	}
 
-	async format(kind: string, version: number): Promise<string | undefined> {
+	/** 매퍼 XML은 선택이 없으면 XML 구조만, 선택이 있으면 그 SQL만 정리한다. 그 밖의 연결 파일은 VS Code 포맷터 */
+	async format(kind: string, version: number, range?: { from: number; to: number }): Promise<string | undefined> {
 		const doc = await this.docAt(kind, version);
-		return doc && formatCode(doc, linkTarget(kind));
+		if (!doc) {
+			return undefined;
+		}
+		const text = doc.getText();
+		if (/\.xml$/i.test(doc.uri.fsPath) && isMapperXml(text)) {
+			return range ? formatMapperRange(text, range, codeOptions().sqlDialect) : formatMapper(text);
+		}
+		return formatCode(doc, linkTarget(kind));
 	}
 
 	/** 붙여넣기 뒤: 포맷 없이 빠진 import만 넣은 글(Java). 넣을 게 없으면 undefined */

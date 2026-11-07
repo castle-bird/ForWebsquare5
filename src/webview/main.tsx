@@ -433,6 +433,9 @@ function App() {
 				<span className="menu-label"><span className={`codicon codicon-${animationOn ? 'check' : 'blank'}`} />애니메이션</span></button>
 			<button role="menuitemcheckbox" aria-checked={blameOn} onClick={() => { setSettingsMenu(undefined); useEditorStore.getState().setCodeBlame(!blameOn); }}>
 				<span className="menu-label"><span className={`codicon codicon-${blameOn ? 'check' : 'blank'}`} />코드 Git blame</span></button>
+			<div className="menu-separator" role="separator" />
+			{/* 안내만 하는 줄(누를 수 없음): 포맷 단축키. VS Code 기본(Shift+Alt+F)과 겹치지 않게 IntelliJ 키를 쓴다 */}
+			<div className="menu-hint">Format: Ctrl+Alt+L</div>
 		</Menu>}
 		{themeColors && <ThemeColorsEditor onClose={() => setThemeColors(false)} />}
 		<Toast />

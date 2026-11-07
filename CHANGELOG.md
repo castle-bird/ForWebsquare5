@@ -1,5 +1,11 @@
 # 변경 내역
 
+## 1.16.0 (2026-11-07)
+
+- MyBatis 매퍼 XML 연결 탭에서 포맷(Ctrl+Alt+L)을 쓸 수 있습니다. 선택 없이 포맷하면 XML 태그 들여쓰기만 정리하고 SQL 본문은 그대로 둡니다
+- 매퍼 XML에서 SQL을 드래그해 선택한 뒤 포맷하면 선택한 SQL만 정리합니다. `#{}`·`${}`·XML 주석은 그대로 두고, 선택에 XML 태그가 섞이면 알려 줍니다. 정리 문법은 설정 `for-websquare5.sqlDialect`(standard·oracle·mysql·mariadb·postgresql·mssql·sqlite)를 따릅니다
+- 코드 탭 포맷 단축키는 Ctrl+Alt+L입니다(VS Code 기본 Shift+Alt+F와 겹치지 않게 IntelliJ와 같은 키). VS Code 키보드 단축키에서 `WebSquare5: 코드 탭 포맷`을 찾아 바꿀 수 있습니다
+
 ## 1.15.0 (2026-11-06)
 
 - Design 탭에서 Source·Script 등 다른 탭에 갔다 돌아올 때 화면을 다시 그리지 않습니다(컴포넌트 3000개 기준 약 210ms → 80ms). 프로젝트 CSS도 같은 내용이면 화면을 열 때마다 다시 변환하지 않아, 큰 테마 CSS를 쓰는 프로젝트에서 화면을 열 때 확장이 멈추는 시간이 줄었습니다

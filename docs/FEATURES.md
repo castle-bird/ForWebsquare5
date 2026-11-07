@@ -68,7 +68,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 - 미니맵(막대형): 글자 대신 낱말마다 색 막대로 코드 흐름과 오류·경고 줄(오른쪽 끝은 파일 전체에서의 위치)을 보여 줍니다. 끌거나 클릭해 이동, 톱니바퀴 → 코드 미니맵으로 켜고 끔(모든 화면 공통, 기본 켬)
 - 정의로 이동(Ctrl+클릭·F12): 같은 Script 함수는 그 자리로, 공통 JS 함수는 그 파일을 VS Code로 엽니다. 커서 추가는 Alt+클릭
 - 파라미터 힌트: `(`·`,`를 치거나 Ctrl+Shift+Space를 누르면 함수 모양과 지금 파라미터를 보여 줍니다(WebSquare API 문서·JSDoc)
-- 문법 오류 표시, 포맷(VS Code에 설정한 포매터, 없으면 VS Code 내장), 검색(Ctrl+F, 입력칸 옆에 몇 번째/찾은 개수 예: 2/10. 편집기를 클릭해도 순번은 그대로, Enter는 커서 다음 일치로), 줄바꿈(VS Code 설정을 따름), 다시 하기 Ctrl+Y·Ctrl+Shift+Z
+- 문법 오류 표시, 포맷(단축키 Ctrl+Alt+L. VS Code 기본 포맷 단축키 Shift+Alt+F와 겹치지 않게 IntelliJ와 같은 키를 썼고, VS Code 키보드 단축키에서 `WebSquare5: 코드 탭 포맷`을 찾아 바꿀 수 있습니다. VS Code에 설정한 포매터, 없으면 VS Code 내장), 검색(Ctrl+F, 입력칸 옆에 몇 번째/찾은 개수 예: 2/10. 편집기를 클릭해도 순번은 그대로, Enter는 커서 다음 일치로), 줄바꿈(VS Code 설정을 따름), 다시 하기 Ctrl+Y·Ctrl+Shift+Z
 - 코드 편집기 테마(탭 줄 오른쪽 톱니바퀴 메뉴): "VS Code 따라가기"(지금 VS Code 색 테마의 문법 색), "IntelliJ Dark"·"IntelliJ Light"·"One Dark"·"One Light"·"GitHub Light Default"·"GitHub Dark Default". Git 변경 줄 표시
 - 테마 색 덮어쓰기: 톱니바퀴 메뉴의 "테마 색 덮어쓰기…" 팝업에서 바꾸면 바로 미리 보이고, 확인하면 저장됩니다(지금 테마만 또는 모든 테마). 설정 `for-websquare5.codeThemeCustomizations`에 직접 적어도 됩니다. 예:
   ```json
@@ -90,6 +90,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 - VS Code에 설치된 언어 확장(Java 등)의 자동완성·포맷·마우스 오버 설명(Javadoc)·정의로 이동(Ctrl+클릭·F12)·파라미터 힌트 사용
 - Java import 목록은 IntelliJ처럼 파일을 열면 `import …` 한 줄로 접혀 있고, 누르거나 왼쪽 접기 표시로 펼칩니다
 - Java 탭은 코드를 붙여 넣거나 포맷하면 빠진 import를 자동으로 넣습니다(Language Support for Java 사용). 안 쓰는 import는 지우지 않고, 후보가 여럿인 클래스는 건너뜁니다
+- MyBatis 매퍼 XML 연결 탭의 포맷(Ctrl+Alt+L): 아무것도 선택하지 않으면 XML 태그 들여쓰기만 정리하고 SQL 본문의 줄 구조는 그대로 둡니다. SQL을 드래그해 선택한 뒤 포맷하면 선택한 SQL만 정리합니다(`#{}`·`${}`와 XML 주석은 그대로 두며, 선택에 XML 태그가 섞이면 정리하지 않고 알려 줍니다). SQL 정리 문법은 설정 `for-websquare5.sqlDialect`를 따릅니다
 - MyBatis 매퍼의 SQL 색·키워드 자동완성. 설정 `for-websquare5.sqlDialect`로 DB 방언을 고릅니다(`standard`(기본)·`oracle`·`mysql`·`mariadb`·`postgresql`·`mssql`·`sqlite`). 방언마다 그 DB의 키워드·자료형·함수가 자동완성에 나옵니다
 
 ## 저장

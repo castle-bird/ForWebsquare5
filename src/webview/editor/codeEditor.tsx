@@ -174,7 +174,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 		if (!s.inFlight && !s.conflict && !editor.state.readOnly) {
 			s.formatting = editor.state.doc;
 			s.importsAfter = false; // 포맷에 import 추가가 들어 있다
-			post({ type: 'format', target, version: s.base });
+			const { from, to } = editor.state.selection.main;
+			post({ type: 'format', target, version: s.base, ...(from < to ? { range: { from, to } } : {}) });
 		}
 	};
 

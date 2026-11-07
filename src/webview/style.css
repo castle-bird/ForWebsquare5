@@ -940,6 +940,7 @@ textarea.edit.style-value {
 .note-gray { --note: var(--vscode-descriptionForeground); }
 .context-menu .menu-label { display: inline-flex; align-items: center; gap: 6px; }
 .context-menu .menu-label .codicon { font-size: 14px; }
+.context-menu .menu-hint { padding: 4px 12px; color: var(--vscode-descriptionForeground); font-size: 12px; cursor: default; user-select: none; }
 .context-menu .swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--note); }
 
 /* 그림(React Flow, 색은 VS Code 테마). 전체 화면이면 웹뷰 전체를 덮는다 */
