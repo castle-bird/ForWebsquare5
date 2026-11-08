@@ -13,8 +13,25 @@ export type TableColor = NoteColor | '';
 export const ARROWS = ['none', 'end', 'start', 'both'] as const;
 export type Arrow = typeof ARROWS[number];
 /** 도형 모양 */
-export const SHAPES = [['rect', '네모'], ['ellipse', '동그라미'], ['triangle', '삼각형'], ['diamond', '다이아몬드'], ['trapezoid', '사다리꼴']] as const;
+export const SHAPES = [
+	['rect', '네모'],
+	['ellipse', '동그라미'],
+	['triangle', '삼각형'],
+	['diamond', '다이아몬드'],
+	['trapezoid', '사다리꼴'],
+	['dataMap', 'dataMap'],
+	['dataList', 'dataList'],
+	['controller', 'Controller'],
+	['service', 'Service'],
+	['mapper', 'Mapper'],
+	['repository', 'Repository'],
+] as const;
 export type ShapeKind = typeof SHAPES[number][0];
+export type CardShapeKind = 'dataMap' | 'dataList' | 'controller' | 'service' | 'mapper' | 'repository';
+export const isCardShape = (kind: ShapeKind): kind is CardShapeKind =>
+	kind === 'dataMap' || kind === 'dataList' || kind === 'controller' || kind === 'service' || kind === 'mapper' || kind === 'repository';
+export const defaultShapeColor = (kind: ShapeKind): NoteColor =>
+	kind === 'dataMap' || kind === 'dataList' ? 'gray' : kind === 'service' ? 'cyan' : kind === 'mapper' ? 'purple' : kind === 'repository' ? 'orange' : 'blue';
 
 export interface UsedColumn { id: string; name: string; desc: string; type: string; pk: boolean }
 /** x·y: 그림에서의 자리. keysOnly: 그림 박스에 PK 컬럼만 */
@@ -33,6 +50,7 @@ export const emptyTables = (): UsedTables => ({ tables: [], links: [], memos: []
 export const MEMO_SIZE = { w: 220, h: 140 };
 export const GROUP_SIZE = { w: 480, h: 320 };
 export const SHAPE_SIZE = { w: 128, h: 128 };
+export const FLOW_SHAPE_SIZE = { w: 192, h: 48 };
 
 /**
  * 같은 id가 또 나오면(사람이 JSON 블록을 복사) 버리지 않고 `id-2`처럼 새 id를 붙인다. 처음 것이 원래 id를 갖는다(선도 그것에 잇는다).
@@ -78,9 +96,11 @@ export function readUsedTables(value: unknown): UsedTables {
 	// 도형은 작게도(선·점 대신) 쓰니 최소 크기를 낮게. 모양을 모르면 버린다
 	const shapes = uniqueIds(list<UsedShape>(v?.shapes).flatMap(s => {
 		const kind = SHAPES.find(([k]) => k === s?.kind)?.[0];
-		return s && str(s.id) && kind ? [{
-			id: str(s.id), kind, text: str(s.text), color: color(s.color, 'blue'), x: num(s.x), y: num(s.y), w: Math.max(8, num(s.w, SHAPE_SIZE.w)), h: Math.max(8, num(s.h, SHAPE_SIZE.h)),
-		}] : [];
+		if (!s || !str(s.id) || !kind) { return []; }
+		const defSize = isCardShape(kind) ? FLOW_SHAPE_SIZE : SHAPE_SIZE;
+		return [{
+			id: str(s.id), kind, text: str(s.text), color: color(s.color, defaultShapeColor(kind)), x: num(s.x), y: num(s.y), w: Math.max(8, num(s.w, defSize.w)), h: Math.max(8, num(s.h, defSize.h)),
+		}];
 	}), ids, taken);
 	const ends = new Set([...tables, ...memos, ...shapes].map(n => n.id)), seen = new Set<string>();
 	const links = list<TableLink>(v?.links).flatMap(l => {

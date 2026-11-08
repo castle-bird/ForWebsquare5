@@ -13,8 +13,6 @@ import { PropertyPane } from './ui/properties';
 import { useEditorPopups } from './ui/editorPopups';
 import { GridBindDialog } from './ui/gridBindDialog';
 import { GridCreateDialog } from './ui/gridCreateDialog';
-import { DataFlowDialog } from './ui/dataFlowDialog';
-import { dataFlow } from '../core/dataFlow';
 
 import { InfoPane } from './ui/infoPane';
 import { UsedTablesPane } from './ui/usedTablesPane';
@@ -101,11 +99,6 @@ function App() {
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const rightPanel = usePanelRef();
 	const [rightOpen, setRightOpen] = useState(true);
-	/** 고른 노드를 우측 패널(Property·Data)에 보인다: 접혀 있으면 펼치고 두 패널이 탭을 바꿔 그 줄까지 간다 */
-	const revealPanels = () => {
-		if (rightPanel.current?.isCollapsed()) { rightPanel.current.expand(); }
-		useEditorStore.setState({ panelReveal: Date.now() });
-	};
 	// ERD(그림이 넓어야 함)에 들어가면 우측 패널을 접고, 나오면 들어가기 전 상태로
 	const reopenRight = useRef(false);
 	const showTab = (name: string) => {
@@ -132,7 +125,7 @@ function App() {
 		grid?: { hasFooter: boolean; at: number; onColumn: boolean; column?: { index: number; cells: number[]; left: boolean; right: boolean } } }>();
 	const [gridBind, setGridBind] = useState<{ grid: number; list: number }>();
 	const [gridCreate, setGridCreate] = useState<{ target: XmlNode; version: number }>();
-	const [dataFlowOpen, setDataFlowOpen] = useState(false);
+	const [flowTrigger, setFlowTrigger] = useState(0);
 	const linkTabs = useLinkTabs(activeTab, LOADING);
 	// 보고 있던 연결 탭이 지워지면 Design으로
 	const shownTab = FIXED_TABS.includes(activeTab) || activeTab === ERD_TAB || linkTabs.labels.includes(activeTab) ? activeTab : 'Design';
@@ -322,8 +315,8 @@ function App() {
 						onClick={() => { if (rightPanel.current?.isCollapsed()) { rightPanel.current.expand(); } else { rightPanel.current?.collapse(); } }} /></>} start={<><button className={`tab-palette codicon codicon-layout-sidebar-left${paletteOpen ? ' active' : ''}`}
 						title={paletteOpen ? '팔레트 접기' : '팔레트 펼치기'} aria-label="팔레트" aria-expanded={paletteOpen} draggable={false} disabled={shownTab !== 'Design'} onClick={() => setPaletteOpen(open => !open)} />
 						<button draggable={false} className={`tab-move codicon codicon-arrow-${otherSide === 'top' ? 'up' : 'down'}`}
-						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} /></>} beforePinned={<><button className={`tab-data-flow codicon codicon-repo-forked${dataFlowOpen ? ' active' : ''}`} title="데이터 흐름 (dataList·dataMap ↔ Submission ↔ Controller)" aria-label="데이터 흐름" aria-pressed={dataFlowOpen} draggable={false} disabled={!model}
-								onClick={() => setDataFlowOpen(open => !open)} /><button className="tab-grid-create codicon codicon-table" title="그리드 만들기" aria-label="그리드 만들기" disabled={shownTab !== 'Design' || !body || !doc} onClick={() => {
+						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} /></>} beforePinned={<><button className="tab-data-flow codicon codicon-repo-forked" title="데이터 흐름 (dataList·dataMap ↔ Submission ↔ Controller)" aria-label="데이터 흐름" draggable={false} disabled={!model}
+								onClick={() => { showTab(ERD_TAB); setFlowTrigger(n => n + 1); }} /><button className="tab-grid-create codicon codicon-table" title="그리드 만들기" aria-label="그리드 만들기" disabled={shownTab !== 'Design' || !body || !doc} onClick={() => {
 								const target = root && insertTarget(root, selected === undefined ? undefined : pathTo(root, selected));
 								if (target && doc) { setGridCreate({ target, version: doc.version }); }
 							}} /><button className="tab-run codicon codicon-play" title="현재 화면 브라우저로 보기" aria-label="현재 화면 브라우저로 보기" draggable={false} disabled={shownTab !== 'Design' || !body}
@@ -347,7 +340,7 @@ function App() {
 							: head && doc ? <InfoPane head={head} onAttr={(name, value) => editAttr(name, value, head.index)}
 								onHistory={rows => post({ type: 'editHistory', version: doc.version, index: head.index, rows })} />
 							: doc ? <EmptyState kind="warning">head가 없는 화면입니다.</EmptyState> : LOADING,
-						[ERD_TAB]: <UsedTablesPane />,
+						[ERD_TAB]: <UsedTablesPane root={root} flowTrigger={flowTrigger} />,
 						Script: doc ? <CodeEditor ref={scriptRef} target="script" lang={scriptLanguage} complete={jsTools.complete} hover={jsTools.hover} definition={jsTools.definition} signature={jsTools.signature} lint="js" text={doc.script.text} version={doc.version}
 							readOnly={!!doc.script.note} notes={[api?.error, modules?.error, doc.script.note]} post={post} /> : LOADING,
 						Source: doc ? <CodeEditor target="source" lang={XML} complete={xmlComplete} hover={xmlHoverSource} lint="xml" text={doc.text} version={doc.version} post={post} /> : LOADING,
@@ -441,8 +434,6 @@ function App() {
 		<Toast />
 		{linkTabs.menu}
 		{editors}
-		{dataFlowOpen && <DataFlowDialog flows={dataFlow(root)} onSelect={index => { setSelected(index); revealPanels(); }} onClose={() => setDataFlowOpen(false)}
-			onOpen={index => { const n = root && nodeAt(root, index); if (n) { openDataEditor(n); } }} />}
 		{gridCreate && <GridCreateDialog target={gridCreate.target} version={gridCreate.version} lists={dataCollection?.children.filter(n => isWs(n, 'dataList') && !!n.attrs.id) ?? []} onClose={() => setGridCreate(undefined)} />}
 		{gridBind && root && (() => {
 			const grid = nodeAt(root, gridBind.grid), list = nodeAt(root, gridBind.list);

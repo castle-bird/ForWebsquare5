@@ -1,9 +1,11 @@
 // ERD 탭 > 사용 테이블: 화면이 쓰는 DB 테이블·메모·그룹을 그림(ERD) 안에서 바로 적고 잇는다(ui/usedTablesDiagram.tsx).
 // 저장은 확장이 이 PC의 고른 폴더에 화면별 JSON으로(고칠 때마다 잠깐 모았다가). 화면 XML은 건드리지 않는다
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { applyDataFlow, dataFlow } from '../../core/dataFlow';
 import type { UsedTables } from '../../core/tables';
 import type { ToWebview } from '../../core/protocol';
-import { post } from '../store';
+import type { XmlNode } from '../../core/xmlModel';
+import { post, useEditorStore } from '../store';
 import { isUndoRedo } from '../keys';
 import { UsedTablesDiagram } from './usedTablesDiagram';
 import { EmptyState } from './emptyState';
@@ -80,8 +82,36 @@ function useUsedTables() {
 	return { status, data, change, undo: () => step(true), redo: () => step(false), canUndo: past.current.length > 0, canRedo: future.current.length > 0 };
 }
 
-export function UsedTablesPane() {
+export function UsedTablesPane({ root, flowTrigger = 0 }: { root?: XmlNode; flowTrigger?: number }) {
 	const { status, data, change, undo, redo, canUndo, canRedo } = useUsedTables();
+	const seenTrigger = useRef(0);
+	const pendingFlow = useRef(false);
+	const [focusIds, setFocusIds] = useState<{ ids: string[]; key: number }>();
+
+	if (flowTrigger > seenTrigger.current) {
+		seenTrigger.current = flowTrigger;
+		pendingFlow.current = true;
+	}
+
+	useEffect(() => {
+		if (!pendingFlow.current || !status) { return; }
+		if (!status.folder) {
+			post({ type: 'chooseTablesFolder', pick: false });
+			return;
+		}
+		if (!data) { return; }
+		pendingFlow.current = false;
+		const flows = dataFlow(root);
+		if (!flows.length) {
+			useEditorStore.setState({ toast: { message: '이 화면에는 Submission이 없습니다.', key: Date.now() } });
+			return;
+		}
+		const { data: next, ids } = applyDataFlow(data, flows);
+		if (JSON.stringify(next) !== JSON.stringify(data)) {
+			change(next);
+		}
+		setFocusIds({ ids, key: Date.now() });
+	}, [flowTrigger, status, data, root, change]);
 
 	if (!status) { return <EmptyState kind="loading">불러오는 중…</EmptyState>; }
 	if (!status.folder) {
@@ -105,6 +135,6 @@ export function UsedTablesPane() {
 			<button type="button" className="btn-tool" onClick={() => post({ type: 'chooseTablesFolder', pick: true })}>저장 위치 변경</button>
 		</div>
 		{status.error && <p className="error" role="alert">{status.error}</p>}
-		<UsedTablesDiagram data={data} onChange={change} onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo} />
+		<UsedTablesDiagram data={data} onChange={change} onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo} focusIds={focusIds} />
 	</div>;
 }

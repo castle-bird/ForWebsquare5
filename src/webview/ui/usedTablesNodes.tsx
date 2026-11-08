@@ -2,7 +2,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type RefObject, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type SetStateAction } from 'react';
 import { Handle, NodeResizer, Position, useUpdateNodeInternals, type Node, type NodeProps } from '@xyflow/react';
 import { clsx } from 'clsx';
-import { CRUD, SHAPES, type NoteColor, type ShapeKind, type UsedColumn, type UsedGroup, type UsedMemo, type UsedShape, type UsedTable, type UsedTables } from '../../core/tables';
+import { CRUD, isCardShape, SHAPES, type CardShapeKind, type NoteColor, type ShapeKind, type UsedColumn, type UsedGroup, type UsedMemo, type UsedShape, type UsedTable, type UsedTables } from '../../core/tables';
 import { ComboInput } from './combo';
 import type { Edit } from './usedTablesPane';
 
@@ -247,13 +247,77 @@ const SHAPE_SVG: Record<ShapeKind, ReactNode> = {
 	triangle: <polygon points="50,0 100,100 0,100" />,
 	diamond: <polygon points="50,0 100,50 50,100 0,50" />,
 	trapezoid: <polygon points="20,0 80,0 100,100 0,100" />,
+	dataMap: <rect x="0" y="0" width="100" height="100" rx="2" />,
+	dataList: <rect x="0" y="0" width="100" height="100" rx="2" />,
+	controller: <rect x="0" y="0" width="100" height="100" rx="2" />,
+	service: <rect x="0" y="0" width="100" height="100" rx="2" />,
+	mapper: <rect x="0" y="0" width="100" height="100" rx="2" />,
+	repository: <rect x="0" y="0" width="100" height="100" rx="2" />,
 };
 /** 연결점: 도형 둘레의 위·오른쪽·아래·왼쪽 점(박스 비율, 선이 도형에 붙게). 기울어진 변은 그 변 가운데 */
+const BOX_POINTS: [number, number][] = [[.5, 0], [1, .5], [.5, 1], [0, .5]];
 const SHAPE_POINTS: Record<ShapeKind, [number, number][]> = {
-	rect: [[.5, 0], [1, .5], [.5, 1], [0, .5]], ellipse: [[.5, 0], [1, .5], [.5, 1], [0, .5]], diamond: [[.5, 0], [1, .5], [.5, 1], [0, .5]],
+	rect: BOX_POINTS, ellipse: BOX_POINTS, diamond: BOX_POINTS,
 	triangle: [[.5, 0], [.75, .5], [.5, 1], [.25, .5]], trapezoid: [[.5, 0], [.9, .5], [.5, 1], [.1, .5]],
+	dataMap: BOX_POINTS, dataList: BOX_POINTS, controller: BOX_POINTS,
+	service: BOX_POINTS, mapper: BOX_POINTS, repository: BOX_POINTS,
 };
-export const shapeIcon = (kind: ShapeKind) => <svg className="shape-icon" viewBox="-6 -6 112 112" aria-hidden="true">{SHAPE_SVG[kind]}</svg>;
+const CARD_META: Record<CardShapeKind, { icon: string; badge: string; label: string; placeholder: string }> = {
+	dataMap: { icon: 'json', badge: 'map', label: 'dataMap', placeholder: 'dataMap ID' },
+	dataList: { icon: 'symbol-array', badge: 'list', label: 'dataList', placeholder: 'dataList ID' },
+	controller: { icon: 'globe', badge: 'method', label: 'Controller', placeholder: '/api/path' },
+	service: { icon: 'gear', badge: 'service', label: 'Service', placeholder: 'Service.method' },
+	mapper: { icon: 'file-code', badge: 'mapper', label: 'Mapper', placeholder: 'Mapper.sqlId' },
+	repository: { icon: 'database', badge: 'repo', label: 'Repository', placeholder: 'Repository.method' },
+};
+export const shapeIcon = (kind: ShapeKind): ReactNode => isCardShape(kind)
+	? <span className={`codicon codicon-${CARD_META[kind].icon}`} aria-hidden="true" />
+	: <svg className="shape-icon" viewBox="-6 -6 112 112" aria-hidden="true">{SHAPE_SVG[kind]}</svg>;
+
+export function shapeBodyText(text: string): string {
+	const [first, ...rest] = text.split('\n');
+	return /^\[[^\]]+\]$/.test(first.trim()) && rest.length > 0 ? rest.join('\n') : text;
+}
+
+function shapeBadgeMeta(tag: string): { icon: string; kind: string } {
+	const lower = tag.toLowerCase();
+	if (lower.startsWith('datamap')) { return { icon: 'json', kind: 'map' }; }
+	if (lower.startsWith('datalist') || lower.startsWith('linkeddatalist')) { return { icon: 'symbol-array', kind: 'list' }; }
+	if (/^(post|get|put|delete|patch|action|controller)\b/.test(lower)) { return { icon: 'globe', kind: 'method' }; }
+	if (lower.includes('오류')) { return { icon: 'error', kind: 'error' }; }
+	if (lower.includes('잘못된')) { return { icon: 'warning', kind: 'warn' }; }
+	return { icon: 'symbol-namespace', kind: 'default' };
+}
+
+/** 도형 글자의 인라인 마크다운(**굵게**, `코드`)과 첫 줄 [배지] 표현 */
+function renderInline(line: string): ReactNode {
+	return line.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) => {
+		if (part.startsWith('**') && part.endsWith('**') && part.length > 4) { return <strong key={i}>{part.slice(2, -2)}</strong>; }
+		if (part.startsWith('`') && part.endsWith('`') && part.length > 2) { return <code key={i}>{part.slice(1, -1)}</code>; }
+		return part;
+	});
+}
+
+function renderLines(text: string): ReactNode {
+	return text.split('\n').map((line, i) => <span key={i}>{i > 0 && '\n'}{renderInline(line)}</span>);
+}
+
+function renderShapeText(text: string): ReactNode {
+	const [first, ...rest] = text.split('\n');
+	const badge = /^\[([^\]]+)\]$/.exec(first.trim());
+	if (badge && rest.length > 0) {
+		const tag = badge[1].trim();
+		const { icon, kind } = shapeBadgeMeta(tag);
+		return <>
+			<span className={clsx('shape-badge', `badge-${kind}`)}>
+				<span className={`codicon codicon-${icon}`} aria-hidden="true" />
+				<span>{tag}</span>
+			</span>
+			<span className="shape-body">{renderLines(rest.join('\n'))}</span>
+		</>;
+	}
+	return <span>{renderLines(text)}</span>;
+}
 
 /** 도형: 끝 손잡이로 크기, 더블클릭으로 가운데 글자. 연결점은 도형 둘레 위 */
 function ShapeBox({ id, data, selected }: NodeProps<ShapeNode>) {
@@ -264,12 +328,22 @@ function ShapeBox({ id, data, selected }: NodeProps<ShapeNode>) {
 	const updateInternals = useUpdateNodeInternals();
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- 모양이 바뀔 때만(id는 노드마다 고정)
 	useEffect(() => updateInternals(id), [s.kind]);
+	const card = isCardShape(s.kind) ? CARD_META[s.kind] : undefined;
+	const body = card ? shapeBodyText(s.text) : s.text;
 	return <>
 		<NodeResizer isVisible={selected} minWidth={8} minHeight={8} onResizeEnd={(_, p) => set(boxOf(p))} />
 		<div className={clsx('used-shape', `note-${s.color}`, { selected, dim: data.dim })} onDoubleClick={() => setEditing(k)}>
 			<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label={SHAPES.find(([kind]) => kind === s.kind)?.[1]}>{SHAPE_SVG[s.kind]}</svg>
-			{editing === k ? <div className="shape-text"><MemoInput k={k} value={s.text} onCommit={text => set({ text })} label="도형 글자" /></div>
-				: s.text && <div className="shape-text">{s.text}</div>}
+			{card ? <div className="shape-text">
+				<span className={clsx('shape-badge', `badge-${card.badge}`)}>
+					<span className={`codicon codicon-${card.icon}`} aria-hidden="true" />
+					<span>{card.label}</span>
+				</span>
+				{editing === k ? <MemoInput k={k} value={body} onCommit={text => set({ text })} label="도형 글자" />
+					: <span className={clsx('shape-body', !body && 'placeholder')}>{body ? renderLines(body) : card.placeholder}</span>}
+			</div>
+				: editing === k ? <div className="shape-text"><MemoInput k={k} value={s.text} onCommit={text => set({ text })} label="도형 글자" /></div>
+				: s.text && <div className="shape-text">{renderShapeText(s.text)}</div>}
 		</div>
 		{/* 연결점은 도형 그림 위에(뒤에 그려야 안 가려진다) */}
 		{SIDES.map(([side, position], i) => { const [fx, fy] = SHAPE_POINTS[s.kind][i]; return <Handle key={side} type="source" position={position} id={side}

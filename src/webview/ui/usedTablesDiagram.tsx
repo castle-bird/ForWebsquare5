@@ -4,13 +4,13 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type Mouse
 import { applyEdgeChanges, applyNodeChanges, Background, BackgroundVariant, BaseEdge, ConnectionLineType, ConnectionMode, ControlButton, Controls, EdgeLabelRenderer, getSmoothStepPath, MarkerType, MiniMap, Panel, Position, ReactFlow, ReactFlowProvider, ViewportPortal, getNodesBounds, useInternalNode, useReactFlow, useStore, type Connection, type Edge, type EdgeChange, type EdgeProps, type NodeChange, type XYPosition } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { clsx } from 'clsx';
-import { ARROWS, GROUP_SIZE, MEMO_SIZE, NOTE_COLORS, SHAPE_SIZE, SHAPES, type Arrow, type NoteColor, type ShapeKind, type TableColor, type TableLink, type UsedShape, type UsedTables } from '../../core/tables';
+import { ARROWS, defaultShapeColor, FLOW_SHAPE_SIZE, GROUP_SIZE, isCardShape, MEMO_SIZE, NOTE_COLORS, SHAPE_SIZE, SHAPES, type Arrow, type NoteColor, type ShapeKind, type TableColor, type TableLink, type UsedShape, type UsedTables } from '../../core/tables';
 import { toPng } from 'html-to-image';
 import { errorMessage } from '../../core/errors';
 import { isModKey } from '../keys';
 import { isLightTheme } from '../editor/themes';
 import { post } from '../store';
-import { DiagramContext, Field, NODE_TYPES, editItem, newId, editTable, fieldKey, insertColumn, mixedKeys, shapeIcon, useDiagram,
+import { DiagramContext, Field, NODE_TYPES, editItem, newId, editTable, fieldKey, insertColumn, mixedKeys, shapeBodyText, shapeIcon, useDiagram,
 	type FlowNode, type GroupNode, type MemoNode, type MenuItem, type ShapeNode, type TableNode } from './usedTablesNodes';
 import { Menu } from './menu';
 import { sizeOf, facingSides, inside, straightAt, alignTo } from './diagramGeometry';
@@ -58,7 +58,7 @@ const TOOLS: { tool: Tool; label: string; icon: string | ReactNode; size: { w: n
 	{ tool: 'table', label: '테이블', icon: 'table', size: { w: 200, h: 80 } },
 	{ tool: 'memo', label: '메모', icon: 'note', size: MEMO_SIZE },
 	{ tool: 'group', label: '그룹', icon: 'layers', size: GROUP_SIZE },
-	...SHAPES.map(([kind, label]) => ({ tool: kind, label, icon: shapeIcon(kind), size: SHAPE_SIZE })),
+	...SHAPES.map(([kind, label]) => ({ tool: kind, label, icon: shapeIcon(kind), size: isCardShape(kind) ? FLOW_SHAPE_SIZE : SHAPE_SIZE })),
 ];
 /** 정렬 안내선(그림 좌표에 그려 확대·이동을 따라감, 굵기는 화면 1px) */
 function Guides({ x, y }: { x?: number; y?: number }) {
@@ -106,11 +106,11 @@ function toEdges(d: UsedTables, current: LinkEdge[], select?: Set<string>): Link
 	});
 }
 
-export function UsedTablesDiagram(props: { data: UsedTables; onChange: Edit; onUndo(): void; onRedo(): void; canUndo: boolean; canRedo: boolean }) {
+export function UsedTablesDiagram(props: { data: UsedTables; onChange: Edit; onUndo(): void; onRedo(): void; canUndo: boolean; canRedo: boolean; focusIds?: { ids: string[]; key: number } }) {
 	return <ReactFlowProvider><Diagram {...props} /></ReactFlowProvider>;
 }
 
-function Diagram({ data, onChange, onUndo, onRedo, canUndo, canRedo }: { data: UsedTables; onChange: Edit; onUndo(): void; onRedo(): void; canUndo: boolean; canRedo: boolean }) {
+function Diagram({ data, onChange, onUndo, onRedo, canUndo, canRedo, focusIds }: { data: UsedTables; onChange: Edit; onUndo(): void; onRedo(): void; canUndo: boolean; canRedo: boolean; focusIds?: { ids: string[]; key: number } }) {
 	const flow = useReactFlow<FlowNode, LinkEdge>();
 	// 처음 그릴 때부터 노드가 있어야 fitView가 그 노드에 맞춘다(그 뒤로는 추가해도 확대 비율 그대로)
 	const [nodes, setNodes] = useState<FlowNode[]>(() => toNodes(data, []));
@@ -152,6 +152,18 @@ function Diagram({ data, onChange, onUndo, onRedo, canUndo, canRedo }: { data: U
 		setEdges(current => toEdges(data, current, select));
 	}, [data]);
 
+	useEffect(() => {
+		if (!focusIds?.ids.length) { return; }
+		setNodes(ns => ns.map(n => n.selected ? { ...n, selected: false } : n));
+		setEdges(es => es.map(e => e.selected ? { ...e, selected: false } : e));
+		let frame = requestAnimationFrame(() => {
+			frame = requestAnimationFrame(() => {
+				void flow.fitView({ nodes: focusIds.ids.map(id => ({ id })), ...FIT, duration: 200 });
+			});
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [focusIds, flow]);
+
 	const selectedIds = () => new Set([...latest.current.nodes.filter(n => n.selected).map(n => n.id), ...latest.current.edges.filter(e => e.selected).map(e => e.id)]);
 	/** 그림 가운데(화면 좌표 → 그림 좌표) */
 	const viewCenter = () => {
@@ -180,9 +192,11 @@ function Diagram({ data, onChange, onUndo, onRedo, canUndo, canRedo }: { data: U
 		addItem(id, 'text', d => ({ ...d, memos: [...d.memos, { id, text: '', color: 'yellow', ...p, ...MEMO_SIZE }] }));
 	};
 	const addShape = (kind: ShapeKind, at?: XYPosition) => {
-		const id = newId(), p = freeSpot(at, SHAPE_SIZE.w, SHAPE_SIZE.h);
+		const card = isCardShape(kind), size = card ? FLOW_SHAPE_SIZE : SHAPE_SIZE;
+		const id = newId(), p = freeSpot(at, size.w, size.h);
 		selectNext.current = new Set([id]);
-		onChange(d => ({ ...d, shapes: [...d.shapes, { id, kind, text: '', color: 'blue', ...p, ...SHAPE_SIZE }] }));
+		onChange(d => ({ ...d, shapes: [...d.shapes, { id, kind, text: '', color: defaultShapeColor(kind), ...p, ...size }] }));
+		if (card) { setEditing(fieldKey(id, 'text')); }
 	};
 	/** 그룹: 고른 것이 있으면 그것을 감싸는 크기로, 없으면 기본 크기 */
 	const addGroup = (at?: XYPosition, around: FlowNode[] = []) => {
@@ -310,7 +324,7 @@ function Diagram({ data, onChange, onUndo, onRedo, canUndo, canRedo }: { data: U
 									const step = GRID * (e.shiftKey ? 4 : 1);
 									return nudge(e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0, e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0);
 								}
-									: /^[1-9]$/.test(e.key) && TOOLS[Number(e.key) - 1] && !e.ctrlKey && !e.metaKey && !e.altKey ? () => pick(TOOLS[Number(e.key) - 1].tool) : undefined;
+									: /^[1-8]$/.test(e.key) && TOOLS[Number(e.key) - 1] && !e.ctrlKey && !e.metaKey && !e.altKey ? () => pick(TOOLS[Number(e.key) - 1].tool) : undefined;
 		if (!run || run() === false) { return; }
 		e.preventDefault();
 		e.stopPropagation();
@@ -377,7 +391,10 @@ function Diagram({ data, onChange, onUndo, onRedo, canUndo, canRedo }: { data: U
 				...common]);
 		} else if (node.type === 'shape') {
 			const x = node.data.shape, setShape = (patch: Partial<UsedShape>) => editItem(onChange, 'shapes', x.id, o => ({ ...o, ...patch }));
-			openMenu(e, [{ label: x.text ? '글자 편집' : '글자 넣기', kbd: 'F2', run: () => setEditing(fieldKey(x.id, 'text')) }, 'separator',
+			const action = (x.kind === 'controller' || x.id.startsWith('flow-act-')) ? shapeBodyText(x.text).split('\n')[0]?.trim() : undefined;
+			openMenu(e, [
+				...action && action !== '(action 없음)' ? [{ label: 'Controller 이동', run: () => post({ type: 'openAction', action }) }, 'separator' as const] : [],
+				{ label: x.text ? '글자 편집' : '글자 넣기', kbd: 'F2', run: () => setEditing(fieldKey(x.id, 'text')) }, 'separator',
 				...SHAPES.map(([kind, label]) => ({ label, checked: x.kind === kind, run: () => setShape({ kind }) })),
 				'separator',
 				...colorItems(x.color, color => setShape({ color })), ...common]);
@@ -521,9 +538,9 @@ function Diagram({ data, onChange, onUndo, onRedo, canUndo, canRedo }: { data: U
 				<Controls showInteractive={false} fitViewOptions={{ ...FIT, duration: 200 }}><ZoomLevel /></Controls>
 				<Panel position="top-left" className="flow-toolbar">
 					{TOOLS.map(({ tool: t, label, icon }, i) => <Fragment key={t}>
-						{i === 3 && <span className="flow-sep" />}
-						{tool(icon, label, () => pick(t), { text: i < 3, pressed: placing === t, badge: i + 1,
-							title: `${label} (${i + 1}) — 그림을 클릭한 자리에` })}
+						{(i === 3 || i === 8) && <span className="flow-sep" />}
+						{tool(icon, label, () => pick(t), { text: i < 3 || i >= 8, pressed: placing === t, badge: i < 8 ? i + 1 : undefined,
+							title: `${label}${i < 8 ? ` (${i + 1})` : ''} — 그림을 클릭한 자리에` })}
 					</Fragment>)}
 					<span className="flow-sep" />
 					{tool('discard', '되돌리기', onUndo, { disabled: !canUndo, title: '되돌리기 (Ctrl+Z)' })}

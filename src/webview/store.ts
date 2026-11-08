@@ -48,8 +48,6 @@ interface EditorState {
 	links: Record<string, LinkState>;
 	linkTabs: LinkTab[];
 	tabOrder?: string[];
-	/** 데이터 흐름 팝업 등에서 고른 노드를 우측 패널에 보이라는 요청(매번 새 값): 패널을 펼치고 Property·Data 탭으로 바꿔 그 줄을 보인다 */
-	panelReveal?: number;
 	/** 화면 점검에서 선택한 노드의 문제 속성 */
 	problemReveal?: { index: number; attr: string };
 	tabPosition: TabPosition;

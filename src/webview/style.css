@@ -695,55 +695,6 @@ input[type="checkbox"].switch:focus-visible { outline: 1px solid var(--vscode-fo
 .data-ref-rows > .data-ref-order { text-align: center; font-size: 11px; color: var(--vscode-textLink-foreground); }
 .data-ref-preview { box-sizing: border-box; min-height: calc(7.5em + 12px); line-height: 1.5; padding: 6px 8px; border-radius: 4px; font-family: var(--vscode-editor-font-family); font-size: 12px; white-space: pre-wrap; word-break: break-all; background: var(--vscode-textCodeBlock-background); }
 .submission-editor form { display: flex; flex: 1; min-height: 0; flex-direction: column; }
-/* 데이터 흐름: Submission마다 카드 하나. 머리줄 = 번호·이름, 본문 = 요청 데이터 → Controller → 응답 데이터, 아래 = 이벤트 핸들러(한 줄씩) */
-/* 글꼴은 우측 패널과 같은 "패널 글꼴 변경" 설정(편집기/UI)을 따른다: 제목·버튼·글자 모두 한 글꼴 */
-.data-flow { --panel-font-family: var(--vscode-editor-font-family, monospace); --flow-accent: var(--vscode-textLink-foreground); width: max-content; max-width: calc(100vw - 24px); max-height: min(640px, calc(100vh - 16px)); font-family: var(--panel-font-family); }
-.data-flow[data-panel-font="ui"] { --panel-font-family: var(--vscode-font-family, sans-serif); }
-.data-flow :is(button, code) { font-family: inherit; }
-/* 세 칸(요청·Controller·응답) 너비는 모든 카드가 같이 쓴다(subgrid). 화면보다 넓어지면 그때 줄바꿈 */
-.data-flow-body { flex: 1; min-height: 0; overflow: auto; padding: 10px 14px 8px; display: grid; grid-template-columns: minmax(180px, auto) minmax(220px, auto) minmax(180px, auto); row-gap: 10px; align-content: start; }
-.flow-card { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; row-gap: 10px; padding: 10px 12px 12px; border: 1px solid var(--vscode-panel-border); border-radius: 8px; background: color-mix(in srgb, var(--vscode-foreground) 3%, transparent); }
-.flow-card:hover { border-color: color-mix(in srgb, var(--flow-accent) 55%, var(--vscode-panel-border)); }
-.flow-card-head { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
-.flow-card-head > .flow-item .flow-data { font-size: 14px; font-weight: 600; }
-.flow-no { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; font-size: 11px; font-weight: 700; color: var(--vscode-badge-foreground); background: var(--vscode-badge-background); }
-.flow-handlers { grid-column: 1 / -1; display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 4px 8px; padding-top: 8px; border-top: 1px dashed var(--vscode-panel-border); }
-/* 요청·응답 칸: 데이터 상자 */
-.flow-side { align-self: stretch; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 4px; min-width: 0; padding: 8px 10px; box-sizing: border-box; border-radius: 6px; border: 1px solid var(--vscode-panel-border); background: var(--vscode-editor-background); }
-/* 가운데 칸: 요청 → Controller → 응답. Controller 주소를 가운데 두고 양쪽에 짧은 화살표 */
-.flow-column { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; max-width: 100%; }
-.flow-link { flex-direction: row; align-items: center; gap: 6px; padding: 0 2px; text-align: center; }
-.flow-arrow { position: relative; flex: 1 1 14px; min-width: 14px; height: 2px; margin-right: 6px; background: color-mix(in srgb, var(--flow-accent) 70%, transparent); }
-.flow-arrow::after { content: ''; position: absolute; right: -7px; top: -4px; border-left: 8px solid color-mix(in srgb, var(--flow-accent) 70%, transparent); border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
-.flow-method { flex: none; padding: 0 6px; border-radius: 4px; font-size: 10px; font-weight: 700; line-height: 1.7; color: var(--flow-accent); background: color-mix(in srgb, var(--flow-accent) 15%, transparent); }
-.flow-item { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; }
-.flow-data { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 1px 4px; margin-left: -4px; border: none; border-radius: 4px; color: inherit; background: none; font: inherit; font-size: 13px; text-align: left; }
-button.flow-data { cursor: pointer; }
-button.flow-data:hover { background: var(--vscode-toolbar-hoverBackground); }
-.flow-data.missing { color: var(--vscode-editorWarning-foreground); }
-/* List·Map·action·이벤트 이름: 편집기 inlay hint처럼 알약 배경 */
-.flow-kind, .flow-action, .flow-handler > span, .flow-hint { flex: none; padding: 0 7px; border-radius: 999px; line-height: 1.6; background: var(--vscode-editorInlayHint-background, color-mix(in srgb, var(--vscode-foreground) 12%, transparent)); color: var(--vscode-editorInlayHint-foreground, var(--vscode-descriptionForeground)); }
-.flow-hint { font-size: 10px; font-weight: 600; }
-.flow-side > .flow-hint { align-self: flex-start; }
-.flow-kind { min-width: 30px; box-sizing: border-box; text-align: center; font-size: 10px; font-weight: 700; }
-.flow-kind.list { color: var(--vscode-charts-blue, var(--vscode-descriptionForeground)); }
-.flow-kind.map { color: var(--vscode-charts-orange, var(--vscode-descriptionForeground)); }
-.flow-id { min-width: 0; overflow-wrap: break-word; }
-.flow-action { font-size: 11px; }
-.flow-edit { flex: none; width: 22px; height: 22px; padding: 0; border: none; border-radius: 4px; background: none; color: var(--vscode-descriptionForeground); font-size: 13px; cursor: pointer; opacity: .5; }
-.flow-card:hover .flow-edit { opacity: .8; }
-.flow-edit:hover:not(:disabled) { opacity: 1; color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground); }
-.flow-edit:disabled { opacity: .3; cursor: default; }
-.flow-empty { grid-column: 1 / -1; }
-.flow-notice { display: flex; align-items: center; gap: 6px; flex: none; margin: 0; padding: 8px 20px 0; font-size: 12px; color: var(--vscode-descriptionForeground); }
-.flow-none, .flow-empty { font-size: 12px; color: var(--vscode-descriptionForeground); }
-/* 해석 못 한 ref·target, 화면에 없는 데이터: 이유를 글로 보인다 */
-.flow-problem { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: 11px; color: var(--vscode-errorForeground); }
-.flow-data.missing .flow-problem { padding: 0 6px; border-radius: 999px; color: var(--vscode-editorWarning-foreground); background: color-mix(in srgb, var(--vscode-editorWarning-foreground) 15%, transparent); }
-.flow-raw { font-size: 11px; word-break: break-all; padding: 0; background: none; color: var(--vscode-descriptionForeground); }
-.flow-url { min-width: 0; overflow-wrap: break-word; font-size: 12px; }
-.flow-handler { display: contents; font-size: 12px; color: var(--vscode-descriptionForeground); }
-.flow-handler code { min-width: 0; padding: 0; background: none; overflow-wrap: anywhere; }
 .grid-bind { width: min(340px, calc(100vw - 24px)); }
 .grid-create { width: min(440px, calc(100vw - 24px)); }
 .form-sections .grid-create-heading { margin-top: 18px; }
@@ -992,7 +943,7 @@ textarea.edit.style-value {
 /* 끌 때 줄 맞춤 안내선 */
 .used-tables-flow .align-guide { position: absolute; box-sizing: content-box; border: 0 dashed var(--vscode-focusBorder); pointer-events: none; z-index: 1000; }
 /* 왼쪽 위 도구 줄(추가·되돌리기·도움말)과 도움말·빈 그림 안내 */
-.used-tables-flow .flow-toolbar { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 8px;
+.used-tables-flow .flow-toolbar { display: flex; flex-wrap: wrap; max-width: calc(100% - 88px); align-items: center; gap: 2px; padding: 3px; border-radius: 8px;
 	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border: 1px solid var(--vscode-panel-border); box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, .2)); }
 .flow-tool { display: inline-flex; align-items: center; gap: 4px; height: 26px; min-width: 26px; justify-content: center; padding: 0 6px; font: inherit; cursor: pointer;
 	color: var(--vscode-foreground); background: none; border: 0; border-radius: 5px; }
@@ -1103,9 +1054,22 @@ textarea.edit.style-value {
 .used-shape svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .used-shape svg > * { fill: color-mix(in srgb, var(--note) 15%, transparent); stroke: var(--note); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .used-shape.selected svg > * { stroke: var(--vscode-focusBorder); }
-.used-shape .shape-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 8px; overflow: hidden; text-align: center;
-	line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--vscode-editor-foreground); pointer-events: none; }
-.used-shape .shape-text .memo-input { width: 100%; height: 100%; margin: 0; text-align: center; pointer-events: all; }
+.used-shape .shape-text { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 4px 8px; overflow: hidden; text-align: center;
+	line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--vscode-editor-foreground); pointer-events: none; }
+.used-shape .shape-badge { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 1.4;
+	color: var(--vscode-descriptionForeground); background: color-mix(in srgb, var(--note) 20%, var(--vscode-editor-background)); border: 1px solid color-mix(in srgb, var(--note) 40%, transparent); }
+.used-shape .shape-badge .codicon { font-size: 12px; color: var(--note); }
+.used-shape .shape-badge.badge-list .codicon { color: var(--vscode-charts-green, #89d185); }
+.used-shape .shape-badge.badge-map .codicon { color: var(--vscode-charts-yellow, #cca700); }
+.used-shape .shape-badge.badge-method, .used-shape .shape-badge.badge-service, .used-shape .shape-badge.badge-mapper, .used-shape .shape-badge.badge-repo { color: var(--vscode-editor-foreground); }
+.used-shape .shape-badge.badge-method .codicon { color: var(--vscode-charts-blue, #3794ff); }
+.used-shape .shape-badge.badge-service .codicon { color: var(--vscode-charts-green, #4ec9b0); }
+.used-shape .shape-badge.badge-mapper .codicon { color: var(--vscode-charts-purple, #b180d7); }
+.used-shape .shape-badge.badge-repo .codicon { color: var(--vscode-charts-orange, #d18616); }
+.used-shape .shape-body { font-weight: 600; color: var(--vscode-editor-foreground); }
+.used-shape .shape-body.placeholder { font-weight: 400; color: var(--vscode-descriptionForeground); opacity: .7; }
+.used-shape .shape-text code { padding: 0 4px; border-radius: 3px; font-family: var(--vscode-editor-font-family, monospace); font-size: .92em; background: var(--vscode-textCodeBlock-background); }
+.used-shape .shape-text .memo-input { flex: 1; min-height: 0; width: 100%; height: 100%; margin: 0; text-align: center; pointer-events: all; }
 .used-tables-flow .react-flow__minimap-node.shape { fill: var(--vscode-charts-blue, #3794ff); opacity: .5; }
 
 /* 선 가운데 글자 */
