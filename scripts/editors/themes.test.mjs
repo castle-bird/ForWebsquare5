@@ -220,7 +220,7 @@ export default async function ({ clickTab, page, reset, modifiedKey }) {
 	assert.equal(await page.$eval(`${themeRow('keyword')} .theme-swatch`, e => getComputedStyle(e).backgroundColor), githubKeyword[0], '안 바꾼 칸에도 테마의 실제 색');
 	assert.equal(await page.$eval(`${themeRow('background')} .theme-swatch`, e => getComputedStyle(e).backgroundColor), 'rgb(13, 17, 23)');
 	await page.click(hex('keyword')); await page.keyboard.type('#ff8800'); await page.keyboard.press('Enter');
-	await page.waitForFunction(() => { const s = [...document.querySelectorAll('.tab-body:not([hidden]) .cm-content span')].find(s => s.textContent === 'return'); return getComputedStyle(s).color === 'rgb(255, 136, 0)'; }, { timeout: 3000 });
+	await page.waitForFunction(() => { const v = window.editor(), { node } = v.domAtPos(v.state.doc.toString().indexOf('return') + 1); return getComputedStyle(node.nodeType === Node.TEXT_NODE ? node.parentElement : node).color === 'rgb(255, 136, 0)'; }, { timeout: 3000 });
 	assert.ok(await page.$eval('.theme-colors-editor .theme-preview', p => [...p.querySelectorAll('.cm-content span')].some(s => s.textContent === 'return' && getComputedStyle(s).color === 'rgb(255, 136, 0)')), '팝업 미리 보기도');
 	await page.click(`${themeRow('keyword')} .font-italic`);
 	assert.equal((await spanStyle('return'))[1], 'italic', 'I 토글');

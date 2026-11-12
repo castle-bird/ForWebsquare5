@@ -2,7 +2,6 @@
 // 내용·자리·선은 data(저장 대상)가 기준이고, 선택·잰 크기·끄는 중 자리 같은 그림 상태만 React Flow 것을 둔다
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { applyEdgeChanges, applyNodeChanges, Background, BackgroundVariant, BaseEdge, ConnectionLineType, ConnectionMode, ControlButton, Controls, EdgeLabelRenderer, getSmoothStepPath, MarkerType, MiniMap, Panel, Position, ReactFlow, ReactFlowProvider, ViewportPortal, getNodesBounds, useInternalNode, useReactFlow, useStore, type Connection, type Edge, type EdgeChange, type EdgeProps, type NodeChange, type XYPosition } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
 import { clsx } from 'clsx';
 import { ARROWS, defaultShapeColor, FLOW_SHAPE_SIZE, GROUP_SIZE, isCardShape, MEMO_SIZE, NOTE_COLORS, SHAPE_SIZE, SHAPES, type Arrow, type NoteColor, type ShapeKind, type TableColor, type TableLink, type UsedShape, type UsedTables } from '../../core/tables';
 import { toPng } from 'html-to-image';

@@ -1,4 +1,4 @@
-import { Activity, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { Activity, Suspense, lazy as lazyComponent, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
 import type { SettingsMenuItem, ToWebview } from '../core/protocol';
@@ -15,7 +15,6 @@ import { GridBindDialog } from './ui/gridBindDialog';
 import { GridCreateDialog } from './ui/gridCreateDialog';
 
 import { InfoPane } from './ui/infoPane';
-import { UsedTablesPane } from './ui/usedTablesPane';
 
 import { boundColumnIds, canMoveGridColumn, listColumns } from '../core/grid';
 import { cssClassNames } from '../core/cssClasses';
@@ -26,7 +25,6 @@ import { useTabHistory } from './ui/tabHistory';
 import { lazy, scriptLanguage, scriptTools, xmlCompletions, xmlHover } from './editor/completions';
 import { Tabs } from './ui/tabs';
 import { PalettePane } from './ui/palette';
-import { ThemeColorsEditor } from './ui/themeColorsEditor';
 import { Toast } from './ui/toast';
 import { Menu, Submenu } from './ui/menu';
 import { useLinkTabs } from './ui/linkedFile';
@@ -41,9 +39,14 @@ import { isMergeCell } from '../core/merge';
 import { inScreenBody } from '../core/paste';
 import { insertTarget } from '../core/palette';
 import '@vscode/codicons/dist/codicon.css';
+// ERD 그림(늦게 불러오는 ui/usedTablesDiagram.tsx)의 스타일: CSS는 웹뷰 HTML이 webview.css 하나만 불러오므로 여기서 묶는다
+import '@xyflow/react/dist/style.css';
 import './style.css';
 
 const XML = xmlSupport();
+// 처음 화면에 필요 없는 것은 열 때 불러온다(ERD 그림 라이브러리, 테마 색 미리 보기의 Java 문법)
+const UsedTablesPane = lazyComponent(() => import('./ui/usedTablesPane').then(m => ({ default: m.UsedTablesPane })));
+const ThemeColorsEditor = lazyComponent(() => import('./ui/themeColorsEditor').then(m => ({ default: m.ThemeColorsEditor })));
 
 /** 탭 줄 톱니바퀴 메뉴(null은 구분선). 찾기 어려운 설정·명령을 한곳에 */
 const SETTINGS_MENU: ([SettingsMenuItem, string] | null)[] = [
@@ -340,7 +343,7 @@ function App() {
 							: head && doc ? <InfoPane head={head} onAttr={(name, value) => editAttr(name, value, head.index)}
 								onHistory={rows => post({ type: 'editHistory', version: doc.version, index: head.index, rows })} />
 							: doc ? <EmptyState kind="warning">head가 없는 화면입니다.</EmptyState> : LOADING,
-						[ERD_TAB]: <UsedTablesPane root={root} flowTrigger={flowTrigger} />,
+						[ERD_TAB]: <Suspense fallback={LOADING}><UsedTablesPane root={root} flowTrigger={flowTrigger} /></Suspense>,
 						Script: doc ? <CodeEditor ref={scriptRef} target="script" lang={scriptLanguage} complete={jsTools.complete} hover={jsTools.hover} definition={jsTools.definition} signature={jsTools.signature} lint="js" text={doc.script.text} version={doc.version}
 							readOnly={!!doc.script.note} notes={[api?.error, modules?.error, doc.script.note]} post={post} /> : LOADING,
 						Source: doc ? <CodeEditor target="source" lang={XML} complete={xmlComplete} hover={xmlHoverSource} lint="xml" text={doc.text} version={doc.version} post={post} /> : LOADING,
@@ -430,7 +433,7 @@ function App() {
 			{/* 안내만 하는 줄(누를 수 없음): 포맷 단축키. VS Code 기본(Shift+Alt+F)과 겹치지 않게 IntelliJ 키를 쓴다 */}
 			<div className="menu-hint">Format: Ctrl+Alt+L</div>
 		</Menu>}
-		{themeColors && <ThemeColorsEditor onClose={() => setThemeColors(false)} />}
+		{themeColors && <Suspense><ThemeColorsEditor onClose={() => setThemeColors(false)} /></Suspense>}
 		<Toast />
 		{linkTabs.menu}
 		{editors}

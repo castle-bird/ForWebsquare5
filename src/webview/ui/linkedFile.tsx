@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import { clsx } from 'clsx';
-import { cleanPath, linkTarget, type LinkTab } from '../../core/links';
+import { cleanPath, type LinkTab } from '../../core/links';
 import { screenDomain, suggestLinks, type LinkSuggestion } from '../../core/linkSuggest';
 import type { LinkState, ToExtension } from '../../core/protocol';
-import { CodeEditor } from '../editor/codeEditor';
-import { linkLanguage } from '../editor/linkLanguages';
 import { isModKey, isUndoRedo } from '../keys';
 import { post, useEditorStore } from '../store';
 import { Menu } from './menu';
 import { EmptyState } from './emptyState';
 import { FileInput } from './fileInput';
 import type { TabHint } from './tabs';
+
+// 연결 파일 편집기는 언어별 문법(Java·HTML·CSS·SQL)이 커서 연결된 탭을 열 때 불러온다
+const LinkedEditor = lazy(() => import('./linkedEditor'));
 
 const hintOf = (state: LinkState | undefined): TabHint => ({
 	title: !state?.path ? '연결된 파일 없음 (눌러서 연결, 우클릭 메뉴)' : state.text === undefined ? `파일을 찾지 못함: ${state.path}` : state.path,
@@ -54,9 +55,6 @@ export function useLinkTabs(activeTab: string, loading: ReactNode) {
 /** 연결 탭: 연결 전·파일이 없으면 경로 입력, 연결되면 그 파일 편집기 */
 function LinkedFile({ tab, state, active }: { tab: LinkTab; state: LinkState; active: boolean }) {
 	const linked = state.text !== undefined, kind = tab.id;
-	const schema = useEditorStore(s => s.xmlSchemas[kind]);
-	const dialect = useEditorStore(s => s.codeOptions.sqlDialect);
-	const language = useMemo(() => state.path ? linkLanguage(state.path, schema, dialect) : undefined, [state.path, schema, dialect]);
 	useEffect(() => {
 		if (!active) {
 			return;
@@ -77,8 +75,8 @@ function LinkedFile({ tab, state, active }: { tab: LinkTab; state: LinkState; ac
 		window.addEventListener('keydown', onKey, true);
 		return () => window.removeEventListener('keydown', onKey, true);
 	}, [active, linked, kind]);
-	return linked && language && state.version !== undefined
-		? <CodeEditor key={state.path} target={linkTarget(kind)} {...language} remote autoImport={/\.java$/i.test(state.path ?? '')} text={state.text!} version={state.version} post={post} />
+	return linked && state.path && state.version !== undefined
+		? <Suspense fallback={<EmptyState kind="loading">불러오는 중…</EmptyState>}><LinkedEditor key={state.path} kind={kind} path={state.path} text={state.text!} version={state.version} /></Suspense>
 		: <LinkPicker tab={tab} missing={state.path} />;
 }
 

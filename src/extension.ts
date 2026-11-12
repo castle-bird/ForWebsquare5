@@ -93,7 +93,7 @@ function html(webview: vscode.Webview, dist: vscode.Uri): string {
 </head>
 <body>
 <div id="root"></div>
-<script nonce="${nonce}" src="${uri('webview.js')}"></script>
+<script type="module" nonce="${nonce}" src="${uri('webview.js')}"></script>
 </body>
 </html>`;
 }

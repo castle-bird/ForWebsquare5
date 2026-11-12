@@ -72,11 +72,11 @@ window.longTasks=0;new PerformanceObserver(l=>l.getEntries().forEach(e=>window.l
 window.idle=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(r,0))));
 window.shadow=()=>document.querySelector('.canvas-host')?.shadowRoot;
 window.until=async(ok,label)=>{const end=performance.now()+20000;while(!ok()){if(performance.now()>end){throw new Error('시간 초과: '+label+' (캔버스 '+(window.shadow()?'있음':'없음')+', 요소 '+(window.shadow()?.querySelectorAll('[data-wse]').length??0)+', 보낸 메시지 '+window.sent.join(',')+')');}await new Promise(r=>setTimeout(r,1));}};</script>
-<script nonce="perf" src="/webview.js"></script></body></html>`;
+<script type="module" nonce="perf" src="/webview.js"></script></body></html>`;
 const server = createServer(async (req, res) => {
-	const name = path.basename(new URL(req.url, 'http://x').pathname);
+	const name = new URL(req.url, 'http://x').pathname.slice(1);
 	const file = path.join(dist, name);
-	if (name && existsSync(file)) {
+	if (name && !name.includes('..') && existsSync(file)) {
 		res.setHeader('Content-Type', name.endsWith('.css') ? 'text/css' : name.endsWith('.js') ? 'text/javascript' : 'application/octet-stream');
 		res.end(await fs.readFile(file));
 	} else {
@@ -177,5 +177,5 @@ try {
 }
 const round = v => typeof v === 'number' ? Math.round(v) : v;
 console.table(rows.map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, round(v)]))));
-const files = (await fs.readdir(dist)).filter(f => /\.(js|css)$/.test(f));
+const files = (await fs.readdir(dist, { recursive: true })).filter(f => /\.(js|css)$/.test(f)).map(f => f.replaceAll(path.sep, '/'));
 console.log('dist:', (await Promise.all(files.map(async f => `${f} ${Math.round((await fs.stat(path.join(dist, f))).size / 1024)}KB`))).join(', '));

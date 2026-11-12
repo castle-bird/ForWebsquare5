@@ -42,6 +42,8 @@ const inlineCssPlugin = {
 };
 
 async function main() {
+	// 묶음 이름에 해시가 있어 지난 빌드 것이 남는다(VSIX에 들어가지 않게 비운다)
+	fs.rmSync(path.join('dist', 'chunks'), { recursive: true, force: true });
 	const common = {
 		bundle: true,
 		minify: production,
@@ -75,12 +77,15 @@ async function main() {
 		esbuild.context({
 			...common,
 			plugins: [...common.plugins, inlineCssPlugin, cspPatchesPlugin],
-			entryPoints: ['src/webview/main.tsx'],
-			format: 'iife',
+			entryPoints: { webview: 'src/webview/main.tsx' },
+			// 처음 화면에 필요 없는 탭(ERD·연결 탭 언어)은 따로 묶어 열 때 불러온다
+			format: 'esm',
+			splitting: true,
 			platform: 'browser',
 			jsx: 'automatic',
 			loader: { '.ttf': 'file', '.svg': 'dataurl' },
-			outfile: 'dist/webview.js',
+			outdir: 'dist',
+			chunkNames: 'chunks/[name]-[hash]',
 		}),
 	]);
 	if (watch) {
