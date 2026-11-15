@@ -13,6 +13,7 @@ import { closeAutoTabs, isOpenByUser, registerAutoTabs } from './autoTabs';
 import { RESOLVE, remoteCompletions, remoteDefinition, remoteHover, remoteSignature } from './completion';
 import { applyCodeEdit, formatCode } from './documentEdit';
 import { addMissingImports } from './javaImports';
+import { mapperDefinition } from './mapperLink';
 import { blameFeed, blameText, stagedText } from './gitBase';
 import { blameOn } from './viewSettings';
 import { xmlSchemaOf } from './xmlSchema';
@@ -473,7 +474,9 @@ export class LinkedFiles {
 		if (!doc) {
 			return;
 		}
-		const found = await remoteDefinition(doc, line, ch);
+		// Mapper ↔ 매퍼 XML은 언어 확장보다 먼저(Java 확장은 메서드 선언에서 자기 자리를 돌려준다)
+		const mapper = (await mapperDefinition(doc, new vscode.Position(line, ch)))?.[0];
+		const found = mapper ? { uri: mapper.uri, range: mapper.range } : await remoteDefinition(doc, line, ch);
 		if (!found) {
 			void this.post({ type: 'toast', message: '정의를 찾지 못했습니다.' });
 			return;

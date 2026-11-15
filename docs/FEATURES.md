@@ -86,6 +86,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 - 작업 폴더 안 파일을 이름으로 검색해 연결
 - Submission 팝업의 요청 URL에서 "Controller 이동"을 누르면 팝업을 닫고 그 URL을 처리하는 Controller 메서드를 엽니다(메서드 이름이 선택됨). 작업 폴더 `.java`의 `@RequestMapping`·`@GetMapping`·`@PostMapping` 등을 직접 읽어 찾으므로 Spring 확장이나 Java 서버가 없어도 됩니다(클래스 경로 + 메서드 경로, `{변수}`, 앞에 붙은 컨텍스트 경로, `.do` 등 확장자 차이). 여럿이면 목록에서 고르고, 그 파일이 이 화면의 연결 탭에 연결돼 있으면 그 탭에서, 아니면 VS Code 편집기로 엽니다. 맞는 매핑이 없으면 화면 알림(토스트)으로 알립니다
 - 연결 전 탭에는 화면 파일 이름의 도메인(`userList01.xml` → `userList`)으로 시작하는 파일이 역할별(Controller·Service·ServiceImpl·Mapper·MyBatis·Validator·VO)로 최대 10개 추천되고, 그 탭에 맞는 역할이 위에 옵니다. 눌러서 연결합니다. 그 아래에는 같은 폴더의 다른 화면이 같은 탭에 연결해 둔 파일이 많이 쓴 순으로 최대 5개 추천됩니다(이 PC에서 연결해 둔 것만)
+- Mapper 인터페이스(`*Mapper.java`)의 메서드 이름에서 Ctrl+클릭·F12를 누르면 MyBatis 매퍼 XML의 같은 `id` 문(select·insert·update·delete)으로, 매퍼 XML의 `id` 값에서 누르면 Mapper 메서드로 이동합니다. 인터페이스 이름 ↔ `namespace` 값도 서로 이동합니다. XML의 `namespace`가 인터페이스 전체 이름(패키지 포함)과 같은 파일을 작업 폴더에서 직접 찾으므로 MyBatis 확장이 없어도 됩니다. 이동할 파일이 이 화면의 연결 탭에 연결돼 있으면 그 탭에서, 아니면 VS Code 편집기로 엽니다(VS Code 편집기에서 열어 둔 Mapper·XML에서도 동작)
 - VS Code에 설치된 언어 확장(Java 등)의 자동완성·포맷·마우스 오버 설명(Javadoc)·정의로 이동(Ctrl+클릭·F12)·파라미터 힌트 사용
 - Java import 목록은 IntelliJ처럼 파일을 열면 `import …` 한 줄로 접혀 있고, 누르거나 왼쪽 접기 표시로 펼칩니다
 - Java 탭은 코드를 붙여 넣거나 포맷하면 빠진 import를 자동으로 넣습니다(Language Support for Java 사용). 안 쓰는 import는 지우지 않고, 후보가 여럿인 클래스는 건너뜁니다

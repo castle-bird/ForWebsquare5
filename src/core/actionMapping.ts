@@ -6,7 +6,7 @@ export interface ActionMapping { path: string; method: string; line: number }
 const MAPPING = /@(Request|Get|Post|Put|Delete|Patch)Mapping\b\s*(\()?/g;
 
 /** 주석을 같은 길이 공백으로(글자 자리 유지). 문자열 안의 // 등은 그대로 */
-function blankComments(text: string): string {
+export function blankComments(text: string): string {
 	let out = '', i = 0;
 	while (i < text.length) {
 		const c = text[i], next = text[i + 1];

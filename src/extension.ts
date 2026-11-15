@@ -10,6 +10,7 @@ import { registerViewSettings } from './vscode/viewSettings';
 import { registerCodeTheme } from './vscode/codeTheme';
 import { createScreen } from './vscode/createScreen';
 import { registerSqlCompletion } from './vscode/sqlCompletion';
+import { registerMapperLink } from './vscode/mapperLink';
 import { registerScreenOpen, rememberScreenEditor } from './vscode/screenOpen';
 import { registerWpack } from './vscode/wpack';
 import { ScreenSession, VIEW_TYPE } from './vscode/screenSession';
@@ -22,6 +23,7 @@ export function activate(context: vscode.ExtensionContext) {
 	registerViewSettings(context);
 	registerLinks(context);
 	registerSqlCompletion(context);
+	registerMapperLink(context);
 	registerCodeTheme(context, msg => panels.forEach(p => void p.webview.postMessage(msg)));
 	context.subscriptions.push(
 		vscode.commands.registerCommand('for-websquare5.createFile', createScreen),

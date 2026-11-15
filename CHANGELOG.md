@@ -1,5 +1,9 @@
 # 변경 내역
 
+## 1.18.0 (2026-11-16)
+
+- Mapper 인터페이스(`*Mapper.java`)와 MyBatis 매퍼 XML 사이를 Ctrl+클릭·F12로 오갈 수 있습니다. 메서드 이름 ↔ 같은 `id`의 select·insert·update·delete, 인터페이스 이름 ↔ `namespace`로 이동하며, 이동할 파일이 연결 탭에 있으면 그 탭에서, 없으면 VS Code 편집기로 엽니다. MyBatis 확장 없이 동작합니다
+
 ## 1.17.1 (2026-11-12)
 
 - 화면 편집기를 여는 시간을 줄였습니다. ERD 탭, 연결 탭(Controller·Service·Mapper 등) 편집기, 테마 색 덮어쓰기 팝업은 처음 열 때 불러옵니다
