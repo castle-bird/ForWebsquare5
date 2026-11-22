@@ -631,4 +631,119 @@ export default async function ({ page, modifiedKey, reset, checkIndentUnit, cont
 		assert.equal(await page.evaluate(() => window.editor().state.doc.toString()), imports, '접기·펼치기는 내용을 안 바꿈');
 		console.log('Java: import 묶음 처음부터 접힘·펼치기 passed');
 	}
+
+	// Mapper ↔ 매퍼 XML 줄 옆 아이콘(원형 M)·클릭 이동·Ctrl+hover 밑줄과 포인터 커서
+	{
+		const mapperJava = 'package com.example;\n\npublic interface UserMapper {\n    int selectList();\n    int count();\n}\n';
+		await page.evaluate(text => {
+			window.send({ type: 'linked', kind: 'mapper', path: 'src/UserMapper.java', text, version: 80 });
+			window.send({
+				type: 'mapperLinks', target: 'link:mapper', version: 80, items: [
+					{ line: 2, ch: 17, length: 10, direction: 'xml', targetFile: 'user_mapper.xml' },
+					{ line: 3, ch: 8, length: 10, direction: 'xml', targetFile: 'user_mapper.xml', id: 'selectList' },
+				],
+			});
+		}, mapperJava);
+		await clickTab('Mapper');
+		await page.waitForFunction(() => window.editor()?.state.doc.toString() === 'package com.example;\n\npublic interface UserMapper {\n    int selectList();\n    int count();\n}\n', { timeout: 3000 });
+		await page.waitForFunction(() => document.querySelectorAll('.tab-body:not([hidden]) .cm-mapper-icon').length === 2, { timeout: 3000 })
+			.catch(() => assert.fail('Mapper 줄 옆 아이콘 2개(인터페이스·selectList) 표시'));
+		const iconTips = await page.$$eval('.tab-body:not([hidden]) .cm-mapper-icon', bs => bs.map(b => b.title));
+		assert.deepEqual(iconTips, ['매퍼 XML로 이동: user_mapper.xml', '매퍼 XML로 이동: user_mapper.xml · selectList']);
+		// 두 번째 아이콘(selectList) 클릭 → definition 요청
+		await page.evaluate(() => { window.sent.length = 0; });
+		await page.click('.tab-body:not([hidden]) .cm-mapper-icon[title*="selectList"]');
+		await page.waitForFunction(() => window.sent.some(m => m.type === 'definition'), { timeout: 3000 })
+			.catch(() => assert.fail('매퍼 아이콘 클릭 → definition 요청'));
+		const clickedDef = await lastSent('definition');
+		assert.deepEqual({ target: clickedDef.target, line: clickedDef.line, ch: clickedDef.ch }, { target: 'link:mapper', line: 3, ch: 8 }, '아이콘 클릭 → selectList 위치로 이동 요청');
+		// Ctrl+hover: 마우스를 먼저 올린 뒤 Ctrl을 눌러도 밑줄·포인터 커서가 생기고, 떼면 사라짐
+		const methodAt = await coordsOf('selectList', 2);
+		await page.mouse.move(methodAt.x, methodAt.y);
+		assert.equal(await page.$('.tab-body:not([hidden]) .cm-def-hover'), null, 'Ctrl 없이는 밑줄 없음');
+		await page.keyboard.down('Control');
+		await page.waitForFunction(() => document.querySelector('.tab-body:not([hidden]) .cm-def-hover')?.textContent === 'selectList', { timeout: 2000 })
+			.catch(() => assert.fail('hover 후 Ctrl 누름 → selectList 밑줄'));
+		assert.equal(await page.$eval('.tab-body:not([hidden]) .cm-def-hover', e => getComputedStyle(e).cursor), 'pointer', 'Ctrl+hover 포인터 커서');
+		await page.keyboard.up('Control');
+		await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .cm-def-hover'), { timeout: 2000 })
+			.catch(() => assert.fail('Ctrl 뗌 → 밑줄 해제'));
+		// 매퍼 XML: namespace·id 값만 Ctrl+hover 밑줄, 일반 SQL·태그 글자에는 밑줄 없음
+		const mapperXml = '<mapper namespace="com.example.UserMapper">\n    <select id="selectList">SELECT 1</select>\n</mapper>\n';
+		await page.evaluate(text => {
+			window.send({ type: 'linked', kind: 'mybatis', path: 'res/user_mapper.xml', text, version: 90 });
+			window.send({
+				type: 'mapperLinks', target: 'link:mybatis', version: 90, items: [
+					{ line: 0, ch: 19, length: 22, direction: 'java', targetFile: 'UserMapper.java' },
+					{ line: 1, ch: 16, length: 10, direction: 'java', targetFile: 'UserMapper.java', id: 'selectList' },
+				],
+			});
+		}, mapperXml);
+		await clickTab('Mybatis');
+		await page.waitForFunction(() => window.editor()?.state.doc.toString().includes('com.example.UserMapper'), { timeout: 3000 });
+		await page.waitForFunction(() => document.querySelectorAll('.tab-body:not([hidden]) .cm-mapper-icon.cm-mapper-to-java').length === 2, { timeout: 3000 })
+			.catch(() => assert.fail('Mybatis XML 줄 옆 아이콘 2개 표시'));
+		const nsAt = await coordsOf('com.example.UserMapper', 5);
+		const sqlAt = await coordsOf('SELECT', 2);
+		await page.keyboard.down('Control');
+		await page.mouse.move(nsAt.x, nsAt.y);
+		await page.waitForFunction(() => document.querySelector('.tab-body:not([hidden]) .cm-def-hover')?.textContent === 'com.example.UserMapper', { timeout: 2000 })
+			.catch(() => assert.fail('XML namespace Ctrl+hover → 전체 FQCN 밑줄'));
+		await page.mouse.move(sqlAt.x, sqlAt.y);
+		await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .cm-def-hover'), { timeout: 2000 })
+			.catch(() => assert.fail('XML 일반 SQL 단어에는 밑줄 없음'));
+		await page.keyboard.up('Control');
+		// 링크 없는 탭(Service)에서는 매퍼 gutter를 숨겨 공간을 차지하지 않음
+		await clickTab('Service');
+		await page.waitForFunction(() => window.editor()?.state.doc.toString().startsWith('package a;'), { timeout: 3000 });
+		assert.equal(await page.$eval('.tab-body:not([hidden]) .cm-mapper-gutter', e => getComputedStyle(e).display), 'none', '링크 없는 파일은 매퍼 gutter 숨김');
+		console.log('Mapper: 줄 옆 원형 M 아이콘·클릭 이동·Ctrl+hover 밑줄/커서 passed');
+	}
+
+	// 연결 탭 상태 표시(미연결 흐림·오류/경고 점, 너비 유지) 및 기호 빠른 이동(Ctrl+Shift+O)
+	{
+		// 미연결 탭(Controller는 앞에서 파일 없음 상태)은 unlinked, 연결된 Mapper는 unlinked 없음
+		assert.equal(await page.evaluate(() => window.tab('Controller').classList.contains('unlinked')), true, '미연결 탭 unlinked');
+		assert.equal(await page.evaluate(() => window.tab('Mapper').classList.contains('unlinked')), false, '연결 탭은 unlinked 없음');
+		const beforeW = await page.evaluate(() => window.tab('Mapper').getBoundingClientRect().width);
+		await page.evaluate(() => window.send({
+			type: 'diagnostics', target: 'link:mapper', version: 80,
+			items: [{ fromLine: 3, fromCh: 4, toLine: 3, toCh: 7, severity: 'error', message: 'err' }],
+		}));
+		await page.waitForFunction(() => window.tab('Mapper').classList.contains('has-error'), { timeout: 2000 });
+		assert.equal(await page.evaluate(() => window.tab('Mapper').getBoundingClientRect().width), beforeW, '오류 점이 생겨도 탭 너비 유지');
+		assert.match(await page.evaluate(() => window.tab('Mapper').title), /오류 1/, '오류 개수 툴팁');
+		await page.evaluate(() => window.send({
+			type: 'diagnostics', target: 'link:mapper', version: 80,
+			items: [{ fromLine: 3, fromCh: 4, toLine: 3, toCh: 7, severity: 'warning', message: 'warn' }],
+		}));
+		await page.waitForFunction(() => !window.tab('Mapper').classList.contains('has-error'), { timeout: 2000 });
+		await page.evaluate(() => window.send({ type: 'diagnostics', target: 'link:mapper', version: 80, items: [] }));
+		// 기호 빠른 이동(Ctrl+Shift+O / gotoSymbolKey): Java(Mapper)·MyBatis XML·Script에서 필터·Enter 점프·Esc 닫기
+		await clickTab('Mapper');
+		await page.waitForFunction(() => window.editor()?.state.doc.toString().includes('selectList'), { timeout: 3000 });
+		await page.evaluate(() => window.send({ type: 'gotoSymbolKey' }));
+		await page.waitForSelector('.tab-body:not([hidden]) .symbol-picker input', { timeout: 2000 });
+		assert.deepEqual(await page.$$eval('.tab-body:not([hidden]) .symbol-picker-list .symbol-name', es => es.map(e => e.textContent)), ['UserMapper', 'selectList', 'count']);
+		await page.type('.tab-body:not([hidden]) .symbol-picker input', 'sel');
+		await page.waitForFunction(() => document.querySelectorAll('.tab-body:not([hidden]) .symbol-picker-list li').length === 1, { timeout: 2000 });
+		await page.keyboard.press('Enter');
+		await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .symbol-picker'), { timeout: 2000 });
+		assert.equal(await selected(), 'selectList', 'Java 기호 점프 → selectList 선택');
+		await clickTab('Mybatis');
+		await page.waitForFunction(() => window.editor()?.state.doc.toString().includes('com.example.UserMapper'), { timeout: 3000 });
+		await page.evaluate(() => window.editor().focus());
+		await page.keyboard.down('Control'); await page.keyboard.down('Shift'); await page.keyboard.press('KeyO'); await page.keyboard.up('Shift'); await page.keyboard.up('Control');
+		await page.waitForSelector('.tab-body:not([hidden]) .symbol-picker input', { timeout: 2000 });
+		assert.deepEqual(await page.$$eval('.tab-body:not([hidden]) .symbol-picker-list .symbol-name', es => es.map(e => e.textContent)), ['com.example.UserMapper', 'selectList']);
+		await page.keyboard.press('ArrowDown');
+		await page.keyboard.press('Enter');
+		await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .symbol-picker'), { timeout: 2000 });
+		assert.equal(await selected(), 'selectList', 'MyBatis XML 기호 점프 → selectList 선택');
+		await page.evaluate(() => window.send({ type: 'gotoSymbolKey' }));
+		await page.waitForSelector('.tab-body:not([hidden]) .symbol-picker input', { timeout: 2000 });
+		await page.keyboard.press('Escape');
+		await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .symbol-picker'), { timeout: 2000 });
+		console.log('UX: 연결 탭 상태 표시(미연결·오류/경고)·기호 빠른 이동(Ctrl+Shift+O) passed');
+	}
 }

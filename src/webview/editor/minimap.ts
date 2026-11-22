@@ -5,7 +5,7 @@ import { ensureSyntaxTree, foldedRanges, highlightingFor, language, syntaxTree }
 import { forEachDiagnostic } from '@codemirror/lint';
 import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import type { EditorState } from '@codemirror/state';
-import { getStyleTags } from '@lezer/highlight';
+import { highlightTree, type Highlighter } from '@lezer/highlight';
 import { capturePointer } from '../ui/pointerCapture';
 import { changedRanges, changesVersion } from './changes';
 
@@ -21,6 +21,20 @@ const LINE_TINT = { error: 'rgba(244, 71, 71, .35)', other: 'rgba(204, 167, 0, .
 const severity = (d: { severity: string }) => d.severity === 'error' ? 'error' : 'other';
 /** 탭은 다음 탭 칸까지 */
 const nextColumn = (col: number, ch: string | undefined, tab: number) => ch === '\t' ? col + tab - col % tab : col + 1;
+const parseRgb = (css: string): [number, number, number] | undefined => {
+	const m = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(css);
+	return m ? [+m[1], +m[2], +m[3]] : undefined;
+};
+/** 밝은 테마의 어두운 기본 글자색인지 판별(미니맵 막대 명암 보정용) */
+const isDarkColor = (css: string) => {
+	const rgb = parseRgb(css);
+	return !!rgb && (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000 < 128;
+};
+/** 무채색(검정·회색·흰색) 토큰인지 판별: 기본 글자·주석 등은 강조 색보다 옅게 그려 뭉침을 줄인다 */
+const isNeutralColor = (css: string) => {
+	const rgb = parseRgb(css);
+	return !!rgb && Math.max(...rgb) - Math.min(...rgb) < 22;
+};
 
 /**
  * 미니맵 줄(row, 1부터) ↔ 문서 줄. 접은 곳은 편집기처럼 첫 줄만 남기고 나머지 줄을 뺀다(VS Code처럼).
@@ -261,6 +275,11 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 	paintLines(g: CanvasRenderingContext2D, top: number, r0: number, r1: number, width: number, ratio: number, tree: ReturnType<typeof syntaxTree>, lines: Rows) {
 		const v = this.view, doc = v.state.doc, tab = v.state.tabSize, cols = width - PAD - 4;
 		const a = lines.line(r0), b = lines.line(r1), yOf = (n: number) => (lines.row(n) - top) * LINE;
+		// 줄마다 1 장치픽셀 이상 여백이 남도록 막대 높이를 픽셀 경계에 맞춘다(줄끼리 뭉쳐 보이지 않게)
+		const barH = Math.max(1, Math.floor(LINE * ratio * .55)) / ratio;
+		const lightTheme = isDarkColor(this.textColor);
+		const plainAlpha = lightTheme ? .28 : .36;
+		const syntaxAlpha = lightTheme ? .52 : .62;
 		g.setTransform(ratio, 0, 0, ratio, 0, 0);
 		g.globalAlpha = 1;
 		const from = doc.line(a).from, to = doc.line(b).to;
@@ -280,48 +299,54 @@ const minimapPlugin = ViewPlugin.fromClass(class {
 				if (lines.visible(n)) { g.fillRect(0, yOf(n), 2, LINE); }
 			}
 		}
-		const columnAt = (line: { from: number; text: string }, pos: number) => {
-			let col = 0;
-			for (let i = 0, limit = pos - line.from; i < limit && i < line.text.length && col < cols; i++) { col = nextColumn(col, line.text[i], tab); }
-			return col;
-		};
-		// 1) 기본 글자색 막대(공백 없는 덩어리마다)
-		g.globalAlpha = .6;
-		g.fillStyle = this.textColor;
-		for (let n = a; n <= b; n++) {
-			if (!lines.visible(n)) { continue; }
-			const line = doc.line(n), y = yOf(n);
-			let col = 0, run = -1;
-			for (let i = 0; i <= line.text.length && col <= cols; i++) {
-				const ch = line.text[i];
-				const space = ch === undefined || ch === ' ' || ch === '\t';
-				if (space && run >= 0) { g.fillRect(PAD + run, y, col - run, LINE - .5); run = -1; }
-				else if (!space && run < 0) { run = col; }
-				col = nextColumn(col, ch, tab);
+		// 한 줄 안에서 순서대로 열 위치를 이어 계산해 중복 스캔을 피한다
+		let curLineNo = -1, curIndex = 0, curCol = 0;
+		const colAt = (line: { number: number; from: number; text: string }, pos: number) => {
+			const target = pos - line.from;
+			if (curLineNo !== line.number || target < curIndex) {
+				curLineNo = line.number; curIndex = 0; curCol = 0;
 			}
-			if (run >= 0) { g.fillRect(PAD + run, y, Math.min(col, cols) - run, LINE - .5); }
-		}
-		// 2) 문법 색: 그릴 범위까지 읽은 트리에서. 안쪽 노드가 바깥 위에 덮인다
-		g.globalAlpha = .9;
-		tree.iterate({
-			from, to,
-			enter: node => {
-				const style = getStyleTags(node);
-				const cls = style && highlightingFor(v.state, style.tags);
-				if (!cls) { return; }
-				g.fillStyle = this.color(cls);
-				const s = Math.max(node.from, from), e = Math.min(node.to, to);
-				for (let n = doc.lineAt(s).number, endLine = doc.lineAt(e).number; n <= endLine; n++) {
-					if (!lines.visible(n)) { continue; }
-					const line = doc.line(n), s0 = Math.max(s, line.from), e0 = Math.min(e, line.to);
-					// 앞뒤 공백은 빼고(문자열·주석 안 공백은 그대로 막대)
-					const text = line.text.slice(s0 - line.from, e0 - line.from), lead = text.length - text.trimStart().length, trail = text.length - text.trimEnd().length;
-					if (lead === text.length) { continue; }
-					const c0 = columnAt(line, s0 + lead), c1 = Math.min(cols, columnAt(line, e0 - trail));
-					if (c1 > c0) { g.fillRect(PAD + c0, yOf(n), c1 - c0, LINE - .5); }
+			while (curIndex < target && curIndex < line.text.length && curCol < cols) {
+				curCol = nextColumn(curCol, line.text[curIndex++], tab);
+			}
+			return curCol;
+		};
+		// 겹치지 않게 한 번만 그린다(기본색 위에 문법색을 덧칠하면 밝은 테마에서 검게 뭉친다). 공백으로 나눠 낱말 모양을 살린다
+		const paintRange = (start: number, end: number, color: string, alpha: number) => {
+			if (start >= end) { return; }
+			g.fillStyle = color;
+			g.globalAlpha = alpha;
+			for (let n = doc.lineAt(start).number, endLine = doc.lineAt(end).number; n <= endLine; n++) {
+				if (!lines.visible(n)) { continue; }
+				const line = doc.line(n), s0 = Math.max(start, line.from), e0 = Math.min(end, line.to);
+				if (s0 >= e0) { continue; }
+				let col = colAt(line, s0);
+				if (col >= cols) { continue; }
+				const y = yOf(n), fromI = s0 - line.from, toI = e0 - line.from;
+				let run = -1;
+				for (let i = fromI; i <= toI && col <= cols; i++) {
+					const ch = i < toI ? line.text[i] : undefined;
+					const space = ch === undefined || ch === ' ' || ch === '\t';
+					if (space && run >= 0) { g.fillRect(PAD + run, y, Math.min(col, cols) - run, barH); run = -1; }
+					else if (!space && run < 0) { run = col; }
+					if (i < toI) { col = nextColumn(col, ch, tab); }
 				}
-			},
-		});
+				if (run >= 0) { g.fillRect(PAD + run, y, Math.min(col, cols) - run, barH); }
+				curLineNo = line.number; curIndex = toI; curCol = col;
+			}
+		};
+		const highlighter: Highlighter = { style: tags => highlightingFor(v.state, tags) };
+		let cursor = from;
+		highlightTree(tree, highlighter, (s, e, cls) => {
+			const s0 = Math.max(s, from), e0 = Math.min(e, to);
+			if (s0 > cursor) { paintRange(cursor, s0, this.textColor, plainAlpha); }
+			if (e0 > s0) {
+				const c = this.color(cls);
+				paintRange(s0, e0, c, c === this.textColor || isNeutralColor(c) ? plainAlpha : syntaxAlpha);
+			}
+			if (e0 > cursor) { cursor = e0; }
+		}, from, to);
+		if (cursor < to) { paintRange(cursor, to, this.textColor, plainAlpha); }
 		g.globalAlpha = 1;
 	}
 

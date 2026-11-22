@@ -12,7 +12,7 @@
   },
   "homepage": "https://github.com/castle-bird/ForWebsquare5#readme",
   "description": "VS Code에서 WebSquare5 에디터를 사용할 수 있게 해주는 비공식 확장",
-  "version": "1.18.0",
+  "version": "1.19.0",
   "icon": "media/logo.png",
   "engines": {
     "vscode": "^1.125.0"
@@ -37,6 +37,10 @@
       {
         "command": "for-websquare5.format",
         "title": "WebSquare5: 코드 탭 포맷 (Source·Script·연결 파일)"
+      },
+      {
+        "command": "for-websquare5.gotoSymbol",
+        "title": "WebSquare5: 기호로 이동 (Script·Source·연결 파일)"
       },
       {
         "command": "for-websquare5.setup",
@@ -110,6 +114,12 @@
       {
         "command": "for-websquare5.format",
         "key": "ctrl+alt+l",
+        "when": "activeCustomEditorId == for-websquare5.designer"
+      },
+      {
+        "command": "for-websquare5.gotoSymbol",
+        "key": "ctrl+shift+o",
+        "mac": "cmd+shift+o",
         "when": "activeCustomEditorId == for-websquare5.designer"
       }
     ],

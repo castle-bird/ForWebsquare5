@@ -118,6 +118,11 @@ input[type="search"]::-webkit-search-cancel-button:hover { opacity: 1; }
 .tab-bar button.markable { position: relative; }
 .tab-bar button.markable::after { content: '\ea71'; position: absolute; right: 2px; top: 2px; font: 8px/1 codicon; visibility: hidden; }
 .tab-bar button.dirty::after { visibility: visible; }
+/* 연결 탭 상태: 미연결은 흐리게, 오류는 빨간 글자·점으로 표시(경고는 표시 안 함, 탭 너비 변화 없음) */
+.tab-bar button.unlinked:not(.active) { opacity: .42; }
+.tab-bar button.unlinked:not(.active):hover { opacity: .82; }
+.tab-bar button.markable.has-error::before { content: ''; position: absolute; right: 3px; bottom: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--vscode-list-errorForeground, #f14c4c); }
+.tab-bar button.has-error { color: var(--vscode-list-errorForeground, #f14c4c); }
 .tab-bar button.dragging { position: relative; z-index: 1; opacity: .6; cursor: grabbing; }
 .tab-bar button.drop-before { box-shadow: inset 2px 0 var(--vscode-focusBorder); }
 .tab-bar button.drop-after { box-shadow: inset -2px 0 var(--vscode-focusBorder); }
@@ -176,8 +181,39 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .resizer.collapsed { width: 0; visibility: hidden; }
 .pane > .tab-body { --pad: 5px; padding: var(--pad); }
 .canvas-frame > .tab-body:has(.code-editor) { padding: 0; }
-.code-editor { height: 100%; display: flex; flex-direction: column; }
+.code-editor { position: relative; height: 100%; display: flex; flex-direction: column; }
 .code-host { flex: 1; min-height: 0; }
+/* 기호 빠른 이동(Ctrl+Shift+O): 편집기 상단 중앙에 뜨는 퍼지 검색 팝업 */
+.symbol-picker {
+	position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 30;
+	width: min(460px, calc(100% - 24px)); display: flex; flex-direction: column; border-radius: 6px; overflow: hidden;
+	background: var(--vscode-quickInput-background, var(--vscode-editorWidget-background)); color: var(--vscode-quickInput-foreground, var(--vscode-foreground));
+	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border)); box-shadow: 0 6px 24px var(--vscode-widget-shadow, rgba(0, 0, 0, .35));
+	font-family: var(--vscode-font-family); font-size: var(--vscode-font-size, 13px); animation: popup-in .1s ease-out;
+}
+[data-animation="off"] .symbol-picker { animation: none; }
+.symbol-picker-input { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
+.symbol-picker-input .codicon { opacity: .7; flex: none; }
+.symbol-picker-input input {
+	flex: 1; min-width: 0; height: 24px; padding: 0 6px; font: inherit; font-size: 12px; border-radius: 3px;
+	color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent);
+}
+.symbol-picker-input input:focus { outline: none; border-color: var(--vscode-focusBorder); }
+.symbol-picker-count { flex: none; font-size: 11px; opacity: .65; font-variant-numeric: tabular-nums; }
+.symbol-picker-list { margin: 0; padding: 4px; list-style: none; max-height: 280px; overflow-y: auto; }
+.symbol-picker-list li { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; white-space: nowrap; overflow: hidden; }
+.symbol-picker-list li.active { background: var(--vscode-quickInputList-focusBackground, var(--vscode-list-activeSelectionBackground)); color: var(--vscode-quickInputList-focusForeground, var(--vscode-list-activeSelectionForeground, inherit)); }
+.symbol-picker-list .codicon { flex: none; font-size: 14px; }
+.symbol-picker-list .symbol-kind-class { color: var(--vscode-symbolIcon-classForeground, #ee9d28); }
+.symbol-picker-list .symbol-kind-interface { color: var(--vscode-symbolIcon-interfaceForeground, #75beff); }
+.symbol-picker-list .symbol-kind-method, .symbol-picker-list .symbol-kind-function { color: var(--vscode-symbolIcon-methodForeground, #b180d7); }
+.symbol-picker-list .symbol-kind-sql { color: var(--vscode-charts-green, #4ec9b0); }
+.symbol-picker-list .symbol-kind-tag { color: var(--vscode-charts-blue, #3794ff); }
+.symbol-picker-list li.active .codicon { color: inherit; }
+.symbol-picker-list .symbol-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.symbol-picker-list .symbol-detail { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; opacity: .65; font-size: 11px; }
+.symbol-picker-list .symbol-line { margin-left: auto; padding-left: 8px; flex: none; opacity: .6; font-size: 11px; font-variant-numeric: tabular-nums; }
+.symbol-picker-empty { padding: 12px; text-align: center; font-size: 12px; opacity: .7; }
 .code-banner { padding: 6px 10px; color: var(--vscode-editorWarning-foreground); background: var(--vscode-editorWidget-background); }
 .code-banner button { margin-left: 8px; cursor: pointer; }
 .link-picker { height: 100%; box-sizing: border-box; display: flex; align-items: flex-start; justify-content: center; overflow: auto; padding: min(12vh, 80px) 16px 16px; }
@@ -231,6 +267,21 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .code-editor .cm-change.cm-change-deleted { height: 0; border-top: 3px solid var(--change); }
 .code-editor .cm-change-ruler { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; z-index: 3; pointer-events: none; }
 .code-editor .cm-change-mark { position: absolute; left: 0; right: 0; min-height: 2px; background: var(--change); opacity: .8; }
+/* Mapper ↔ 매퍼 XML 줄 옆 아이콘(링크가 있을 때만 표시)과 Ctrl+hover 정의 이동 밑줄 */
+.code-editor .cm-editor:not(.cm-has-mapper-links) .cm-mapper-gutter { display: none !important; }
+.code-editor .cm-editor.cm-has-mapper-links .cm-gutter-lint:not(:has(.cm-lint-marker)) { width: 0; min-width: 0; overflow: hidden; }
+.code-editor .cm-mapper-gutter { width: 18px; margin-left: 2px; }
+.code-editor .cm-mapper-gutter .cm-gutterElement { display: flex; align-items: center; justify-content: center; padding: 0; }
+.code-editor .cm-mapper-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; opacity: .9; transition: opacity .12s, background-color .12s, transform .12s; }
+.code-editor .cm-mapper-icon:hover { opacity: 1; background: color-mix(in srgb, currentColor 18%, transparent); transform: scale(1.06); }
+.code-editor .cm-mapper-icon:active { transform: scale(.96); }
+.code-editor .cm-mapper-icon svg { display: block; width: 14px; height: 14px; }
+.code-editor .cm-mapper-to-xml { color: #38a169; }
+.code-editor .cm-mapper-to-java { color: #3b8eea; }
+body.vscode-light .code-editor:not(.custom-theme) .cm-mapper-to-xml, body.vscode-high-contrast-light .code-editor:not(.custom-theme) .cm-mapper-to-xml { color: #2b8a57; }
+body.vscode-light .code-editor:not(.custom-theme) .cm-mapper-to-java, body.vscode-high-contrast-light .code-editor:not(.custom-theme) .cm-mapper-to-java { color: #2872b8; }
+.code-editor .cm-def-hover { text-decoration: underline; text-underline-offset: 2px; cursor: pointer; color: var(--vscode-editorLink-activeForeground, var(--vscode-textLink-foreground, #4e94ce)); }
+.code-editor .cm-def-hover * { color: inherit; cursor: pointer; }
 /* 고른 테마: 선택 색을 지정하지 않았으면 테마 글자색을 옅게 섞어 쓴다 */
 .code-editor.custom-theme .cm-selectionBackground, .code-editor.custom-theme .cm-focused .cm-selectionBackground { background: var(--code-selection, color-mix(in srgb, currentColor 25%, transparent)) !important; }
 .code-editor.custom-theme .cm-activeLine { background-color: var(--code-line, color-mix(in srgb, currentColor 7%, transparent)) !important; }
@@ -1080,13 +1131,21 @@ textarea.edit.style-value {
 .code-editor .cm-blame { padding-left: 3em; white-space: pre; pointer-events: none; user-select: none;
 	color: var(--vscode-git-blame-editorDecorationForeground, var(--vscode-editorCodeLens-foreground, var(--vscode-descriptionForeground))); }
 /* 코드 편집기 미니맵(막대형, editor/minimap.ts): 스크롤바 왼쪽, 지금 보이는 곳은 슬라이더 */
-.code-editor .cm-minimap { position: absolute; top: 0; bottom: 0; width: 72px; z-index: 2; cursor: default; background: var(--vscode-minimap-background, color-mix(in srgb, currentColor 5%, transparent)); }
+.code-editor .cm-minimap { position: absolute; top: 0; bottom: 0; width: 72px; box-sizing: border-box; z-index: 2; cursor: default;
+	background: var(--vscode-minimap-background, color-mix(in srgb, currentColor 3%, transparent));
+	border-left: 1px solid color-mix(in srgb, currentColor 8%, transparent); }
+.code-editor.custom-theme .cm-minimap { background: color-mix(in srgb, currentColor 3%, transparent); }
 .code-editor .cm-minimap { --minimap-added: var(--vscode-minimapGutter-addedBackground, var(--vscode-editorGutter-addedBackground, #2ea043));
 	--minimap-modified: var(--vscode-minimapGutter-modifiedBackground, var(--vscode-editorGutter-modifiedBackground, #0078d4));
 	--minimap-deleted: var(--vscode-minimapGutter-deletedBackground, var(--vscode-editorGutter-deletedBackground, #f85149)); }
 .code-editor .cm-minimap canvas { display: block; width: 100%; height: 100%; }
-.code-editor .cm-minimap-slider { position: absolute; left: 0; right: 0; min-height: 4px; background: var(--vscode-minimapSlider-background, rgba(121, 121, 121, .2)); opacity: 0; transition: opacity .15s; }
+.code-editor .cm-minimap-slider { position: absolute; left: 0; right: 0; min-height: 4px;
+	background: var(--vscode-minimapSlider-background, color-mix(in srgb, currentColor 11%, transparent));
+	opacity: .55; transition: opacity .15s, background-color .15s; }
+.code-editor.custom-theme .cm-minimap-slider { background: color-mix(in srgb, currentColor 10%, transparent); }
 .code-editor .cm-minimap:hover .cm-minimap-slider, .code-editor .cm-minimap.dragging .cm-minimap-slider { opacity: 1; }
-.code-editor .cm-minimap:hover .cm-minimap-slider:hover { background: var(--vscode-minimapSlider-hoverBackground, rgba(100, 100, 100, .35)); }
-.code-editor .cm-minimap.dragging .cm-minimap-slider { background: var(--vscode-minimapSlider-activeBackground, rgba(191, 191, 191, .2)); }
+.code-editor .cm-minimap:hover .cm-minimap-slider:hover { background: var(--vscode-minimapSlider-hoverBackground, color-mix(in srgb, currentColor 18%, transparent)); }
+.code-editor.custom-theme .cm-minimap:hover .cm-minimap-slider:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
+.code-editor .cm-minimap.dragging .cm-minimap-slider { background: var(--vscode-minimapSlider-activeBackground, color-mix(in srgb, currentColor 22%, transparent)); }
+.code-editor.custom-theme .cm-minimap.dragging .cm-minimap-slider { background: color-mix(in srgb, currentColor 20%, transparent); }
 .code-editor .cm-minimap-probe { position: absolute; visibility: hidden; }

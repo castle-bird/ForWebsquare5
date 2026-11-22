@@ -13,7 +13,7 @@ import { closeAutoTabs, isOpenByUser, registerAutoTabs } from './autoTabs';
 import { RESOLVE, remoteCompletions, remoteDefinition, remoteHover, remoteSignature } from './completion';
 import { applyCodeEdit, formatCode } from './documentEdit';
 import { addMissingImports } from './javaImports';
-import { mapperDefinition } from './mapperLink';
+import { mapperDefinition, mapperLinksOf } from './mapperLink';
 import { blameFeed, blameText, stagedText } from './gitBase';
 import { blameOn } from './viewSettings';
 import { xmlSchemaOf } from './xmlSchema';
@@ -147,6 +147,8 @@ export class LinkedFiles {
 	private readonly reloads = new Map<string, Promise<unknown>>();
 	/** 연결 파일마다 Git blame 보내기(입력이 멈춘 뒤) */
 	private readonly blames = new Map<string, ReturnType<typeof blameFeed>>();
+	/** 반대쪽 매퍼 파일 변경 시 링크 아이콘 갱신 타이머 */
+	private mapperRefreshTimer?: NodeJS.Timeout;
 
 	constructor(private readonly owner: vscode.TextDocument, private readonly postToWebview: (msg: ToWebview) => Thenable<boolean>) {
 		this.subs = [
@@ -154,8 +156,14 @@ export class LinkedFiles {
 			// 탭 이름이 바뀌면 순서(이름으로 저장)도 바뀌므로 같이 보낸다
 			onTabsChanged(({ from, select }) => void this.post({ type: 'tabOrder', order: tabOrder() ?? [] }).then(() => this.reload(from === this ? select : undefined))),
 			// 내용이 그대로여도 저장 안 함 표시가 바뀌면 불린다
-			vscode.workspace.onDidChangeTextDocument(e => this.schedule(this.kindOf(e.document.uri))),
-			vscode.workspace.onDidSaveTextDocument(d => this.schedule(this.kindOf(d.uri), 0)),
+			vscode.workspace.onDidChangeTextDocument(e => {
+				this.schedule(this.kindOf(e.document.uri));
+				this.refreshSiblingMapperLinks(e.document.uri);
+			}),
+			vscode.workspace.onDidSaveTextDocument(d => {
+				this.schedule(this.kindOf(d.uri), 0);
+				this.refreshSiblingMapperLinks(d.uri);
+			}),
 			// 언어 확장(Java 언어 서버 등)이 낸 문제를 연결 탭에도 그대로
 			vscode.languages.onDidChangeDiagnostics(e => e.uris.forEach(uri => { const kind = this.kindOf(uri); if (kind) { void this.sendDiagnostics(kind); } })),
 			// 연결할 수 있는 확장자가 바뀌면 웹뷰 안내·검색 목록을 다시
@@ -265,6 +273,7 @@ export class LinkedFiles {
 		// 다른 파일로 바꾸면 새 기준이 올 때까지 옛 파일 기준으로 표시하지 않게
 		for (const kind of cleared) {
 			await this.post({ type: 'gitBase', target: linkTarget(kind) });
+			await this.post({ type: 'mapperLinks', target: linkTarget(kind), version: 0, items: [] });
 		}
 		for (const tab of tabs) {
 			const file = saved[tab.id];
@@ -400,6 +409,34 @@ export class LinkedFiles {
 		this.scheduleBlame(undefined, kind);
 		await this.sendSchema(kind, link, text);
 		await this.sendDiagnostics(kind);
+		void this.sendMapperLinks(kind, link, doc);
+	}
+
+	/** 매퍼 XML이나 Mapper Java가 바뀌면 반대쪽 연결 탭의 매퍼 링크 아이콘도 갱신한다(입력 중 잦은 재탐색을 모은다) */
+	private refreshSiblingMapperLinks(uri: vscode.Uri): void {
+		const ext = path.extname(uri.path).toLowerCase();
+		const targetExt = ext === '.xml' ? '.java' : ext === '.java' ? '.xml' : undefined;
+		if (!targetExt) { return; }
+		clearTimeout(this.mapperRefreshTimer);
+		this.mapperRefreshTimer = setTimeout(() => {
+			if (this.disposed) { return; }
+			for (const [kind, link] of this.links) {
+				if (path.extname(link.uri.path).toLowerCase() === targetExt && link.doc && !link.doc.isClosed) {
+					void this.sendMapperLinks(kind, link, link.doc);
+				}
+			}
+		}, 300);
+	}
+
+	/** Mapper ↔ 매퍼 XML 이동 아이콘·Ctrl+hover 밑줄 표시용 자리 목록 */
+	private async sendMapperLinks(kind: string, link: Link, doc: vscode.TextDocument): Promise<void> {
+		const ext = path.extname(link.uri.path).toLowerCase();
+		if (ext !== '.java' && ext !== '.xml') { return; }
+		const version = doc.version + link.offset;
+		const items = await mapperLinksOf(doc).catch(() => []);
+		if (this.links.get(kind) === link && !doc.isClosed && doc.version + link.offset === version) {
+			await this.post({ type: 'mapperLinks', target: linkTarget(kind), version, items });
+		}
 	}
 
 	/** VS Code가 그 파일에 낸 문제(문제 탭과 같은 것)를 지금 문서 버전과 함께 */
@@ -613,6 +650,7 @@ export class LinkedFiles {
 
 	async dispose(): Promise<void> {
 		this.disposed = true;
+		clearTimeout(this.mapperRefreshTimer);
 		this.subs.forEach(s => s.dispose());
 		this.blames.forEach(b => b.dispose());
 		const uris = [...this.links.values()].map(l => l.uri);

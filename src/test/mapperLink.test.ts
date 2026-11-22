@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { javaTargetAt, xmlTargetAt } from '../core/mapperLink';
+import { isLikelyJavaMapper, javaHitAt, javaTargetAt, lineColAt, xmlHitAt, xmlTargetAt } from '../core/mapperLink';
 
 const JAVA = [
 	'package com.example.user;',
@@ -42,5 +42,23 @@ suite('Mapper ↔ 매퍼 XML', () => {
 		assert.strictEqual(xmlTargetAt(XML, at(XML, 'commented')), undefined);
 		assert.strictEqual(xmlTargetAt(XML, at(XML, 'inCdata')), undefined);
 		assert.strictEqual(xmlTargetAt(XML, at(XML, 'resultType')), undefined);
+	});
+
+	test('Hit 범위와 줄·칸 계산(CRLF 포함)', () => {
+		const hit = javaHitAt(JAVA, at(JAVA, 'selectList(@'))!;
+		assert.strictEqual(JAVA.slice(hit.origin.at, hit.origin.at + hit.origin.name.length), 'selectList');
+		const xmlHit = xmlHitAt(XML, at(XML, 'com.example'))!;
+		assert.strictEqual(XML.slice(xmlHit.origin.at, xmlHit.origin.at + xmlHit.origin.name.length), 'com.example.user.UserMapper');
+		const crlf = 'line0\r\n  selectList';
+		assert.deepStrictEqual(lineColAt(crlf, crlf.indexOf('selectList')), { line: 1, ch: 2 });
+	});
+
+	test('자동 아이콘 탐색 대상 Java 인터페이스 판별', () => {
+		assert.strictEqual(isLikelyJavaMapper(JAVA, 'UserMapper.java'), true);
+		assert.strictEqual(isLikelyJavaMapper('public interface UserDao { void run(); }'), true);
+		assert.strictEqual(isLikelyJavaMapper('@org.apache.ibatis.annotations.Mapper\npublic interface CustomSql { void run(); }', 'CustomSql.java'), true);
+		assert.strictEqual(isLikelyJavaMapper('public interface UserService { void run(); }', 'UserService.java'), false);
+		assert.strictEqual(isLikelyJavaMapper('// @Mapper\npublic interface UserService { void run(); }', 'UserService.java'), false);
+		assert.strictEqual(isLikelyJavaMapper('public class UserMapper { void run() {} }', 'UserMapper.java'), false);
 	});
 });

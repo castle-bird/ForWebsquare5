@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type Rea
 import { clsx } from 'clsx';
 import { DndContext, PointerSensor, useDraggable, useSensor, useSensors, type DragEndEvent, type DragMoveEvent } from '@dnd-kit/core';
 import { moveTab, orderTabs } from '../../core/links';
-export interface TabHint { title?: string; dirty?: boolean }
+export interface TabHint { title?: string; dirty?: boolean; unlinked?: boolean; error?: boolean }
 
 type Drop = { target: string; after: boolean };
 
@@ -146,7 +146,10 @@ function Tab({ name, active, hint, draggable, buttons, drop, onClick, onContextM
 		if (node) { buttons.set(name, node); } else { buttons.delete(name); }
 	}} {...draggable && { ...drag.attributes, ...drag.listeners }}
 		role="tab" aria-selected={active} title={hint?.title}
-		className={clsx({ active, markable: !!hint, dirty: hint?.dirty, dragging: drag.isDragging }, drop && `drop-${drop}`)}
+		className={clsx({
+			active, markable: !!hint, dirty: hint?.dirty, unlinked: hint?.unlinked, 'has-error': hint?.error,
+			dragging: drag.isDragging,
+		}, drop && `drop-${drop}`)}
 		style={drag.transform ? { transform: `translateX(${drag.transform.x}px)` } : undefined}
 		onClick={onClick} onContextMenu={onContextMenu}>{name}</button>;
 }

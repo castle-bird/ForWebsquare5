@@ -30,10 +30,14 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.registerCustomEditorProvider(VIEW_TYPE, new DesignerProvider(context.extensionUri, context.globalState, context.workspaceState, context.storageUri ?? context.globalStorageUri), {
 			webviewOptions: { retainContextWhenHidden: true },
 		}),
-		// 포맷 단축키(Ctrl+Alt+L): 웹뷰는 VS Code 키 바인딩으로 받아 보이는 편집기에 전달. Alt+글자 조합은 웹뷰에서 VS Code 메뉴가 열려서 피한다.
+		// 포맷 단축키(Ctrl+Alt+L)·기호로 이동(Ctrl+Shift+O): 웹뷰는 VS Code 키 바인딩으로 받아 보이는 편집기에 전달.
 		vscode.commands.registerCommand('for-websquare5.format', () => {
 			const panel = [...panels].find(p => p.active);
 			void panel?.webview.postMessage({ type: 'formatKey' } satisfies ToWebview);
+		}),
+		vscode.commands.registerCommand('for-websquare5.gotoSymbol', () => {
+			const panel = [...panels].find(p => p.active);
+			void panel?.webview.postMessage({ type: 'gotoSymbolKey' } satisfies ToWebview);
 		}),
 	);
 	registerScreenOpen(context, VIEW_TYPE);

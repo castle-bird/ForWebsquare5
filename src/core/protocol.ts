@@ -11,6 +11,7 @@ import type { LinkTab, LinkTarget } from './links';
 import type { SiblingLink } from './linkSuggest';
 import type { CodeThemeState, ThemeOverlay } from './codeTheme';
 import type { CodeOptions } from './codeOptions';
+import type { MapperLinkMark } from './mapperLink';
 
 export type PanelFont = 'ui' | 'editor';
 
@@ -21,6 +22,7 @@ export type ToWebview =
 	| { type: 'popupAck'; popup: string; ok: boolean; error?: string }
 	| { type: 'codeAck'; target: CodeTarget; ok: boolean; version: number }
 	| { type: 'formatKey' }
+	| { type: 'gotoSymbolKey' }
 	| { type: 'select'; id: string }
 	| { type: 'formatted'; target: CodeTarget; text?: string }
 	| { type: 'scriptApi'; api: ScriptApi; events: ScriptApi; error?: string }
@@ -42,6 +44,7 @@ export type ToWebview =
 	| ({ type: 'codeTheme' } & CodeThemeState)
 	| ({ type: 'codeOptions' } & CodeOptions) // 줄바꿈·합자(VS Code editor.wordWrap·fontLigatures)·SQL 방언(설정)
 	| { type: 'diagnostics'; target: CodeTarget; version: number; items: RemoteDiagnostic[] } // VS Code가 그 파일에 낸 문제(문제 탭과 같은 것). version: 연결 파일 버전
+	| { type: 'mapperLinks'; target: CodeTarget; version: number; items: MapperLinkMark[] } // Mapper ↔ 매퍼 XML 이동 표시(줄 옆 아이콘·Ctrl+hover 밑줄)
 	| { type: 'gitBase'; target: CodeTarget; text?: string } // 변경 표시 기준(Git 스테이지 내용). 없으면 표시 안 함
 	| ({ type: 'completions'; id: number } & Partial<RemoteCompletions>)
 	| { type: 'completionDetails'; id: number; items: RemoteCompletionDetail[] } // 같은 요청의 앞쪽 항목을 푼 결과(늦게 옴)

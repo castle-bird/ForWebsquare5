@@ -9,7 +9,9 @@ import { acceptCompletion, autocompletion, type CompletionSource } from '@codemi
 import { getIndentUnit, indentUnit, type LanguageSupport } from '@codemirror/language';
 import { diff } from '@codemirror/merge';
 import type { CodeChange, CodeTarget, SignatureInfo, ToExtension, ToWebview } from '../../core/protocol';
+import { extractSymbols, type CodeSymbol, type SymbolLang } from '../../core/symbols';
 import type { LintSource } from '@codemirror/lint';
+import { SymbolPicker } from '../ui/symbolPicker';
 import { fromRemote, lintFor, posAt, remoteProblemsChanged, type LintMode } from './lint';
 import { codeVars, editorBase, editorClass, followsVsCode, keepSearchMatchColors, themeOf } from './themes';
 import { baseEffect, gitChanges } from './changes';
@@ -19,6 +21,7 @@ import { minimap } from './minimap';
 import { indentGuides } from './indentGuides';
 import { searchCount } from './searchCount';
 import { blame, blameEffect } from './blame';
+import { definitionHover, mapperLinks, mapperLinksEffect } from './mapperLinks';
 import { jumped } from './jumps';
 import { restoreOnReturn } from './focus';
 import { notInComment } from './docComment';
@@ -109,13 +112,16 @@ export interface CodeEditorHandle {
 }
 
 export const CodeEditor = forwardRef<CodeEditorHandle, {
-	target: CodeTarget; lang: LanguageSupport; complete: CompletionSource; hover?: HoverSource; definition?: DefinitionSource; signature?: LocalSignatureSource; lint?: LintMode; text: string; version: number;
+	target: CodeTarget; lang: LanguageSupport; complete: CompletionSource; hover?: HoverSource; definition?: DefinitionSource; signature?: LocalSignatureSource; lint?: LintMode;
+	/** Ctrl+Shift+O 기호 빠른 이동 언어(없으면 lint 기준으로 추론) */
+	symbolLang?: SymbolLang;
+	text: string; version: number;
 	/** VS Code 언어 확장의 자동완성을 먼저 쓴다(연결 탭). 없으면 complete */
 	remote?: boolean;
 	/** 붙여넣은 뒤 VS Code 언어 확장으로 빠진 import를 넣는다(Java 연결 탭) */
 	autoImport?: boolean;
 	readOnly?: boolean; notes?: (string | undefined)[]; post(msg: ToExtension): void;
-}>(function CodeEditor({ target, lang, complete, hover, definition, signature, lint, text, version, remote = false, autoImport = false, readOnly = false, notes = [], post }, ref) {
+}>(function CodeEditor({ target, lang, complete, hover, definition, signature, lint, symbolLang, text, version, remote = false, autoImport = false, readOnly = false, notes = [], post }, ref) {
 	const host = useRef<HTMLDivElement>(null);
 	const view = useRef<EditorView>(null);
 	const source = useRef(complete);
@@ -128,9 +134,13 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 	const sync = useRef<{ base: number; inFlight: boolean; remote: boolean; conflict: boolean; queued?: [ChangeSet, Text]; formatting?: Text; formatAfter?: boolean; importsAfter?: boolean }>(
 		{ base: version, inFlight: false, remote: false, conflict: false });
 	const [conflict, setConflict] = useState(false);
+	const [symbols, setSymbols] = useState<CodeSymbol[]>();
 	/** VS Code가 낸 문제(연결 탭)와 그 연결 파일 버전 */
 	const diagnostics = useEditorStore(s => s.diagnostics[target]);
 	const remoteProblems = useRef(diagnostics);
+	const mapperLinkData = useEditorStore(s => s.mapperLinks[target]);
+	const lintRef = useRef(lint);
+	const symbolLangRef = useRef<SymbolLang | undefined>(symbolLang ?? (lint === 'js' ? 'js' : lint === 'xml' ? 'xml' : undefined));
 	const savedTheme = useEditorStore(s => s.codeTheme), themeDraft = useEditorStore(s => s.codeThemeDraft);
 	const codeTheme = useMemo(() => themeDraft ? { ...savedTheme, ...themeDraft } : savedTheme, [savedTheme, themeDraft]);
 	const gitBase = useEditorStore(s => s.gitBases[target]);
@@ -245,7 +255,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 				post({ type: 'definition', target, version, line: line.number - 1, ch: pos - line.from });
 			}
 		};
-		// VS Code처럼 Ctrl(macOS Cmd)+클릭·F12 = 정의로 이동, 커서 추가는 Alt+클릭
+		// VS Code처럼 Ctrl(macOS Cmd)+클릭·F12 = 정의로 이동, 커서 추가는 Alt+클릭. Ctrl+hover 밑줄·커서와 매퍼 줄 옆 아이콘도 함께
 		const definitionKeys: Extension = remote || definition ? [
 			EditorView.clickAddsSelectionRange.of(e => e.altKey),
 			Prec.high(keymap.of([{ key: 'F12', run: view => (void goToDefinition(view, view.state.selection.main.head), true) }])),
@@ -261,18 +271,29 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 					return true;
 				},
 			}),
+			...(remote ? [mapperLinks((view, pos) => { void goToDefinition(view, pos); })] : []),
+			definitionHover({
+				remote,
+				isXml: () => lintRef.current === 'xml',
+				hasDefinition: definition ? (state, pos) => !!definitionSource.current?.(state, pos) : undefined,
+			}),
 		] : [];
+		const openSymbols = (ed: EditorView) => {
+			const langKind = symbolLangRef.current;
+			setSymbols(langKind ? extractSymbols(ed.state.doc.toString(), langKind) : []);
+		};
+		const symbolKey = Prec.high(keymap.of([{ key: 'Mod-Shift-o', run: ed => (openSymbols(ed), true), preventDefault: true }]));
 		const editor = new EditorView({
 			parent: host.current!,
 			doc: text,
 			extensions: [
-				basicSetup, scrollPastEnd(), searchTop, selectionClass, keys, completion, indent, indentGuides(), lintFor(lint, remoteLint), gitChanges,
+				basicSetup, scrollPastEnd(), searchTop, selectionClass, keys, symbolKey, completion, indent, indentGuides(), lintFor(lint, remoteLint),
 				langConf.of(languageOf.current(lang)),
 				wrapConf.of(wordWrap ? EditorView.lineWrapping : []),
 				minimapConf.of(minimapOn ? minimap : []),
 				blameConf.of(blameOn ? blame : []),
 				hoverTooltip((view, pos, side) => hoverSource.current?.(view, pos, side) ?? remoteHoverSource?.(view, pos) ?? null),
-				definitionKeys, signatures,
+				definitionKeys, gitChanges, signatures,
 				theme.of(themeOf(codeTheme)),
 				readOnlyConf.of(EditorState.readOnly.of(readOnly)),
 				// 실행 취소·다시 실행은 CodeMirror만: VS Code 웹뷰는 키를 VS Code에도 넘겨서 문서까지 한 번 더 되돌리고
@@ -352,6 +373,12 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 				}
 				return;
 			}
+			if (data.type === 'gotoSymbolKey') {
+				if (editor.dom.offsetParent) {
+					openSymbols(editor);
+				}
+				return;
+			}
 			if (data.type === 'formatted' && data.target === target) {
 				const changes = data.text !== undefined && s.formatting === editor.state.doc ? changesTo(editor, data.text) : [];
 				s.formatting = undefined;
@@ -426,7 +453,9 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 	useEffect(() => {
 		definitionSource.current = definition;
 		signatureSource.current = signature;
-	}, [definition, signature]);
+		lintRef.current = lint;
+		symbolLangRef.current = symbolLang ?? (lint === 'js' ? 'js' : lint === 'xml' ? 'xml' : undefined);
+	}, [definition, signature, lint, symbolLang]);
 	// 처음 값은 편집기를 만들 때 이미 넣었다
 	const applied = useRef({ lang, wordWrap, minimapOn, blameOn, readOnly });
 	useEffect(() => {
@@ -488,6 +517,30 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 			load(text, version);
 		}
 	}, [text, version]);
+	// Mapper ↔ 매퍼 XML 줄 옆 아이콘·Ctrl+hover 범위: 지금 문서 버전과 맞을 때 반영(비어 있으면 지움)
+	useEffect(() => {
+		const v = view.current, s = sync.current;
+		if (!v || !remote) { return; }
+		if (!mapperLinkData || !mapperLinkData.items.length) {
+			v.dispatch({ effects: mapperLinksEffect([]) });
+		} else if (mapperLinkData.version === s.base && !s.inFlight && !s.queued && !s.conflict) {
+			v.dispatch({ effects: mapperLinksEffect(mapperLinkData.items) });
+		}
+	}, [mapperLinkData, remote, version]);
+
+	const closeSymbols = () => {
+		setSymbols(undefined);
+		view.current?.focus();
+	};
+	const jumpToSymbol = (sym: CodeSymbol) => {
+		setSymbols(undefined);
+		const editor = view.current;
+		if (!editor) { return; }
+		const from = editor.state.selection;
+		const to = EditorSelection.create([EditorSelection.range(sym.from, sym.to)]);
+		showSelection(editor, to);
+		jumped(() => showSelection(editor, from), () => showSelection(editor, to));
+	};
 
 	return <div className={editorClass(codeTheme)} style={codeVars(codeTheme)}>
 		{notes.filter(Boolean).map(n => <div key={n} className="code-banner">{n}</div>)}
@@ -497,6 +550,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
 				sync.current.conflict = false;
 				setConflict(false);
 			}}>다시 불러오기</button></div>}
+		{symbols && <SymbolPicker symbols={symbols} onChoose={jumpToSymbol} onClose={closeSymbols} />}
 		<div ref={host} className="code-host" />
 	</div>;
 });

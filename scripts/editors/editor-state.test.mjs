@@ -296,9 +296,13 @@ export default async function ({ page, clickTab }) {
 			const bars = () => {
 				const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data, out = [];
 				for (let r = 0; r < rows; r++) {
-					const y = Math.round((r * 2 + 1) * ratio);
+					const y0 = Math.floor(r * 2 * ratio), y1 = Math.min(canvas.height - 1, Math.floor((r * 2 + 2) * ratio) - 1);
 					let right = -1;
-					for (let x = canvas.width - 4 * ratio - 1; x >= 0; x--) { if (data[(y * canvas.width + x) * 4 + 3] > 0) { right = x; break; } }
+					for (let x = canvas.width - 4 * ratio - 1; x >= 0; x--) {
+						let hit = false;
+						for (let y = y0; y <= y1; y++) { if (data[(y * canvas.width + x) * 4 + 3] > 0) { hit = true; break; } }
+						if (hit) { right = x; break; }
+					}
 					out.push(right);
 				}
 				return out;

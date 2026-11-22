@@ -12,7 +12,7 @@ export default async function ({ page, clickTab }) {
 		const line = Math.min(250, Math.floor(canvas.height / ratio / 2) - 2);
 		const at = n => [...g.getImageData(Math.floor(5 * ratio), Math.floor(((n - 1) * 2 + 0.5) * ratio), 1, 1).data];
 		const first = at(1), last = at(line);
-		return first[3] > 200 && first.join(',') === last.join(',');
+		return first[3] > 80 && first.join(',') === last.join(',');
 	}, { timeout: 5000 });
 	assert.equal(await page.evaluate(() => window.editor().scrollDOM.scrollTop), 0, '스크롤 없이 미니맵 아래쪽까지 문법 색칠');
 	assert.equal(await page.evaluate(() => window.editor().state.doc.lines), 3000, '문서 내용 유지');

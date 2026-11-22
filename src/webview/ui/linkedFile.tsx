@@ -1,8 +1,8 @@
 import { Suspense, lazy, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import { clsx } from 'clsx';
-import { cleanPath, type LinkTab } from '../../core/links';
+import { cleanPath, linkTarget, type LinkTab } from '../../core/links';
 import { screenDomain, suggestLinks, type LinkSuggestion } from '../../core/linkSuggest';
-import type { LinkState, ToExtension } from '../../core/protocol';
+import type { LinkState, RemoteDiagnostic, ToExtension } from '../../core/protocol';
 import { isModKey, isUndoRedo } from '../keys';
 import { post, useEditorStore } from '../store';
 import { Menu } from './menu';
@@ -13,15 +13,23 @@ import type { TabHint } from './tabs';
 // 연결 파일 편집기는 언어별 문법(Java·HTML·CSS·SQL)이 커서 연결된 탭을 열 때 불러온다
 const LinkedEditor = lazy(() => import('./linkedEditor'));
 
-const hintOf = (state: LinkState | undefined): TabHint => ({
-	title: !state?.path ? '연결된 파일 없음 (눌러서 연결, 우클릭 메뉴)' : state.text === undefined ? `파일을 찾지 못함: ${state.path}` : state.path,
-	dirty: state?.dirty,
-});
+const hintOf = (state: LinkState | undefined, items: RemoteDiagnostic[] | undefined): TabHint => {
+	const linked = !!state?.path && state.text !== undefined;
+	const errors = linked ? (items?.filter(i => i.severity === 'error').length ?? 0) : 0;
+	const base = !state?.path ? '연결된 파일 없음 (눌러서 연결, 우클릭 메뉴)' : state.text === undefined ? `파일을 찾지 못함: ${state.path}` : state.path;
+	return {
+		title: errors ? `${base} (오류 ${errors})` : base,
+		dirty: state?.dirty,
+		unlinked: !linked,
+		error: errors > 0,
+	};
+};
 
-/** 아래 탭에 붙일 연결 탭들: 탭 내용·툴팁(저장 안 함 ●)·우클릭 메뉴(열기·변경·해제·삭제) */
+/** 아래 탭에 붙일 연결 탭들: 탭 내용·툴팁(저장 안 함 ●·미연결 흐림·오류/경고 점)·우클릭 메뉴(열기·변경·해제·삭제) */
 export function useLinkTabs(activeTab: string, loading: ReactNode) {
 	const links = useEditorStore(s => s.links);
 	const tabs = useEditorStore(s => s.linkTabs);
+	const diagnostics = useEditorStore(s => s.diagnostics);
 	const [menu, setMenu] = useState<{ x: number; y: number; tab: LinkTab }>();
 	const onTabMenu = (name: string, e: MouseEvent) => {
 		const tab = tabs.find(t => t.label === name);
@@ -40,7 +48,7 @@ export function useLinkTabs(activeTab: string, loading: ReactNode) {
 		keys: Object.fromEntries(tabs.map(t => [t.label, `link:${t.id}`])),
 		items: Object.fromEntries(tabs.map(t => [t.label,
 			links[t.id] ? <LinkedFile tab={t} state={links[t.id]} active={activeTab === t.label} /> : loading])),
-		hints: Object.fromEntries(tabs.map(t => [t.label, hintOf(links[t.id])])),
+		hints: Object.fromEntries(tabs.map(t => [t.label, hintOf(links[t.id], diagnostics[linkTarget(t.id)]?.items)])),
 		onTabMenu,
 		menu: menu && <Menu key={`${menu.x},${menu.y}`} x={menu.x} y={menu.y} onClose={() => setMenu(undefined)}>
 			<button role="menuitem" onClick={() => run({ type: 'openLink', kind })}>VS Code에서 열기</button>

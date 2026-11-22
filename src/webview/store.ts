@@ -4,6 +4,7 @@ import { DEFAULT_LINK_EXTS, DEFAULT_LINK_TABS, type LinkTab } from '../core/link
 import type { CodeThemeState } from '../core/codeTheme';
 import type { SiblingLink } from '../core/linkSuggest';
 import type { Blame } from '../core/blame';
+import type { MapperLinkMark } from '../core/mapperLink';
 import { DEFAULT_CODE_OPTIONS, type CodeOptions } from '../core/codeOptions';
 import { annotate, findNode, isWs, isXf, localName, nodeAt, parseXml, pathTo, type XmlNode } from '../core/xmlModel';
 import type { DropPosition } from '../core/paste';
@@ -70,6 +71,8 @@ interface EditorState {
 	gitBases: Partial<Record<CodeTarget, string>>;
 	/** VS Code가 연결 파일에 낸 문제(편집기가 뜨기 전에 와도 남도록 여기에) */
 	diagnostics: Partial<Record<CodeTarget, Extract<ToWebview, { type: 'diagnostics' }>>>;
+	/** Mapper ↔ 매퍼 XML 이동 자리(편집기가 뜨기 전에 와도 남도록 여기에) */
+	mapperLinks: Partial<Record<CodeTarget, { version: number; items: MapperLinkMark[] }>>;
 	/** 연결 탭 경로 입력의 파일 검색 목록(탭 id별) */
 	linkFiles: Record<string, string[]>;
 	/** 지금 화면 파일 이름(확장자 없이): 연결 탭 추천의 기준 */
@@ -196,6 +199,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 	blames: {},
 	paletteFavorites: [],
 	diagnostics: {},
+	mapperLinks: {},
 	linkFiles: {},
 	linkScreen: '',
 	linkSiblings: {},
@@ -258,6 +262,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 			set({ gitBases: { ...get().gitBases, [incoming.target]: incoming.text } });
 		} else if (incoming.type === 'diagnostics') {
 			set({ diagnostics: { ...get().diagnostics, [incoming.target]: incoming } });
+		} else if (incoming.type === 'mapperLinks') {
+			set({ mapperLinks: { ...get().mapperLinks, [incoming.target]: { version: incoming.version, items: incoming.items } } });
 		} else if (incoming.type === 'codeTheme') {
 			const { type: _type, ...theme } = incoming;
 			set({ codeTheme: theme });

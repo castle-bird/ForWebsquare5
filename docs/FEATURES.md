@@ -66,6 +66,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 - XML·WebSquare API·공통 JS 자동완성과 마우스 오버 설명(공통 JS·같은 Script 함수의 JSDoc 포함). 공통 JS를 저장하면 바로 반영됩니다
 - 미니맵(막대형): 글자 대신 낱말마다 색 막대로 코드 흐름과 오류·경고 줄(오른쪽 끝은 파일 전체에서의 위치)을 보여 줍니다. 끌거나 클릭해 이동, 톱니바퀴 → 코드 미니맵으로 켜고 끔(모든 화면 공통, 기본 켬)
 - 정의로 이동(Ctrl+클릭·F12): 같은 Script 함수는 그 자리로, 공통 JS 함수는 그 파일을 VS Code로 엽니다. 커서 추가는 Alt+클릭
+- 기호로 이동(Ctrl+Shift+O): 현재 코드 탭의 함수(`scwin.*`)·클래스/메서드(Java)·SQL ID(MyBatis XML)·요소 ID(Source XML)·CSS 선택자를 퍼지 검색해 바로 이동합니다
 - 파라미터 힌트: `(`·`,`를 치거나 Ctrl+Shift+Space를 누르면 함수 모양과 지금 파라미터를 보여 줍니다(WebSquare API 문서·JSDoc)
 - 문법 오류 표시, 포맷(단축키 Ctrl+Alt+L. VS Code 기본 포맷 단축키 Shift+Alt+F와 겹치지 않게 IntelliJ와 같은 키를 썼고, VS Code 키보드 단축키에서 `WebSquare5: 코드 탭 포맷`을 찾아 바꿀 수 있습니다. VS Code에 설정한 포매터, 없으면 VS Code 내장), 검색(Ctrl+F, 입력칸 옆에 몇 번째/찾은 개수 예: 2/10. 편집기를 클릭해도 순번은 그대로, Enter는 커서 다음 일치로), 줄바꿈(VS Code 설정을 따름), 다시 하기 Ctrl+Y·Ctrl+Shift+Z
 - 코드 편집기 테마(탭 줄 오른쪽 톱니바퀴 메뉴): "VS Code 따라가기"(지금 VS Code 색 테마의 문법 색), "IntelliJ Dark"·"IntelliJ Light"·"One Dark"·"One Light"·"GitHub Light Default"·"GitHub Dark Default". Git 변경 줄 표시
@@ -82,11 +83,11 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 
 화면 탭에서 Java·XML·SQL 등 연결 파일을 열어 편집합니다. 탭 목록과 순서는 직접 바꿀 수 있고, 탭 줄 앞쪽 화살표로 탭 줄을 위·아래로 옮길 수 있습니다(기본 위).
 
-- 기본 탭은 Controller·Service·ServiceImpl·Mapper·Mybatis입니다. 편집기 탭 줄이 좁으면 연결 탭 이름이 …로 줄어듭니다(마우스를 올리면 전체)
+- 기본 탭은 Controller·Service·ServiceImpl·Mapper·Mybatis입니다. 파일이 아직 연결되지 않은 탭은 흐리게, 오류가 있는 탭은 빨간 글자·점으로 표시되며, 탭 줄이 좁으면 이름이 …로 줄어듭니다(마우스를 올리면 전체 경로와 오류 개수)
 - 작업 폴더 안 파일을 이름으로 검색해 연결
 - Submission 팝업의 요청 URL에서 "Controller 이동"을 누르면 팝업을 닫고 그 URL을 처리하는 Controller 메서드를 엽니다(메서드 이름이 선택됨). 작업 폴더 `.java`의 `@RequestMapping`·`@GetMapping`·`@PostMapping` 등을 직접 읽어 찾으므로 Spring 확장이나 Java 서버가 없어도 됩니다(클래스 경로 + 메서드 경로, `{변수}`, 앞에 붙은 컨텍스트 경로, `.do` 등 확장자 차이). 여럿이면 목록에서 고르고, 그 파일이 이 화면의 연결 탭에 연결돼 있으면 그 탭에서, 아니면 VS Code 편집기로 엽니다. 맞는 매핑이 없으면 화면 알림(토스트)으로 알립니다
 - 연결 전 탭에는 화면 파일 이름의 도메인(`userList01.xml` → `userList`)으로 시작하는 파일이 역할별(Controller·Service·ServiceImpl·Mapper·MyBatis·Validator·VO)로 최대 10개 추천되고, 그 탭에 맞는 역할이 위에 옵니다. 눌러서 연결합니다. 그 아래에는 같은 폴더의 다른 화면이 같은 탭에 연결해 둔 파일이 많이 쓴 순으로 최대 5개 추천됩니다(이 PC에서 연결해 둔 것만)
-- Mapper 인터페이스(`*Mapper.java`)의 메서드 이름에서 Ctrl+클릭·F12를 누르면 MyBatis 매퍼 XML의 같은 `id` 문(select·insert·update·delete)으로, 매퍼 XML의 `id` 값에서 누르면 Mapper 메서드로 이동합니다. 인터페이스 이름 ↔ `namespace` 값도 서로 이동합니다. XML의 `namespace`가 인터페이스 전체 이름(패키지 포함)과 같은 파일을 작업 폴더에서 직접 찾으므로 MyBatis 확장이 없어도 됩니다. 이동할 파일이 이 화면의 연결 탭에 연결돼 있으면 그 탭에서, 아니면 VS Code 편집기로 엽니다(VS Code 편집기에서 열어 둔 Mapper·XML에서도 동작)
+- Mapper 인터페이스(`*Mapper.java`)의 메서드 이름에서 Ctrl+클릭·F12를 누르면 MyBatis 매퍼 XML의 같은 `id` 문(select·insert·update·delete)으로, 매퍼 XML의 `id` 값에서 누르면 Mapper 메서드로 이동합니다. 인터페이스 이름 ↔ `namespace` 값도 서로 이동합니다. 연결된 줄 왼쪽에는 원형 `M` 아이콘이 표시되어 클릭만으로 바로 이동할 수 있고(VS Code 편집기에서는 CodeLens·마우스 오버 링크로도 이동), Ctrl을 누른 채 메서드·문 `id`에 마우스를 올리면 밑줄과 포인터 커서로 이동 가능함을 표시합니다. XML의 `namespace`가 인터페이스 전체 이름(패키지 포함)과 같은 파일을 작업 폴더에서 직접 찾으므로 MyBatis 확장이 없어도 됩니다. 이동할 파일이 이 화면의 연결 탭에 연결돼 있으면 그 탭에서, 아니면 VS Code 편집기로 엽니다(VS Code 편집기에서 열어 둔 Mapper·XML에서도 동작)
 - VS Code에 설치된 언어 확장(Java 등)의 자동완성·포맷·마우스 오버 설명(Javadoc)·정의로 이동(Ctrl+클릭·F12)·파라미터 힌트 사용
 - Java import 목록은 IntelliJ처럼 파일을 열면 `import …` 한 줄로 접혀 있고, 누르거나 왼쪽 접기 표시로 펼칩니다
 - Java 탭은 코드를 붙여 넣거나 포맷하면 빠진 import를 자동으로 넣습니다(Language Support for Java 사용). 안 쓰는 import는 지우지 않고, 후보가 여럿인 클래스는 건너뜁니다

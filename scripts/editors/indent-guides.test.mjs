@@ -32,7 +32,7 @@ export default async function ({ page, clickTab, reset }) {
 				if (magenta) { run++; } else if (run) { widths.push(run); run = 0; }
 			}
 			return widths;
-		}, png.toString('base64'), clip, scale);
+		}, Buffer.from(png).toString('base64'), clip, scale);
 		console.log(`Indent guides ${scale * 100}%: ${widths.join(',')} physical pixels`);
 		assert.equal(widths.length, 4, '들여쓰기 단계별 안내선 유지');
 		assert.ok(widths.every(w => w === 1), `${scale * 100}% 안내선 두께: ${widths}`);
