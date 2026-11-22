@@ -6,15 +6,11 @@ export default async function ({ page }) {
 		window.sent.length = 0;
 		window.send({ type: 'document', version: 90, text, root: window.parseXml(text), script: { text: '' } });
 	});
-	const button = 'button[aria-label="데이터 흐름"]';
-	await page.waitForFunction(selector => !document.querySelector(selector)?.disabled, {}, button);
-	await page.click(button);
-
-	// ERD 탭으로 화면이 전환되고, 폴더가 없으면 기본 위치를 요청한 뒤 기존 테이블과 겹치지 않게 데이터 흐름을 그린다
+	// 메인 탭 줄에는 데이터 흐름 버튼이 없고, ERD 탭 상단 바의 버튼으로 기존 테이블과 겹치지 않게 데이터 흐름을 그린다
+	assert.equal(await page.$('.tab-bar button[aria-label="데이터 흐름"]'), null, '메인 탭 줄에는 버튼 없음');
+	await page.evaluate(() => window.tab('ERD').click());
 	await page.waitForFunction(() => window.tab('ERD')?.getAttribute('aria-selected') === 'true');
 	await page.waitForFunction(() => window.sent.some(m => m.type === 'loadUsedTables'));
-	await page.evaluate(() => window.send({ type: 'usedTables' }));
-	await page.waitForFunction(() => window.sent.some(m => m.type === 'chooseTablesFolder' && m.pick === false));
 	await page.evaluate(() => {
 		window.lastSave = () => window.sent.findLast(m => m.type === 'saveUsedTables')?.data;
 		window.send({
@@ -22,6 +18,9 @@ export default async function ({ page }) {
 			data: { tables: [{ id: 't1', name: 'TB_BASE', desc: '', crud: [], columns: [], keysOnly: false, color: '', x: 80, y: 128 }], links: [], memos: [], groups: [], shapes: [] },
 		});
 	});
+	const button = '.used-tables-bar button[aria-label="데이터 흐름"]';
+	await page.waitForSelector(button);
+	await page.click(button);
 	await page.waitForFunction(() => window.lastSave()?.groups.length === 6, { timeout: 3000 });
 	const saved = await page.evaluate(() => window.lastSave());
 	assert.equal(saved.tables.length, 1, '기존 테이블 유지');

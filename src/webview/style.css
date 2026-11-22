@@ -147,8 +147,8 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .design-layout { height: 100%; }
 .design-canvas { height: 100%; box-sizing: border-box; padding: 12px; display: flex; flex-direction: column; }
 .design-canvas > div { flex: 1; min-height: 0; }
-.tab-bar .tab-panel-right, .tab-bar .tab-palette, .tab-bar .tab-settings, .tab-bar .tab-run, .tab-bar .tab-grid-create, .tab-bar .tab-data-flow { padding: 4px 8px; }
-.tab-bar :is(.tab-run, .tab-grid-create, .tab-data-flow):disabled { opacity: .35; cursor: default; }
+.tab-bar .tab-panel-right, .tab-bar .tab-palette, .tab-bar .tab-settings, .tab-bar .tab-run, .tab-bar .tab-grid-create { padding: 4px 8px; }
+.tab-bar :is(.tab-run, .tab-grid-create):disabled { opacity: .35; cursor: default; }
 .tab-bar .tab-palette:disabled { opacity: .35; cursor: default; }
 .palette-pane { display: flex; flex-direction: column; height: 100%; background: var(--vscode-sideBar-background); }
 /* 패널 머리: 탭 줄(.tab-bar)과 같은 33px(선 포함)·아래 선, 글자 시작도 탭 글자(여백 6 + 12)와 같은 18px → 옆 패널과 가로선이 이어진다 */

@@ -82,25 +82,12 @@ function useUsedTables() {
 	return { status, data, change, undo: () => step(true), redo: () => step(false), canUndo: past.current.length > 0, canRedo: future.current.length > 0 };
 }
 
-export function UsedTablesPane({ root, flowTrigger = 0 }: { root?: XmlNode; flowTrigger?: number }) {
+export function UsedTablesPane({ root }: { root?: XmlNode }) {
 	const { status, data, change, undo, redo, canUndo, canRedo } = useUsedTables();
-	const seenTrigger = useRef(0);
-	const pendingFlow = useRef(false);
 	const [focusIds, setFocusIds] = useState<{ ids: string[]; key: number }>();
 
-	if (flowTrigger > seenTrigger.current) {
-		seenTrigger.current = flowTrigger;
-		pendingFlow.current = true;
-	}
-
-	useEffect(() => {
-		if (!pendingFlow.current || !status) { return; }
-		if (!status.folder) {
-			post({ type: 'chooseTablesFolder', pick: false });
-			return;
-		}
+	const addDataFlow = useCallback(() => {
 		if (!data) { return; }
-		pendingFlow.current = false;
 		const flows = dataFlow(root);
 		if (!flows.length) {
 			useEditorStore.setState({ toast: { message: '이 화면에는 Submission이 없습니다.', key: Date.now() } });
@@ -111,7 +98,7 @@ export function UsedTablesPane({ root, flowTrigger = 0 }: { root?: XmlNode; flow
 			change(next);
 		}
 		setFocusIds({ ids, key: Date.now() });
-	}, [flowTrigger, status, data, root, change]);
+	}, [data, root, change]);
 
 	if (!status) { return <EmptyState kind="loading">불러오는 중…</EmptyState>; }
 	if (!status.folder) {
@@ -132,6 +119,9 @@ export function UsedTablesPane({ root, flowTrigger = 0 }: { root?: XmlNode; flow
 		<div className="used-tables-bar">
 			<span className="title">사용 테이블</span>
 			<span className="where" title={status.file}>{status.file}</span>
+			<button type="button" className="btn-tool" title="현재 화면의 Submission·dataList·dataMap·Controller 흐름 그리기" aria-label="데이터 흐름" onClick={addDataFlow}>
+				<span className="codicon codicon-repo-forked" aria-hidden="true" />데이터 흐름
+			</button>
 			<button type="button" className="btn-tool" onClick={() => post({ type: 'chooseTablesFolder', pick: true })}>저장 위치 변경</button>
 		</div>
 		{status.error && <p className="error" role="alert">{status.error}</p>}

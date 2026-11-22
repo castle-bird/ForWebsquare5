@@ -128,7 +128,6 @@ function App() {
 		grid?: { hasFooter: boolean; at: number; onColumn: boolean; column?: { index: number; cells: number[]; left: boolean; right: boolean } } }>();
 	const [gridBind, setGridBind] = useState<{ grid: number; list: number }>();
 	const [gridCreate, setGridCreate] = useState<{ target: XmlNode; version: number }>();
-	const [flowTrigger, setFlowTrigger] = useState(0);
 	const linkTabs = useLinkTabs(activeTab, LOADING);
 	// 보고 있던 연결 탭이 지워지면 Design으로
 	const shownTab = FIXED_TABS.includes(activeTab) || activeTab === ERD_TAB || linkTabs.labels.includes(activeTab) ? activeTab : 'Design';
@@ -318,8 +317,7 @@ function App() {
 						onClick={() => { if (rightPanel.current?.isCollapsed()) { rightPanel.current.expand(); } else { rightPanel.current?.collapse(); } }} /></>} start={<><button className={`tab-palette codicon codicon-layout-sidebar-left${paletteOpen ? ' active' : ''}`}
 						title={paletteOpen ? '팔레트 접기' : '팔레트 펼치기'} aria-label="팔레트" aria-expanded={paletteOpen} draggable={false} disabled={shownTab !== 'Design'} onClick={() => setPaletteOpen(open => !open)} />
 						<button draggable={false} className={`tab-move codicon codicon-arrow-${otherSide === 'top' ? 'up' : 'down'}`}
-						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} /></>} beforePinned={<><button className="tab-data-flow codicon codicon-repo-forked" title="데이터 흐름 (dataList·dataMap ↔ Submission ↔ Controller)" aria-label="데이터 흐름" draggable={false} disabled={!model}
-								onClick={() => { showTab(ERD_TAB); setFlowTrigger(n => n + 1); }} /><button className="tab-grid-create codicon codicon-table" title="그리드 만들기" aria-label="그리드 만들기" disabled={shownTab !== 'Design' || !body || !doc} onClick={() => {
+						title={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} aria-label={`탭을 ${otherSide === 'top' ? '위' : '아래'}로`} onClick={() => setTabPosition(otherSide)} /></>} beforePinned={<><button className="tab-grid-create codicon codicon-table" title="그리드 만들기" aria-label="그리드 만들기" disabled={shownTab !== 'Design' || !body || !doc} onClick={() => {
 								const target = root && insertTarget(root, selected === undefined ? undefined : pathTo(root, selected));
 								if (target && doc) { setGridCreate({ target, version: doc.version }); }
 							}} /><button className="tab-run codicon codicon-play" title="현재 화면 브라우저로 보기" aria-label="현재 화면 브라우저로 보기" draggable={false} disabled={shownTab !== 'Design' || !body}
@@ -343,7 +341,7 @@ function App() {
 							: head && doc ? <InfoPane head={head} onAttr={(name, value) => editAttr(name, value, head.index)}
 								onHistory={rows => post({ type: 'editHistory', version: doc.version, index: head.index, rows })} />
 							: doc ? <EmptyState kind="warning">head가 없는 화면입니다.</EmptyState> : LOADING,
-						[ERD_TAB]: <Suspense fallback={LOADING}><UsedTablesPane root={root} flowTrigger={flowTrigger} /></Suspense>,
+						[ERD_TAB]: <Suspense fallback={LOADING}><UsedTablesPane root={root} /></Suspense>,
 						Script: doc ? <CodeEditor ref={scriptRef} target="script" lang={scriptLanguage} complete={jsTools.complete} hover={jsTools.hover} definition={jsTools.definition} signature={jsTools.signature} lint="js" text={doc.script.text} version={doc.version}
 							readOnly={!!doc.script.note} notes={[api?.error, modules?.error, doc.script.note]} post={post} /> : LOADING,
 						Source: doc ? <CodeEditor target="source" lang={XML} complete={xmlComplete} hover={xmlHoverSource} lint="xml" text={doc.text} version={doc.version} post={post} /> : LOADING,

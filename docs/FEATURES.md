@@ -24,7 +24,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 
 ## 데이터 흐름
 
-- **데이터 흐름**: 탭 줄 오른쪽 그리드 만들기 왼쪽의 버튼을 누르면 ERD 탭으로 이동하며 현재 화면의 Submission 관계를 기존 테이블 영역과 겹치지 않는 오른쪽 빈자리에 그룹과 도형으로 그립니다. Submission마다 파란 그룹(이름: Submission ID)으로 묶고, 그 안에 `Request`(빨강)·`Response`(초록) 그룹을 두며, 가운데 `Controller` 도형(요청 URL)과 요청·응답 `dataMap`(`{}`)·`dataList`(`[]`) 도형(회색)을 화살표로 이어 보여 줍니다. `Controller` 도형을 우클릭해 `Controller 이동`을 누르면 그 URL을 처리하는 Controller 메서드를 엽니다. 그려진 그룹·도형·선은 일반 ERD 항목처럼 옮기거나 수정해 JSON에 저장할 수 있으며, 위치를 옮긴 뒤 다시 눌러도 커스텀 위치가 유지됩니다.
+- **데이터 흐름**: ERD 탭 상단 바의 `데이터 흐름` 버튼을 누르면 현재 화면의 Submission 관계를 기존 테이블 영역과 겹치지 않는 오른쪽 빈자리에 그룹과 도형으로 그립니다. Submission마다 파란 그룹(이름: Submission ID)으로 묶고, 그 안에 `Request`(빨강)·`Response`(초록) 그룹을 두며, 가운데 `Controller` 도형(요청 URL)과 요청·응답 `dataMap`(`{}`)·`dataList`(`[]`) 도형(회색)을 화살표로 이어 보여 줍니다. `Controller` 도형을 우클릭해 `Controller 이동`을 누르면 그 URL을 처리하는 Controller 메서드를 엽니다. 그려진 그룹·도형·선은 일반 ERD 항목처럼 옮기거나 수정해 JSON에 저장할 수 있으며, 위치를 옮긴 뒤 다시 눌러도 커스텀 위치가 유지됩니다.
 
 ## 그리드
 
