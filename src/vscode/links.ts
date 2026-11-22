@@ -7,7 +7,7 @@ import { codeOptions } from './codeOptions';
 import { cleanPath, linkIdOf, linkProblem, linkTarget, type LinkTab } from '../core/links';
 import { errorMessage } from '../core/errors';
 import { SIBLING_LIMIT, siblingLinks } from '../core/linkSuggest';
-import { serial } from '../project/paths';
+import { GENERATED_DIRS, serial } from '../project/paths';
 import type { CodeChange, CodeTarget, ToExtension, ToWebview } from '../core/protocol';
 import { closeAutoTabs, isOpenByUser, registerAutoTabs } from './autoTabs';
 import { RESOLVE, remoteCompletions, remoteDefinition, remoteHover, remoteSignature } from './completion';
@@ -40,6 +40,19 @@ const clearFoundCache = () => {
 	foundCache = undefined;
 	folderFilesCache.clear();
 };
+const IGNORED_TREE_DIR = new RegExp(`(^|[\\\\/])(${GENERATED_DIRS}|out|_wpack_|_wpackbabel_)([\\\\/]|$)`, 'i');
+const onTreeChange = (uri: vscode.Uri) => {
+	if (uri.scheme === 'file') {
+		if (IGNORED_TREE_DIR.test(vscode.workspace.asRelativePath(uri, false))) {
+			return;
+		}
+		const ext = path.extname(uri.fsPath).toLowerCase();
+		if (ext && !linkExts().includes(ext)) {
+			return;
+		}
+	}
+	clearFoundCache();
+};
 
 export function registerLinks(context: vscode.ExtensionContext): void {
 	workspaceState = context.workspaceState;
@@ -47,8 +60,8 @@ export function registerLinks(context: vscode.ExtensionContext): void {
 	registerLinkTabs(context);
 	registerAutoTabs(context, uri => used.has(uri));
 	const treeWatcher = vscode.workspace.createFileSystemWatcher('**/*', false, true, false);
-	treeWatcher.onDidCreate(clearFoundCache);
-	treeWatcher.onDidDelete(clearFoundCache);
+	treeWatcher.onDidCreate(onTreeChange);
+	treeWatcher.onDidDelete(onTreeChange);
 	context.subscriptions.push(changed, treeWatcher,
 		vscode.workspace.onDidRenameFiles(e => { clearFoundCache(); void followRenames(e.files); }),
 		vscode.workspace.onDidChangeWorkspaceFolders(clearFoundCache),

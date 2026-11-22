@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { isScreen, parseXml } from '../core/xmlModel';
+import { WEBSQUARE_NS, isScreen, parseXml } from '../core/xmlModel';
 import { errorMessage } from '../core/errors';
 import { GENERATED_DIRS, findWebRoot, serial } from '../project/paths';
 import { convert, disposeWpack, publish, readWpackConfig, warmWpack } from '../project/wpack';
@@ -66,6 +66,12 @@ function watchScreenFiles(): vscode.Disposable {
 async function wpackConvert(uri: vscode.Uri, xml: string, fromDisk = false): Promise<void> {
 	const file = uri.fsPath;
 	if (uri.scheme !== 'file' || !/\.xml$/i.test(file)) {
+		return;
+	}
+	if (fromDisk && wpackDone.get(file) === xml) {
+		return;
+	}
+	if (!xml.includes(WEBSQUARE_NS)) {
 		return;
 	}
 	const webRoot = await findWebRoot(file);

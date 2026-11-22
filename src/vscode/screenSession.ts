@@ -67,9 +67,10 @@ export class ScreenSession {
 	private defsNow: ComponentDef[] | undefined;
 	private earlySent = false;
 	private definitions: ReturnType<typeof loadDefinitions>;
-	private api: ReturnType<ScreenSession['loadApi']>;
+	private api?: ReturnType<ScreenSession['loadApi']>;
 	private readonly styles: ReturnType<typeof loadStyles>;
-	private modules: ReturnType<typeof loadModules>;
+	private modules?: ReturnType<typeof loadModules>;
+	private secondaryStarted = false;
 	private readonly udcs: Promise<Set<string>>;
 	/** 문서 보내기는 wframe 화면 읽기 등으로 걸리는 시간이 다르다: 늦게 끝난 옛 요청이 새 문서를 덮지 않게 마지막 요청만 보낸다 */
 	private latest = 0;
@@ -80,7 +81,7 @@ export class ScreenSession {
 	 * 화면 XML(Source·Script)과 연결 파일은 따로 줄 세운다(느린 Java 포맷이 화면 편집을 막지 않게)
 	 */
 	private readonly codeQueues = new Map<string, Promise<unknown>>();
-	private readonly timers: { document?: NodeJS.Timeout; git?: NodeJS.Timeout; modules?: NodeJS.Timeout } = {};
+	private readonly timers: { document?: NodeJS.Timeout; git?: NodeJS.Timeout; modules?: NodeJS.Timeout; early?: NodeJS.Timeout } = {};
 	private readonly browserPreview: BrowserPreview;
 	private readonly links: LinkedFiles;
 	private readonly usedTables: UsedTablesStore;
@@ -91,9 +92,7 @@ export class ScreenSession {
 		private readonly webRoot: string, private readonly host: SessionHost) {
 		this.browserPreview = new BrowserPreview(document, panel.webview, webRoot, on => void this.post({ type: 'browserPreview', on }));
 		this.definitions = this.trackDefinitions();
-		this.api = this.loadApi();
 		this.styles = loadStyles(document, panel.webview, webRoot);
-		this.modules = loadModules(webRoot);
 		this.udcs = udcNames(webRoot).catch(() => new Set<string>());
 		this.links = new LinkedFiles(document, this.post);
 		this.usedTables = new UsedTablesStore(document.uri, host.workspaceState, vscode.Uri.joinPath(host.tablesFolder, 'used-tables'), this.post);
@@ -101,7 +100,7 @@ export class ScreenSession {
 		// 공통 JS(config.xml engine module)·config.xml이 저장되면 다시 읽어 자동완성·설명에 반영. 어떤 .js가 공통인지는 config.xml이 정하므로 다 받고 모아서 다시 읽는다
 		const moduleWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(webRoot), '{**/*.js,websquare/config.xml}'));
 		const reloadModules = (uri: vscode.Uri) => {
-			if (NOT_MODULE_DIR.test(path.relative(webRoot, uri.fsPath))) {
+			if ((!this.modules && !this.secondaryStarted) || NOT_MODULE_DIR.test(path.relative(webRoot, uri.fsPath))) {
 				return;
 			}
 			clearTimeout(this.timers.modules);
@@ -178,6 +177,14 @@ export class ScreenSession {
 
 	private loadApi() {
 		return resolvePath('apiDocumentationPath', this.document.uri, this.webRoot).then(loadApiDocs);
+	}
+
+	private ensureApi() {
+		return (this.api ??= this.loadApi());
+	}
+
+	private ensureModules() {
+		return (this.modules ??= loadModules(this.webRoot));
 	}
 
 	private reloadDefinitions() {
@@ -271,34 +278,43 @@ export class ScreenSession {
 
 	private ready() {
 		const post = this.post;
+		clearTimeout(this.timers.early);
+		this.secondaryStarted = false;
 		void post({ type: 'tabOrder', order: tabOrder() ?? [] });
 		void post({ type: 'tabPosition', position: tabPosition() });
 		void post({ type: 'panelFont', font: panelFont() });
 		void post({ type: 'minimap', on: minimapOn() });
 		void post({ type: 'animation', on: animationOn() });
 		void post({ type: 'codeBlame', on: blameOn() });
-		this.xmlBlame.schedule(0);
 		void post({ type: 'paletteFavorites', keys: paletteFavorites(this.host.globalState) });
 		void post({ type: 'codeTheme', ...codeTheme() });
 		void post({ type: 'codeOptions', ...codeOptions() });
 		this.bases = {};
-		void this.sendBases();
-		void this.links.reload(undefined, true);
-		void this.api.then(result => post({ type: 'scriptApi', ...result }));
-		void this.modules.then(post);
+		const startSecondary = () => {
+			if (this.secondaryStarted || this.disposed) { return; }
+			this.secondaryStarted = true;
+			void this.sendBases();
+			void this.links.reload(undefined, true);
+			this.xmlBlame.schedule(0);
+			void this.ensureApi().then(result => post({ type: 'scriptApi', ...result }));
+			void this.ensureModules().then(post);
+		};
 		// 정의가 늦으면(설치 폴더 자동 탐색·디스크가 바쁠 때) 기다리지 않고 문서부터 보여 준다. 정의가 오면 아래에서 다시 보낸다
-		const early = setTimeout(() => void this.styles.then(s => {
-			if (this.defsNow) { return; }
+		this.timers.early = setTimeout(() => void this.styles.then(async s => {
+			if (this.defsNow || this.disposed) { return; }
 			this.earlySent = true;
 			void post(s);
 			void post({ type: 'definitions', defs: [], error: 'WebSquare5 컴포넌트 정의를 불러오는 중입니다…' });
-			return this.sendDocument();
+			await this.sendDocument();
+			startSecondary();
 		}), 1000);
-		void Promise.all([this.definitions, this.styles]).then(([d, s]) => {
-			clearTimeout(early);
+		void Promise.all([this.definitions, this.styles]).then(async ([d, s]) => {
+			clearTimeout(this.timers.early);
+			this.timers.early = undefined;
 			void post({ type: 'definitions', ...d });
 			void post(s);
-			return this.sendDocument();
+			await this.sendDocument();
+			startSecondary();
 		});
 	}
 
@@ -373,7 +389,7 @@ export class ScreenSession {
 		},
 		// Script 정의로 이동(공통 JS): config.xml에서 읽은 공통 JS 목록에 있는 경로만 연다
 		openModule: msg => {
-			void this.modules.then(async ({ files }) => {
+			void this.ensureModules().then(async ({ files }) => {
 				if (!files.some(f => f.path === msg.path)) { return; }
 				const range = new vscode.Range(msg.line, msg.ch, msg.endLine, msg.endCh);
 				await vscode.window.showTextDocument(vscode.Uri.file(fromWebPath(this.webRoot, msg.path, ENGINE_PAGE)), { selection: range });
@@ -425,6 +441,7 @@ export class ScreenSession {
 		clearTimeout(this.timers.document);
 		clearTimeout(this.timers.git);
 		clearTimeout(this.timers.modules);
+		clearTimeout(this.timers.early);
 		this.xmlBlame.dispose();
 		this.browserPreview.dispose();
 		this.subs.forEach(s => s.dispose());

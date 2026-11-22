@@ -5,14 +5,19 @@ import {
 	isLikelyJavaMapper, javaHitAt, javaPlace, lineColAt, parseJavaMapper, parseXmlMapper, xmlHitAt, xmlPlace,
 	type MapperLinkMark, type Named,
 } from '../core/mapperLink';
+import { mapLimit } from '../project/paths';
 
 /** 빌드 산출물·의존성 폴더는 찾지 않는다 */
 const EXCLUDE = '{**/target/**,**/build/**,**/bin/**,**/out/**,**/node_modules/**,**/.git/**}';
 const MAX_FILES = 20000;
+const CONCURRENCY = 32;
+const MAPPER_PATH_HINT = /mapper|sql|mybatis|dao|query|repository/i;
 const OPEN_CMD = 'for-websquare5.openMapperTarget';
 
 /** 파일마다 읽은 매퍼 XML namespace(수정 시각이 같으면 다시 읽지 않는다). 매퍼가 아니면 '' */
 const namespaces = new Map<string, { mtime: number; namespace: string }>();
+/** 같은 문서·같은 버전의 중복 링크 계산을 합친다 */
+const resolvedCache = new Map<string, { version: number; promise: Promise<ResolvedMapperLink[]> }>();
 
 interface ResolvedMapperLink extends MapperLinkMark {
 	targetUri: vscode.Uri;
@@ -50,25 +55,57 @@ const scope = (doc: vscode.TextDocument, glob: string) => {
 /** 영문·숫자만 소문자로: UserMapper·user_mapper·user-mapper.xml 비교용 */
 const plain = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-/** namespace가 fqcn인 매퍼 XML. 이름이 인터페이스와 닮은 파일을 먼저 읽고, 없을 때만 나머지를 읽는다 */
+/** namespace가 fqcn인 매퍼 XML. 캐시 → 이름 유사 파일 → 매퍼 경로 힌트 → 나머지 XML 순으로 찾는다 */
 async function mapperXmls(doc: vscode.TextDocument, fqcn: string): Promise<vscode.Uri[]> {
+	const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
+	const cached = [...namespaces.entries()]
+		.filter(([, v]) => v.namespace === fqcn)
+		.map(([k]) => vscode.Uri.parse(k))
+		.filter(uri => !folder || vscode.workspace.getWorkspaceFolder(uri)?.uri.toString() === folder.uri.toString());
+	if (cached.length) {
+		const verified = (await mapLimit(cached, CONCURRENCY, async uri => {
+			try {
+				return await namespaceOf(uri) === fqcn ? uri : undefined;
+			} catch {
+				namespaces.delete(uri.toString());
+				return undefined;
+			}
+		})).filter(uri => uri !== undefined);
+		if (verified.length) { return verified; }
+	}
+
 	const files = await vscode.workspace.findFiles(scope(doc, '**/*.xml'), EXCLUDE, MAX_FILES);
 	const stem = plain(fqcn.slice(fqcn.lastIndexOf('.') + 1).replace(/(Mapper|Dao|Repository)$/, ''));
-	const near = stem ? files.filter(uri => plain(path.basename(uri.fsPath, '.xml')).includes(stem)) : [];
-	const matching = async (list: vscode.Uri[]) => (await Promise.all(list.map(async uri => await namespaceOf(uri).catch(() => '') === fqcn ? uri : undefined)))
-		.filter(uri => uri !== undefined);
+	const matching = async (list: vscode.Uri[]) => (await mapLimit(list, CONCURRENCY, async uri =>
+		await namespaceOf(uri).catch(() => '') === fqcn ? uri : undefined
+	)).filter(uri => uri !== undefined);
+
+	const near: vscode.Uri[] = [];
+	const hinted: vscode.Uri[] = [];
+	const other: vscode.Uri[] = [];
+	for (const uri of files) {
+		if (stem && plain(path.basename(uri.fsPath, '.xml')).includes(stem)) {
+			near.push(uri);
+		} else if (MAPPER_PATH_HINT.test(uri.fsPath)) {
+			hinted.push(uri);
+		} else {
+			other.push(uri);
+		}
+	}
 	const first = await matching(near);
-	return first.length ? first : matching(files.filter(uri => !near.includes(uri)));
+	if (first.length) { return first; }
+	const second = await matching(hinted);
+	return second.length ? second : matching(other);
 }
 
 /** 패키지까지 같은 Mapper 인터페이스 파일 */
 async function mapperJavas(doc: vscode.TextDocument, fqcn: string): Promise<vscode.Uri[]> {
 	const name = fqcn.slice(fqcn.lastIndexOf('.') + 1);
 	const files = await vscode.workspace.findFiles(scope(doc, `**/${name}.java`), EXCLUDE, MAX_FILES);
-	const found = await Promise.all(files.map(async uri => {
+	const found = await mapLimit(files, CONCURRENCY, async uri => {
 		const text = await readText(uri).catch(() => '');
 		return parseJavaMapper(text)?.fqcn === fqcn ? uri : undefined;
-	}));
+	});
 	return found.filter(uri => uri !== undefined);
 }
 
@@ -80,13 +117,13 @@ const rangeOf = (text: string, named: Named): vscode.Range => {
 
 /** 열린 문서(저장 안 한 편집 포함) 또는 디스크 글자에서 이름 자리를 찾는다(숨은 문서를 새로 열지 않는다) */
 async function located(uris: vscode.Uri[], place: (text: string) => Named | undefined, originSelectionRange: vscode.Range): Promise<vscode.LocationLink[]> {
-	const found = await Promise.all(uris.map(async uri => {
+	const found = await mapLimit(uris, CONCURRENCY, async uri => {
 		const text = await readText(uri).catch(() => '');
 		const at = text ? place(text) : undefined;
 		if (!at) { return undefined; }
 		const range = rangeOf(text, at);
 		return { originSelectionRange, targetUri: uri, targetRange: range, targetSelectionRange: range } satisfies vscode.LocationLink;
-	}));
+	});
 	return found.filter(l => l !== undefined);
 }
 
@@ -118,7 +155,7 @@ export async function mapperDefinition(doc: vscode.TextDocument, position: vscod
 }
 
 /** 문서 안 매퍼 ↔ XML로 이동할 수 있는 모든 자리(실제로 연결된 대상이 있을 때만) */
-async function resolveMapperLinks(doc: vscode.TextDocument): Promise<ResolvedMapperLink[]> {
+async function computeMapperLinks(doc: vscode.TextDocument): Promise<ResolvedMapperLink[]> {
 	const text = doc.getText();
 	const ext = path.extname(doc.uri.path).toLowerCase();
 	if (ext === '.java') {
@@ -186,6 +223,21 @@ async function resolveMapperLinks(doc: vscode.TextDocument): Promise<ResolvedMap
 		return marks;
 	}
 	return [];
+}
+
+function resolveMapperLinks(doc: vscode.TextDocument): Promise<ResolvedMapperLink[]> {
+	const key = doc.uri.toString();
+	const version = doc.version;
+	const hit = resolvedCache.get(key);
+	if (hit?.version === version) { return hit.promise; }
+	const promise = computeMapperLinks(doc).catch(err => {
+		if (resolvedCache.get(key)?.promise === promise) {
+			resolvedCache.delete(key);
+		}
+		throw err;
+	});
+	resolvedCache.set(key, { version, promise });
+	return promise;
 }
 
 /** 웹뷰 연결 탭에 보낼 매퍼 링크 표시 목록 */
@@ -304,6 +356,11 @@ export function registerMapperLink(context: vscode.ExtensionContext) {
 		vscode.workspace.onDidChangeTextDocument(e => {
 			const ext = path.extname(e.document.uri.path).toLowerCase();
 			if (ext !== '.java' && ext !== '.xml') { return; }
+			// 반대쪽 파일 편집(저장 전 dirty 포함)이 연결 탭·편집기 링크에 즉시 반영되도록 반대 확장자 캐시를 비운다
+			const siblingExt = ext === '.xml' ? '.java' : '.xml';
+			for (const key of [...resolvedCache.keys()]) {
+				if (key.toLowerCase().endsWith(siblingExt)) { resolvedCache.delete(key); }
+			}
 			for (const editor of vscode.window.visibleTextEditors) {
 				if (editor.document === e.document) { scheduleEditor(editor, 250); }
 			}
@@ -312,6 +369,7 @@ export function registerMapperLink(context: vscode.ExtensionContext) {
 			const ext = path.extname(doc.uri.path).toLowerCase();
 			if (ext === '.java' || ext === '.xml') {
 				if (ext === '.xml') { namespaces.delete(doc.uri.toString()); }
+				resolvedCache.clear();
 				refreshVisible(0);
 			}
 		}),

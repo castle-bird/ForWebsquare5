@@ -93,4 +93,55 @@ suite('디자이너 편집 동기화', () => {
 			assert.ok(!sent.some(msg => msg.type === 'document'), '비동기 frame 읽기 중 바뀐 버전은 보내지 않음');
 		} finally { release(); releaseFrames(); dispose(); }
 	});
+
+	test('부가 리소스(loadApiDocs·engineModules·LinkedFiles.reload)는 ready 후 첫 document 전송 뒤에 호출됨', async () => {
+		const document = { version: 1, uri: { fsPath: 'C:/web/main.xml' }, getText: () => '<html xmlns:w2="http://www.inswave.com/websquare"><body><group/></body></html>' };
+		const events: string[] = [];
+		const disposable = { dispose() {} }, event = () => disposable;
+		let receive!: (msg: ToExtension) => void, dispose!: () => void;
+		const ScreenSession = await loadSession({
+			vscode: {
+				Uri: { file: (s: string) => s, joinPath: (...s: string[]) => s.join('/') },
+				RelativePattern: class {},
+				workspace: { createFileSystemWatcher: () => ({ ...disposable, onDidChange: event, onDidCreate: event, onDidDelete: event }), onDidChangeConfiguration: event, onDidChangeTextDocument: event },
+				window: { showErrorMessage() {}, showWarningMessage() {} },
+			},
+			'project/frames': { attachFrames: async () => {} },
+			'project/components': { annotate() {} },
+			'project/styles': { stylesheetFiles: async () => [] },
+			'project/modules': { udcNames: async () => new Set(), engineModules: async () => { events.push('engineModules'); return { files: [], failed: [] }; } },
+			'project/apiDocs': { loadApiDocs: async () => { events.push('loadApiDocs'); return { api: {} }; } },
+			'vscode/setup': { resolvePath: async () => undefined, offerSetup() {}, onDidChangeInstall: event },
+			'vscode/links': { LinkedFiles: class { handle() { return false; } reload() { events.push('links.reload'); return Promise.resolve(); } dispose() {} } },
+			'vscode/tables': { UsedTablesStore: class { handle() { return false; } dispose() {} } },
+			'vscode/browserPreview': { BrowserPreview: class { update() {} dispose() {} } },
+			'vscode/gitBase': { onGitChange: event, blameFeed: () => ({ schedule() {}, dispose() {} }), stagedText: async () => undefined },
+			'vscode/viewSettings': { tabPosition: () => 'top', panelFont: () => 'ui', minimapOn: () => false, animationOn: () => false, blameOn: () => false, onBlameToggled: event },
+			'vscode/linkTabs': { tabOrder: () => [] },
+			'vscode/palette': { paletteFavorites: () => [] },
+			'vscode/codeTheme': { codeTheme: () => ({}) },
+			'vscode/codeOptions': { codeOptions: () => ({}) },
+		});
+		const panel = { webview: {
+			asWebviewUri: (uri: string) => uri,
+			postMessage: async (msg: ToWebview) => { events.push(`post:${msg.type}`); return true; },
+			onDidReceiveMessage: (fn: typeof receive) => { receive = fn; return disposable; },
+		}, onDidDispose: (fn: () => void) => { dispose = fn; } };
+		new ScreenSession(document, panel, 'C:/web', { globalState: {}, workspaceState: {}, tablesFolder: 'storage', broadcast() {} });
+		const settle = () => new Promise<void>(resolve => setImmediate(resolve));
+		try {
+			await settle();
+			assert.strictEqual(events.length, 0, '생성 시점에는 부가 리소스를 읽지 않음');
+			receive({ type: 'ready' });
+			await settle();
+			const docIdx = events.indexOf('post:document');
+			const linksIdx = events.indexOf('links.reload');
+			const apiIdx = events.indexOf('loadApiDocs');
+			const modulesIdx = events.indexOf('engineModules');
+			assert.ok(docIdx >= 0, '첫 document가 전송되어야 함');
+			assert.ok(linksIdx > docIdx, 'LinkedFiles.reload는 첫 document 전송 뒤에 호출됨');
+			assert.ok(apiIdx > docIdx, 'loadApiDocs는 첫 document 전송 뒤에 호출됨');
+			assert.ok(modulesIdx > docIdx, 'engineModules는 첫 document 전송 뒤에 호출됨');
+		} finally { dispose(); }
+	});
 });

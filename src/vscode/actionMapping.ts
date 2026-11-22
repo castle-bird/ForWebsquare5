@@ -2,19 +2,27 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { actionPath, matchAction, parseMappings, type ActionMapping } from '../core/actionMapping';
+import { mapLimit } from '../project/paths';
 
 /** 빌드 산출물·의존성 폴더는 찾지 않는다 */
 const EXCLUDE = '{**/target/**,**/build/**,**/bin/**,**/out/**,**/node_modules/**,**/.git/**}';
 const MAX_FILES = 20000;
+const CONCURRENCY = 32;
+const LIKELY_JAVA = /controller|action|web|endpoint|resource|api/i;
 
 /** 파일마다 읽은 매핑(수정 시각이 같으면 다시 읽지 않는다) */
 const cache = new Map<string, { mtime: number; mappings: ActionMapping[] }>();
 
 async function mappingsOf(uri: vscode.Uri): Promise<ActionMapping[]> {
+	const open = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString());
+	if (open?.isDirty) {
+		const text = open.getText();
+		return text.includes('Mapping') ? parseMappings(text) : [];
+	}
 	const { mtime } = await vscode.workspace.fs.stat(uri);
 	const hit = cache.get(uri.toString());
 	if (hit?.mtime === mtime) { return hit.mappings; }
-	const text = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
+	const text = open ? open.getText() : new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
 	const mappings = text.includes('Mapping') ? parseMappings(text) : [];
 	cache.set(uri.toString(), { mtime, mappings });
 	return mappings;
@@ -29,8 +37,23 @@ export async function openAction(document: vscode.TextDocument, action: string, 
 	const folder = vscode.workspace.getWorkspaceFolder(document.uri);
 	const found = await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: 'Controller 찾는 중' }, async () => {
 		const files = await vscode.workspace.findFiles(folder ? new vscode.RelativePattern(folder, '**/*.java') : '**/*.java', EXCLUDE, MAX_FILES);
-		const all = await Promise.all(files.map(async uri => (await mappingsOf(uri).catch(() => [])).map(m => ({ uri, ...m, score: matchAction(action, m.path) }))));
-		const hits = all.flat().filter(h => h.score > 0);
+		const scan = async (list: vscode.Uri[]) => (await mapLimit(list, CONCURRENCY, async uri =>
+			(await mappingsOf(uri).catch(() => [])).map(m => ({ uri, ...m, score: matchAction(action, m.path) }))
+		)).flat().filter(h => h.score > 0);
+		// Controller·Action 등 후보 파일을 먼저 스캔해 완전 일치(score === 2)가 나오면 나머지 VO/DTO 스캔을 건너뛴다
+		const likely: vscode.Uri[] = [];
+		const rest: vscode.Uri[] = [];
+		for (const uri of files) {
+			if (LIKELY_JAVA.test(path.basename(uri.fsPath)) || (cache.get(uri.toString())?.mappings.length ?? 0) > 0) {
+				likely.push(uri);
+			} else {
+				rest.push(uri);
+			}
+		}
+		const first = await scan(likely);
+		const exact = first.filter(h => h.score === 2);
+		if (exact.length) { return exact; }
+		const hits = [...first, ...await scan(rest)];
 		const best = Math.max(0, ...hits.map(h => h.score));
 		return hits.filter(h => h.score === best);
 	});

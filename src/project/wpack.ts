@@ -30,14 +30,14 @@ const WPACK_NAME = 'standalone_wpack-win.exe';
 /** w-pack/index.js를 실행할 플러그인 Node(…/node/node.exe). index.js는 …/node/node_modules/w-pack 안에 있다 */
 const nodeFor = (script: string) => path.resolve(path.dirname(script), '..', '..', 'node.exe');
 
+export const isWpackDir = (dir: string, names: string[]): boolean =>
+	(path.basename(dir) === 'w-pack' && names.includes('index.js')) || names.includes(WPACK_NAME);
+
 /**
  * 변환기 자동 탐색. Eclipse 플러그인이 쓰는 최신 w-pack/index.js를 먼저 고른다(오래되거나 손상된 단독 exe보다 낫다).
  * 실행할 node.exe가 없으면 standalone exe로, 그것도 없으면 index.js를 그대로 돌려줘 변환할 때 이유를 알린다
  */
-export async function findWpack(eclipseRoot: string): Promise<string | undefined> {
-	const dirs = await findDirs(eclipseRoot, (dir, names) =>
-		(path.basename(dir) === 'w-pack' && names.includes('index.js')) || names.includes(WPACK_NAME),
-		8, (name, dir) => path.basename(dir) === 'node_modules' && name !== 'w-pack');
+export async function pickWpack(dirs: readonly string[]): Promise<string | undefined> {
 	const scripts: string[] = [];
 	for (const dir of dirs) {
 		// 폴더 이름이 w-pack이어도 exe만 있는 곳(index.js 없음)이 있다
@@ -56,6 +56,12 @@ export async function findWpack(eclipseRoot: string): Promise<string | undefined
 		}
 	}
 	return scripts[0];
+}
+
+export async function findWpack(eclipseRoot: string): Promise<string | undefined> {
+	const dirs = await findDirs(eclipseRoot, isWpackDir,
+		8, (name, dir) => path.basename(dir) === 'node_modules' && name !== 'w-pack');
+	return pickWpack(dirs);
 }
 
 export async function eclipseDeployRoots(webRoot: string): Promise<string[]> {

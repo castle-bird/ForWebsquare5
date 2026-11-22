@@ -4,14 +4,14 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { parseXml, type XmlNode } from '../core/xmlModel';
-import { annotate, parseComponents } from '../project/components';
-import { convert, eclipseDeployRoots, findWpack, publish, readWpackConfig, wpackArgs } from '../project/wpack';
+import { annotate, findDefinitionFile, isDefinitionDir, parseComponents, pickDefinitionFile } from '../project/components';
+import { convert, eclipseDeployRoots, findWpack, isWpackDir, pickWpack, publish, readWpackConfig, wpackArgs } from '../project/wpack';
 import { scopeCss } from '../project/styles';
 import { engineModules, udcNames } from '../project/modules';
 import { attachFrames } from '../project/frames';
-import { cleanSample, loadApiDocs, parseApiEvents, parseApiMethods } from '../project/apiDocs';
+import { cleanSample, findApiDocs, isApiDocsDir, loadApiDocs, parseApiEvents, parseApiMethods } from '../project/apiDocs';
 import { SCREEN, DEFS } from './helpers';
-import { cached, fromWebPath } from '../project/paths';
+import { cached, findDirs, fromWebPath, mapLimit } from '../project/paths';
 import { eclipseUsage, findInstalls, isInside, unescapeProperty } from '../project/discover';
 
 suite('비동기 캐시', () => {
@@ -24,6 +24,23 @@ suite('비동기 캐시', () => {
 		rejectOld(new Error('old'));
 		await assert.rejects(old);
 		assert.strictEqual(cache.get('key'), current);
+	});
+
+	test('mapLimit: 입력 순서를 유지하고 동시 실행 수를 상한 이하로 제한한다', async () => {
+		const items = [0, 1, 2, 3, 4, 5, 6, 7];
+		let active = 0;
+		let peak = 0;
+		const out = await mapLimit(items, 3, async n => {
+			active++;
+			peak = Math.max(peak, active);
+			await new Promise(resolve => setTimeout(resolve, (8 - n) * 2));
+			active--;
+			return n * 10;
+		});
+		assert.deepStrictEqual(out, items.map(n => n * 10));
+		assert.ok(peak <= 3 && peak >= 2, `peak=${peak}`);
+		assert.deepStrictEqual(await mapLimit([], 3, async (n: number) => n), []);
+		assert.deepStrictEqual(await mapLimit([1, 2], 0, async n => n + 1), [2, 3]);
 	});
 });
 
@@ -450,5 +467,38 @@ suite('설치본 자동 탐색', () => {
 		assert.ok(isInside(ws, ws));
 		assert.ok(!isInside(path.resolve('eGov', 'workspace2', 'proj'), ws));
 		assert.ok(!isInside(path.resolve('eGov'), ws));
+	});
+
+	test('도구 판별/선택 헬퍼 조합이 기존 findDefinitionFile·findApiDocs·findWpack과 동일하게 동작', async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ws5-bundle-'));
+		const def1 = path.join(root, 'p1', 'config', '5.0.1');
+		const def2 = path.join(root, 'p1', 'config', '5.0.10');
+		const api = path.join(root, 'docs', 'api');
+		const exe = path.join(root, 'bin', 'w-pack', 'standalone_wpack-win.exe');
+		const nodeDir = path.join(root, 'plugins', 'node');
+		const script = path.join(nodeDir, 'node_modules', 'w-pack', 'index.js');
+		for (const dir of [def1, def2, path.join(api, '$p'), path.dirname(exe), path.dirname(script)]) {
+			fs.mkdirSync(dir, { recursive: true });
+		}
+		fs.writeFileSync(path.join(def1, 'WebSquareConfig.xml'), '<WebSquare/>');
+		fs.writeFileSync(path.join(def2, 'WebSquareConfig.xml'), '<WebSquare/>');
+		fs.writeFileSync(path.join(api, 'index.html'), '');
+		fs.writeFileSync(exe, '');
+		fs.writeFileSync(script, '');
+		fs.writeFileSync(path.join(nodeDir, 'node.exe'), '');
+
+		const defDirs: string[] = [];
+		const wpackDirs: string[] = [];
+		const apiDirs: string[] = [];
+		await findDirs(root, (dir, names) => {
+			if (isDefinitionDir(dir, names)) { defDirs.push(dir); }
+			if (isWpackDir(dir, names)) { wpackDirs.push(dir); }
+			if (isApiDocsDir(dir, names)) { apiDirs.push(dir); }
+			return false;
+		}, 8, (name, dir) => path.basename(dir) === 'node_modules' && name !== 'w-pack');
+
+		assert.strictEqual(pickDefinitionFile(defDirs), await findDefinitionFile(root));
+		assert.strictEqual(await pickWpack(wpackDirs), await findWpack(root));
+		assert.strictEqual(apiDirs[0], await findApiDocs(root));
 	});
 });

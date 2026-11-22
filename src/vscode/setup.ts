@@ -1,10 +1,10 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { findApiDocs } from '../project/apiDocs';
-import { findDefinitionFile } from '../project/components';
+import { isApiDocsDir } from '../project/apiDocs';
+import { findDefinitionFile, isDefinitionDir, pickDefinitionFile } from '../project/components';
 import { eclipseUsage, findInstalls, findLocalInstalls, isInside } from '../project/discover';
-import { cached, exists, findWebRoot, numeric } from '../project/paths';
-import { findWpack } from '../project/wpack';
+import { cached, exists, findDirs, findWebRoot, numeric } from '../project/paths';
+import { isWpackDir, pickWpack } from '../project/wpack';
 
 export type SetupKey = 'eclipseInstallPath' | 'componentDefinitionFile' | 'wpackExecutable' | 'apiDocumentationPath';
 type FileKey = Exclude<SetupKey, 'eclipseInstallPath'>;
@@ -62,21 +62,51 @@ function configuredPath(key: SetupKey, uri: vscode.Uri, webRoot?: string): strin
 	return value ? path.resolve(base, value) : undefined;
 }
 
-const FINDERS: Record<FileKey, (eclipseRoot: string) => Promise<string | undefined>> = {
-	componentDefinitionFile: findDefinitionFile,
-	wpackExecutable: findWpack,
-	apiDocumentationPath: findApiDocs,
-};
+const SKIP_DIRS = new Set(['p2', 'features', 'jre', 'jdk', 'configuration', '.git']);
 
 const autoCache = new Map<string, Promise<string | undefined>>();
+const bundleCache = new Map<string, Promise<Record<FileKey, string | undefined>>>();
 export function clearAutoCache(): void {
 	autoCache.clear();
+	bundleCache.clear();
 }
+
+/** 설치 폴더 하나를 한 번만 훑어 정의 파일·wpack·API 문서를 동시에 찾는다 */
+const scanAll = (root: string) => cached(bundleCache, root, async () => {
+	const defDirs: string[] = [];
+	const wpackDirs: string[] = [];
+	const apiDirs: string[] = [];
+	await findDirs(root, (dir, names) => {
+		if (isDefinitionDir(dir, names)) {
+			defDirs.push(dir);
+		}
+		if (isWpackDir(dir, names)) {
+			wpackDirs.push(dir);
+		}
+		if (isApiDocsDir(dir, names)) {
+			apiDirs.push(dir);
+		}
+		return false;
+	}, 8, (name, dir) => SKIP_DIRS.has(name) || (path.basename(dir) === 'node_modules' && name !== 'w-pack'));
+	const [def, wpack] = [pickDefinitionFile(defDirs), await pickWpack(wpackDirs)];
+	const api = apiDirs[0];
+	const verify = async (found: string | undefined) => found && await exists(found) ? found : undefined;
+	const [componentDefinitionFile, wpackExecutable, apiDocumentationPath] = await Promise.all([
+		verify(def), verify(wpack), verify(api),
+	]);
+	return { componentDefinitionFile, wpackExecutable, apiDocumentationPath };
+});
 
 /** 설치 폴더 밑을 뒤져 찾는다. 같은 세션에서는 폴더당 한 번 */
 const scan = (key: FileKey, root: string) => cached(autoCache, `${key}:${root}`, async () => {
-	const found = await FINDERS[key](root);
-	return found && await exists(found) ? found : undefined;
+	const all = await scanAll(root);
+	for (const k of FILE_KEYS) {
+		const file = all[k];
+		if (file) {
+			rememberFile(root, k, file);
+		}
+	}
+	return all[key];
 });
 
 function rememberFile(root: string, key: FileKey, file: string): void {
@@ -146,10 +176,18 @@ function revalidate(root: string): void {
 }
 
 async function recheck(root: string): Promise<void> {
-	const found = await Promise.all(FILE_KEYS.map(async key => [key, await scan(key, root).catch(() => undefined)] as const));
+	bundleCache.delete(root);
+	for (const key of FILE_KEYS) {
+		autoCache.delete(`${key}:${root}`);
+	}
+	const all = await scanAll(root).catch(() => undefined);
+	if (!all) {
+		return;
+	}
 	const known = installs().files[root] ?? {};
 	const files = { ...known };
-	for (const [key, file] of found) {
+	for (const key of FILE_KEYS) {
+		const file = all[key];
 		if (file) {
 			files[key] = file;
 		} else {

@@ -11,7 +11,28 @@ export { isInside };
 const SKIP = new Set([
 	'windows', 'windows.old', 'programdata', 'appdata', '$recycle.bin', 'system volume information', 'recovery', 'perflogs',
 	'msocache', '$windows.~bt', '$windows.~ws', 'onedrivetemp', 'node_modules', 'bower_components', 'target', 'build',
+	'dist', 'out', 'coverage', 'vendor', 'packages', '__pycache__', 'venv', '$sysreset', 'inetpub', 'intel', 'amd', 'nvidia',
 ]);
+
+/** 같은 깊이에서 뒤로 미루는 폴더(소문자): 설치본이 있을 가능성이 낮고 하위 파일이 많은 폴더 */
+const LOW_PRIORITY = new Set([
+	'program files', 'program files (x86)', 'users', 'downloads', 'documents', 'pictures', 'videos', 'music', 'desktop', 'onedrive',
+]);
+
+/** 같은 깊이에서 먼저 볼 폴더 이름 패턴 */
+const HINT_DIR = /websquare|inswave|egov|eclipse|studio|dev|tool|ide|work/i;
+
+/** 같은 depth 안에서의 방문 우선순위(0: 최우선, 1: 일반, 2: 후순위) */
+function dirPriority(dir: string): number {
+	const name = path.basename(dir).toLowerCase();
+	if (name === 'plugins' || HINT_DIR.test(name)) {
+		return 0;
+	}
+	if (LOW_PRIORITY.has(name)) {
+		return 2;
+	}
+	return 1;
+}
 
 /** Eclipse의 plugins 폴더에 WebSquare5 플러그인(com.inswave.*)이 있으면 그 Eclipse 폴더가 설치본이다 */
 const isPlugins = (dir: string, names: string[]) => path.basename(dir).toLowerCase() === 'plugins' && names.some(n => n.startsWith('com.inswave.'));
@@ -30,8 +51,20 @@ export interface FindOptions {
  */
 export async function findInstalls(roots: string[], { maxDepth = 6, deadline = Infinity, cancelled = () => false }: FindOptions = {}): Promise<{ installs: string[]; complete: boolean }> {
 	const installs: string[] = [];
+	const foundRoots = new Set<string>();
+	const isUnderFoundRoot = (dir: string) => {
+		for (const root of foundRoots) {
+			if (isInside(dir, root)) {
+				return true;
+			}
+		}
+		return false;
+	};
 	let level = [...new Set(roots.map(r => path.resolve(r)))];
 	for (let depth = 0; level.length && depth <= maxDepth; depth++) {
+		if (level.length > 1) {
+			level.sort((a, b) => dirPriority(a) - dirPriority(b));
+		}
 		const next: string[] = [];
 		let at = 0, stopped = false;
 		const worker = async () => {
@@ -41,9 +74,14 @@ export async function findInstalls(roots: string[], { maxDepth = 6, deadline = I
 					return;
 				}
 				const dir = level[at++];
+				if (isUnderFoundRoot(dir)) {
+					continue;
+				}
 				const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
 				if (isPlugins(dir, entries.map(e => e.name))) {
-					installs.push(path.dirname(dir));
+					const installRoot = path.dirname(dir);
+					installs.push(installRoot);
+					foundRoots.add(installRoot);
 					continue;
 				}
 				for (const e of entries) {
@@ -57,17 +95,21 @@ export async function findInstalls(roots: string[], { maxDepth = 6, deadline = I
 		if (stopped) {
 			return { installs, complete: false };
 		}
-		level = next;
+		level = foundRoots.size ? next.filter(d => !isUnderFoundRoot(d)) : next;
 	}
 	return { installs, complete: true };
 }
 
-/** 이 PC의 로컬 드라이브 전체에서 찾기. 드라이브 목록(PowerShell, 1초쯤)을 기다리는 동안 시스템 드라이브부터 훑는다 */
+/** 이 PC의 로컬 드라이브 전체에서 찾기. Windows는 시스템 드라이브(C:\)를 즉시 훑고, 추가 드라이브가 있을 때만 PowerShell로 고정 드라이브를 거른다 */
 export async function findLocalInstalls(options: FindOptions = {}): Promise<{ installs: string[]; complete: boolean }> {
-	const system = process.platform === 'win32' ? `${process.env.SystemDrive ?? 'C:'}\\`.toUpperCase() : undefined;
+	if (process.platform !== 'win32') {
+		return findInstalls(await searchNonWindowsRoots(), options);
+	}
+	const system = `${(process.env.SystemDrive ?? 'C:').toUpperCase()}\\`;
+	const immediate = [system];
 	const results = await Promise.all([
-		system && await exists(system) ? findInstalls([system], options) : { installs: [], complete: true },
-		searchRoots().then(roots => findInstalls(roots.filter(r => r.toUpperCase() !== system), options)),
+		await exists(system) ? findInstalls(immediate, options) : { installs: [], complete: true },
+		searchExtraWindowsRoots(immediate).then(ds => ds.length ? findInstalls(ds, options) : { installs: [], complete: true }),
 	]);
 	return { installs: results.flatMap(r => r.installs), complete: results.every(r => r.complete) };
 }
@@ -91,17 +133,38 @@ export async function eclipseUsage(root: string): Promise<{ lastUsed: number; wo
 	return { lastUsed: Math.max(...times), workspaces };
 }
 
-/** 훑을 곳: Windows는 로컬 고정 드라이브(C:·D: 등, 네트워크·이동식 제외), 그 밖에는 홈·/opt·/Applications */
-async function searchRoots(): Promise<string[]> {
-	if (process.platform !== 'win32') {
-		const candidates = [os.homedir(), '/opt', '/Applications'];
-		return (await Promise.all(candidates.map(async dir => await exists(dir) ? dir : undefined))).filter(dir => dir !== undefined);
-	}
-	// 드라이브 종류는 PowerShell(CIM)로: DriveType 3 = 로컬 디스크. 숫자라 OS 언어와 상관없다
-	const fixed = await new Promise<string[]>(resolve => execFile('powershell.exe',
+/** 비-Windows 탐색 루트: 홈·/opt·/Applications */
+async function searchNonWindowsRoots(): Promise<string[]> {
+	const candidates = [os.homedir(), '/opt', '/Applications'];
+	return (await Promise.all(candidates.map(async dir => await exists(dir) ? dir : undefined))).filter(dir => dir !== undefined);
+}
+
+/** PowerShell CIM(DriveType 3 = 로컬 디스크)으로 고정 드라이브 목록 조회 */
+function fixedWindowsDrives(): Promise<string[]> {
+	return new Promise<string[]>(resolve => execFile('powershell.exe',
 		['-NoProfile', '-NonInteractive', '-Command', '(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3").DeviceID'],
 		{ timeout: 10_000, windowsHide: true },
 		(error, stdout) => resolve(error ? [] : stdout.split(/\r?\n/).map(s => s.trim().toUpperCase()).filter(s => /^[A-Z]:$/.test(s)))));
-	const drives = (fixed.length ? fixed : ['C:', 'D:']).sort().map(d => d + '\\');
-	return (await Promise.all(drives.map(async d => await exists(d) ? d : undefined))).filter(d => d !== undefined);
+}
+
+/** 시스템 드라이브 외 드라이브가 있을 때만 PowerShell CIM으로 로컬 고정 드라이브를 걸러낸다 */
+async function searchExtraWindowsRoots(immediate: string[]): Promise<string[]> {
+	const immediateSet = new Set(immediate.map(r => r.toUpperCase()));
+	const fsutil = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'fsutil.exe');
+	const fsutilDrives = await new Promise<string[] | undefined>(resolve => execFile(fsutil, ['fsinfo', 'drives'],
+		{ timeout: 3000, windowsHide: true },
+		(error, stdout) => {
+			if (error) {
+				resolve(undefined);
+				return;
+			}
+			const found = [...new Set(stdout.toUpperCase().match(/[A-Z]:/g) ?? [])];
+			resolve(found.length ? found : undefined);
+		}));
+	if (fsutilDrives && fsutilDrives.every(d => immediateSet.has(d + '\\'))) {
+		return [];
+	}
+	const fixed = await fixedWindowsDrives();
+	const extra = fixed.map(d => d + '\\').filter(d => !immediateSet.has(d)).sort();
+	return (await Promise.all(extra.map(async d => await exists(d) ? d : undefined))).filter(d => d !== undefined);
 }

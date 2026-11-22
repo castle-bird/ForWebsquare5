@@ -95,8 +95,11 @@ export function parseApiEvents(html: string, doc = parseDocument(html, { withSta
 	return parseDetailList(doc, html, 'ename', 'edesc');
 }
 
+export const isApiDocsDir = (_dir: string, names: string[]): boolean =>
+	names.includes('index.html') && names.some(n => API_DIR.test(n));
+
 export async function findApiDocs(eclipseRoot: string): Promise<string | undefined> {
-	const dirs = await findDirs(eclipseRoot, (_dir, names) => names.includes('index.html') && names.some(n => API_DIR.test(n)), 8, name => name === 'node_modules');
+	const dirs = await findDirs(eclipseRoot, isApiDocsDir, 8, name => name === 'node_modules');
 	return dirs[0];
 }
 

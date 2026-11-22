@@ -31,6 +31,21 @@ export function serial<T>(queues: Map<string, Promise<unknown>>, key: string, jo
 
 export const numeric = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: true });
 
+/** 동시 실행 수를 limit(최소 1)으로 제한해 items 순서대로 결과를 모은다 */
+export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+	const results = new Array<R>(items.length);
+	let next = 0;
+	const worker = async () => {
+		while (next < items.length) {
+			const i = next++;
+			results[i] = await fn(items[i]);
+		}
+	};
+	const count = Math.min(Math.max(1, Math.floor(limit)), items.length);
+	await Promise.all(Array.from({ length: count }, worker));
+	return results;
+}
+
 /** skip: 들어가지 않을 하위 폴더(찾는 것이 그 안에 있을 리 없는 큰 폴더를 건너뛰어 빠르게) */
 export async function findDirs(root: string, test: (dir: string, names: string[]) => boolean, maxDepth = 8, skip?: (name: string, dir: string) => boolean): Promise<string[]> {
 	const results: string[] = [];
@@ -39,10 +54,10 @@ export async function findDirs(root: string, test: (dir: string, names: string[]
 	for (let depth = 0; level.length && depth <= maxDepth && visited < 20_000; depth++) {
 		const batch = level.slice(0, 20_000 - visited);
 		visited += batch.length;
-		const loaded = await Promise.all(batch.map(async dir => ({
+		const loaded = await mapLimit(batch, 32, async dir => ({
 			dir,
 			entries: await readdir(dir, { withFileTypes: true }).catch(() => []),
-		})));
+		}));
 		const next: string[] = [];
 		for (const { dir, entries } of loaded) {
 			if (test(dir, entries.map(e => e.name))) {
