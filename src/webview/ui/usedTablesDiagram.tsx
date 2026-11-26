@@ -151,17 +151,26 @@ function Diagram({ data, onChange, onUndo, onRedo, canUndo, canRedo, focusIds }:
 		setEdges(current => toEdges(data, current, select));
 	}, [data]);
 
+	const pendingFocus = useRef<{ ids: string[]; key: number }>(undefined);
 	useEffect(() => {
 		if (!focusIds?.ids.length) { return; }
+		pendingFocus.current = focusIds;
 		setNodes(ns => ns.map(n => n.selected ? { ...n, selected: false } : n));
 		setEdges(es => es.map(e => e.selected ? { ...e, selected: false } : e));
-		let frame = requestAnimationFrame(() => {
-			frame = requestAnimationFrame(() => {
-				void flow.fitView({ nodes: focusIds.ids.map(id => ({ id })), ...FIT, duration: 200 });
-			});
+	}, [focusIds]);
+
+	// 새로 추가된 노드는 React Flow가 크기를 잰(measured) 뒤에 fitView를 불러야 화면 밖으로 밀리지 않는다
+	useEffect(() => {
+		const target = pendingFocus.current;
+		if (!target) { return; }
+		const byId = new Map(nodes.map(n => [n.id, n]));
+		if (!target.ids.every(id => byId.get(id)?.measured?.width)) { return; }
+		pendingFocus.current = undefined;
+		const frame = requestAnimationFrame(() => {
+			void flow.fitView({ nodes: target.ids.map(id => ({ id })), ...FIT, duration: 200 });
 		});
 		return () => cancelAnimationFrame(frame);
-	}, [focusIds, flow]);
+	}, [nodes, focusIds, flow]);
 
 	const selectedIds = () => new Set([...latest.current.nodes.filter(n => n.selected).map(n => n.id), ...latest.current.edges.filter(e => e.selected).map(e => e.id)]);
 	/** 그림 가운데(화면 좌표 → 그림 좌표) */

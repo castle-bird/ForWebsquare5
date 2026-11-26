@@ -1,6 +1,9 @@
 // 코드 편집기 기호 빠른 이동(Ctrl+Shift+O)용 기호 추출: JS(Script·공통), Java, XML(MyBatis·WebSquare), CSS
-import { parse } from 'acorn';
-import { blankComments } from './actionMapping';
+import { parse, type Options as AcornOptions } from 'acorn';
+import { parse as parseLoose } from 'acorn-loose';
+import { parser as javaParser } from '@lezer/java';
+import { parser as cssParser } from '@lezer/css';
+import type { SyntaxNode } from '@lezer/common';
 
 export type SymbolKind = 'class' | 'interface' | 'method' | 'function' | 'sql' | 'tag';
 export type SymbolLang = 'js' | 'java' | 'xml' | 'css';
@@ -18,6 +21,15 @@ export interface CodeSymbol {
 }
 
 const blank = (s: string) => s.replace(/[^\n]/g, ' ');
+const JS_OPTIONS: AcornOptions = {
+	ecmaVersion: 'latest',
+	sourceType: 'script',
+	allowReturnOutsideFunction: true,
+	allowAwaitOutsideFunction: true,
+	allowHashBang: true,
+};
+/** acorn-loose가 빠진 식별자 자리에 넣는 자리표시자 */
+const DUMMY_ID = '✖';
 
 /** 줄 시작 offset 표를 한 번 만들어 이진 탐색으로 줄 번호(1부터)를 구한다 */
 function lineFinder(text: string): (offset: number) => number {
@@ -43,12 +55,15 @@ interface JsNode {
 }
 
 const isFuncNode = (n: JsNode | undefined) => !!n && (n.type === 'FunctionExpression' || n.type === 'ArrowFunctionExpression');
+const validId = (n: JsNode | undefined): n is JsNode & { name: string; start: number; end: number } =>
+	!!n && n.type === 'Identifier' && typeof n.name === 'string' && n.name !== '' && n.name !== DUMMY_ID
+	&& typeof n.start === 'number' && typeof n.end === 'number' && n.start < n.end;
 
 function memberName(node: JsNode): { name: string; from: number; to: number; detail?: string } | undefined {
 	if (node.type !== 'MemberExpression' || node.computed) { return undefined; }
 	const prop = node.property as JsNode, obj = node.object as JsNode;
-	if (prop?.type !== 'Identifier' || typeof prop.name !== 'string' || prop.start === undefined || prop.end === undefined) { return undefined; }
-	if (obj?.type === 'Identifier' && typeof obj.name === 'string') {
+	if (!validId(prop)) { return undefined; }
+	if (validId(obj)) {
 		return { name: `${obj.name}.${prop.name}`, from: prop.start, to: prop.end, detail: obj.name };
 	}
 	if (obj?.type === 'MemberExpression') {
@@ -60,148 +75,101 @@ function memberName(node: JsNode): { name: string; from: number; to: number; det
 	return undefined;
 }
 
-/** JS·Script 기호: `scwin.*` 대입, 함수 선언·함수 변수, 클래스와 메서드. 문법 오류 시 정규식 폴백 */
+/** JS·Script 기호: `scwin.*` 대입, 함수 선언·함수 변수, 클래스와 메서드. 문법 오류 시 acorn-loose로 복구 */
 function extractJsSymbols(text: string): CodeSymbol[] {
 	const lineOf = lineFinder(text);
 	const out: CodeSymbol[] = [];
 	const push = (name: string, kind: SymbolKind, from: number, to: number, detail?: string) => {
 		out.push({ name, kind, from, to, line: lineOf(from), ...detail ? { detail } : {} });
 	};
+	let ast: JsNode;
 	try {
-		const ast = parse(text, {
-			ecmaVersion: 'latest',
-			sourceType: 'script',
-			allowReturnOutsideFunction: true,
-			allowAwaitOutsideFunction: true,
-			allowHashBang: true,
-		}) as unknown as JsNode;
-		const walk = (node: JsNode, owner?: string) => {
-			if (node.type === 'FunctionDeclaration') {
-				const id = node.id as JsNode | undefined;
-				if (id?.type === 'Identifier' && typeof id.name === 'string' && id.start !== undefined && id.end !== undefined) {
-					push(id.name, 'function', id.start, id.end, owner);
-				}
-			} else if (node.type === 'ClassDeclaration') {
-				const id = node.id as JsNode | undefined;
-				if (id?.type === 'Identifier' && typeof id.name === 'string' && id.start !== undefined && id.end !== undefined) {
-					push(id.name, 'class', id.start, id.end, owner);
-					const body = (node.body as JsNode | undefined)?.body;
-					if (Array.isArray(body)) {
-						for (const item of body as JsNode[]) {
-							if (item.type === 'MethodDefinition') {
-								const key = item.key as JsNode;
-								if (key?.type === 'Identifier' && typeof key.name === 'string' && key.start !== undefined && key.end !== undefined) {
-									push(key.name, 'method', key.start, key.end, id.name);
-								}
+		ast = parse(text, JS_OPTIONS) as unknown as JsNode;
+	} catch {
+		ast = parseLoose(text, JS_OPTIONS) as unknown as JsNode;
+	}
+	const walk = (node: JsNode, owner?: string) => {
+		if (node.type === 'FunctionDeclaration') {
+			const id = node.id as JsNode | undefined;
+			if (validId(id)) {
+				push(id.name, 'function', id.start, id.end, owner);
+			}
+		} else if (node.type === 'ClassDeclaration') {
+			const id = node.id as JsNode | undefined;
+			if (validId(id)) {
+				push(id.name, 'class', id.start, id.end, owner);
+				const body = (node.body as JsNode | undefined)?.body;
+				if (Array.isArray(body)) {
+					for (const item of body as JsNode[]) {
+						if (item.type === 'MethodDefinition') {
+							const key = item.key as JsNode;
+							if (validId(key)) {
+								push(key.name, 'method', key.start, key.end, id.name);
 							}
 						}
 					}
-					return;
 				}
-			} else if (node.type === 'VariableDeclarator') {
-				const id = node.id as JsNode, init = node.init as JsNode | undefined;
-				if (id?.type === 'Identifier' && typeof id.name === 'string' && id.start !== undefined && id.end !== undefined && isFuncNode(init)) {
-					push(id.name, 'function', id.start, id.end, owner);
-				}
-			} else if (node.type === 'AssignmentExpression') {
-				const left = node.left as JsNode, right = node.right as JsNode;
-				const mem = memberName(left);
-				if (mem && (mem.detail === 'scwin' || isFuncNode(right))) {
-					push(mem.name, 'function', mem.from, mem.to, mem.detail);
+				return;
+			}
+		} else if (node.type === 'VariableDeclarator') {
+			const id = node.id as JsNode, init = node.init as JsNode | undefined;
+			if (validId(id) && isFuncNode(init)) {
+				push(id.name, 'function', id.start, id.end, owner);
+			}
+		} else if (node.type === 'AssignmentExpression') {
+			const left = node.left as JsNode, right = node.right as JsNode;
+			const mem = memberName(left);
+			if (mem && (mem.detail === 'scwin' || isFuncNode(right))) {
+				push(mem.name, 'function', mem.from, mem.to, mem.detail);
+			}
+		}
+		for (const [k, v] of Object.entries(node)) {
+			if (k === 'body' && isFuncNode(node)) { continue; }
+			for (const child of Array.isArray(v) ? v : [v]) {
+				if (child && typeof child === 'object' && typeof (child as JsNode).type === 'string') {
+					walk(child as JsNode, owner);
 				}
 			}
-			for (const [k, v] of Object.entries(node)) {
-				if (k === 'body' && isFuncNode(node)) { continue; }
-				for (const child of Array.isArray(v) ? v : [v]) {
-					if (child && typeof child === 'object' && typeof (child as JsNode).type === 'string') {
-						walk(child as JsNode, owner);
-					}
-				}
-			}
-		};
-		walk(ast);
-		return out;
-	} catch {
-		const cleaned = blankComments(text).replace(/`(?:[^`\\]|\\.)*`|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, blank);
-		const seen = new Set<number>();
-		for (const m of cleaned.matchAll(/\b(scwin)\.([A-Za-z_$][\w$]*)\s*=/g)) {
-			const from = m.index + m[1].length + 1;
-			if (!seen.has(from)) { seen.add(from); push(`${m[1]}.${m[2]}`, 'function', from, from + m[2].length, m[1]); }
 		}
-		for (const m of cleaned.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g)) {
-			const from = m.index + m[0].indexOf(m[1]);
-			if (!seen.has(from)) { seen.add(from); push(m[1], 'function', from, from + m[1].length); }
-		}
-		return out.sort((a, b) => a.from - b.from);
-	}
+	};
+	walk(ast);
+	return out;
 }
 
-const JAVA_CONTROL = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'new', 'throw', 'assert', 'synchronized', 'super', 'this', 'yield']);
+const JAVA_TYPES = new Set(['ClassDeclaration', 'InterfaceDeclaration', 'EnumDeclaration', 'RecordDeclaration']);
+const JAVA_METHODS = new Set(['MethodDeclaration', 'ConstructorDeclaration', 'CompactConstructorDeclaration']);
 
-/** Java 기호: 클래스·인터페이스·열거형·레코드와 본문 안 메서드·생성자 선언 */
+/** Java 기호(@lezer/java CST): 클래스·인터페이스·열거형·레코드와 본문 안 메서드·생성자 선언 */
 function extractJavaSymbols(text: string): CodeSymbol[] {
-	const cleaned = blankComments(text).replace(/"""[\s\S]*?"""|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, blank);
 	const lineOf = lineFinder(text);
 	const out: CodeSymbol[] = [];
-	const typeStack: { name: string; depth: number }[] = [];
-	const word = /[A-Za-z_$][\w$]*/y;
-	let braces = 0, parens = 0;
-	let pendingType: { name: string; kind: SymbolKind; from: number; to: number } | undefined;
-
-	for (let i = 0; i < cleaned.length; i++) {
-		const c = cleaned[i];
-		if (c === '{') {
-			braces++;
-			if (pendingType) {
-				typeStack.push({ name: pendingType.name, depth: braces });
-				pendingType = undefined;
-			}
-		} else if (c === '}') {
-			if (typeStack.at(-1)?.depth === braces) { typeStack.pop(); }
-			braces = Math.max(0, braces - 1);
-		} else if (c === '(') {
-			parens++;
-		} else if (c === ')') {
-			parens = Math.max(0, parens - 1);
-		} else if (parens === 0 && /[A-Za-z_$]/.test(c)) {
-			word.lastIndex = i;
-			const m = word.exec(cleaned)!;
-			const token = m[0];
-			const after = i + token.length;
-			let prev = i - 1;
-			while (prev >= 0 && /\s/.test(cleaned[prev])) { prev--; }
-			const prevCh = prev >= 0 ? cleaned[prev] : '';
-
-			if ((token === 'class' || token === 'interface' || token === 'enum' || token === 'record') && prevCh !== '.' && prevCh !== '@') {
-				const next = /^\s+([A-Za-z_$][\w$]*)/.exec(cleaned.slice(after));
-				if (next) {
-					const name = next[1];
-					const from = after + next[0].length - name.length;
-					const kind: SymbolKind = token === 'interface' ? 'interface' : 'class';
-					out.push({ name, kind, from, to: from + name.length, line: lineOf(from), ...typeStack.length ? { detail: typeStack.at(-1)!.name } : {} });
-					pendingType = { name, kind, from, to: from + name.length };
-					i = from + name.length - 1;
-					continue;
+	const walk = (node: SyntaxNode, owner?: string) => {
+		if (JAVA_TYPES.has(node.name)) {
+			const def = node.getChild('Definition');
+			if (def) {
+				const name = text.slice(def.from, def.to);
+				const kind: SymbolKind = node.name === 'InterfaceDeclaration' ? 'interface' : 'class';
+				out.push({ name, kind, from: def.from, to: def.to, line: lineOf(def.from), ...owner ? { detail: owner } : {} });
+				for (let child = node.firstChild; child; child = child.nextSibling) {
+					walk(child, name);
 				}
-			} else if (typeStack.length && braces === typeStack.at(-1)!.depth && !JAVA_CONTROL.has(token) && prevCh !== '@' && prevCh !== '.' && prevCh !== '=') {
-				let j = after;
-				while (j < cleaned.length && /\s/.test(cleaned[j])) { j++; }
-				if (cleaned[j] === '(') {
-					// 괄호 닫힌 뒤 `{`, `;`, `throws`가 이어지면 메서드·생성자 선언(필드 초기화 호출은 제외)
-					let p = 1, k = j + 1;
-					while (k < cleaned.length && p > 0) {
-						if (cleaned[k] === '(') { p++; } else if (cleaned[k] === ')') { p--; }
-						k++;
-					}
-					const tail = cleaned.slice(k, k + 200);
-					if (/^\s*(?:\{|;|throws\b|default\b)/.test(tail)) {
-						out.push({ name: token, kind: 'method', from: i, to: after, line: lineOf(i), detail: typeStack.at(-1)!.name });
-					}
-				}
+				return;
 			}
-			i = after - 1;
+		} else if (JAVA_METHODS.has(node.name)) {
+			const def = node.getChild('Definition');
+			if (def) {
+				out.push({ name: text.slice(def.from, def.to), kind: 'method', from: def.from, to: def.to, line: lineOf(def.from), ...owner ? { detail: owner } : {} });
+			}
+			// 메서드 본문(Block) 안 지역 선언·호출은 건너뛴다
+			return;
+		} else if (node.name === 'Block' || node.name === 'FieldDeclaration') {
+			return;
 		}
-	}
+		for (let child = node.firstChild; child; child = child.nextSibling) {
+			walk(child, owner);
+		}
+	};
+	walk(javaParser.parse(text).topNode);
 	return out;
 }
 
@@ -230,32 +198,50 @@ function extractXmlSymbols(text: string): CodeSymbol[] {
 	return out;
 }
 
-/** CSS 기호: 최상위 선택자·@규칙 */
+/** CSS 기호(@lezer/css CST): 최상위 및 @media·@supports 안 선택자와 @keyframes */
 function extractCssSymbols(text: string): CodeSymbol[] {
-	const cleaned = text.replace(/\/\*[\s\S]*?\*\//g, blank);
 	const lineOf = lineFinder(text);
 	const out: CodeSymbol[] = [];
-	let depth = 0, start = 0;
-	for (let i = 0; i < cleaned.length; i++) {
-		const c = cleaned[i];
-		if (c === '{') {
-			if (depth === 0) {
-				const raw = cleaned.slice(start, i);
-				const lead = raw.length - raw.trimStart().length;
-				const name = raw.trim().replace(/\s+/g, ' ');
-				if (name) {
-					const from = start + lead;
-					out.push({ name, kind: 'tag', from, to: from + Math.min(name.length, i - from), line: lineOf(from), detail: 'css' });
+	const pushHeader = (node: SyntaxNode, block: SyntaxNode, detail: string) => {
+		const raw = text.slice(node.from, block.from).replace(/\/\*[\s\S]*?\*\//g, ' ');
+		const lead = raw.length - raw.trimStart().length;
+		const name = raw.trim().replace(/\s+/g, ' ');
+		if (!name) { return; }
+		const from = node.from + lead;
+		out.push({ name, kind: 'tag', from, to: from + Math.min(name.length, block.from - from), line: lineOf(from), detail });
+	};
+	const walk = (node: SyntaxNode, context = 'css') => {
+		if (node.name === 'RuleSet') {
+			const block = node.getChild('Block');
+			if (block) {
+				pushHeader(node, block, context);
+				// 중첩 CSS 규칙(CSS Nesting) 탐색
+				for (let child = block.firstChild; child; child = child.nextSibling) {
+					if (child.name === 'RuleSet' || child.name.endsWith('Statement')) { walk(child, context); }
 				}
 			}
-			depth++;
-		} else if (c === '}') {
-			depth = Math.max(0, depth - 1);
-			if (depth === 0) { start = i + 1; }
-		} else if (c === ';' && depth === 0) {
-			start = i + 1;
+			return;
 		}
-	}
+		if (node.name === 'KeyframesStatement') {
+			const block = node.getChild('KeyframeList') ?? node.getChild('Block');
+			if (block) { pushHeader(node, block, '@keyframes'); }
+			return;
+		}
+		if (node.name === 'MediaStatement' || node.name === 'SupportsStatement' || node.name === 'LayerStatement' || node.name === 'AtRule') {
+			const block = node.getChild('Block');
+			if (block) {
+				const kw = node.firstChild ? text.slice(node.firstChild.from, node.firstChild.to).trim() : 'css';
+				for (let child = block.firstChild; child; child = child.nextSibling) {
+					walk(child, kw || context);
+				}
+			}
+			return;
+		}
+		for (let child = node.firstChild; child; child = child.nextSibling) {
+			walk(child, context);
+		}
+	};
+	walk(cssParser.parse(text).topNode);
 	return out;
 }
 

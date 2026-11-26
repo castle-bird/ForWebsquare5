@@ -1,84 +1,133 @@
-// Submission action URL → Spring Controller 메서드. Spring 확장·Java 서버 없이 .java 글자에서 @RequestMapping·@GetMapping 등을 읽는다
+// Submission action URL → Spring Controller 메서드. Spring 확장·Java 서버 없이 @lezer/java CST에서 @RequestMapping·@GetMapping 등을 읽는다
+import { parser as javaParser } from '@lezer/java';
+import type { SyntaxNode } from '@lezer/common';
 
 /** Controller 메서드 하나의 요청 경로(클래스 경로 + 메서드 경로)와 자리 */
 export interface ActionMapping { path: string; method: string; line: number }
 
-const MAPPING = /@(Request|Get|Post|Put|Delete|Patch)Mapping\b\s*(\()?/g;
+const MAPPING_NAMES = new Set(['RequestMapping', 'GetMapping', 'PostMapping', 'PutMapping', 'DeleteMapping', 'PatchMapping']);
+const TYPE_DECLS = new Set(['ClassDeclaration', 'InterfaceDeclaration', 'RecordDeclaration']);
+const TYPE_BODIES = new Set(['ClassBody', 'InterfaceBody', 'RecordBody']);
 
-/** 주석을 같은 길이 공백으로(글자 자리 유지). 문자열 안의 // 등은 그대로 */
-export function blankComments(text: string): string {
-	let out = '', i = 0;
-	while (i < text.length) {
-		const c = text[i], next = text[i + 1];
-		if (c === '"' || c === '\'') {
-			let j = i + 1;
-			while (j < text.length && text[j] !== c && text[j] !== '\n') { j += text[j] === '\\' ? 2 : 1; }
-			out += text.slice(i, j + 1);
-			i = j + 1;
-		} else if (c === '/' && (next === '/' || next === '*')) {
-			const end = next === '/' ? text.indexOf('\n', i) : text.indexOf('*/', i + 2) + 2;
-			const stop = end <= 1 || end === -1 ? text.length : end;
-			out += text.slice(i, stop).replace(/[^\n]/g, ' ');
-			i = stop;
-		} else {
-			out += c;
-			i++;
-		}
+/** 애너테이션의 단순 이름(`@a.b.GetMapping` → `GetMapping`) */
+function annotationName(node: SyntaxNode, text: string): string {
+	const nameNode = node.getChild('Identifier') ?? node.getChild('ScopedIdentifier');
+	if (!nameNode) { return ''; }
+	const raw = text.slice(nameNode.from, nameNode.to).replace(/\s+/g, '');
+	const dot = raw.lastIndexOf('.');
+	return dot >= 0 ? raw.slice(dot + 1) : raw;
+}
+
+/** Java 문자열 리터럴(`"..."`)의 따옴표·이스케이프 해제 */
+function unquoteJavaString(raw: string): string {
+	if (raw.length < 2 || raw[0] !== '"' || raw[raw.length - 1] !== '"') { return raw; }
+	try {
+		return JSON.parse(raw) as string;
+	} catch {
+		return raw.slice(1, -1).replace(/\\(["\\])/g, '$1');
+	}
+}
+
+/** 노드 아래의 모든 문자열 리터럴 값 */
+function collectStrings(node: SyntaxNode, text: string, out: string[] = []): string[] {
+	if (node.name === 'StringLiteral') {
+		out.push(unquoteJavaString(text.slice(node.from, node.to)));
+		return out;
+	}
+	for (let child = node.firstChild; child; child = child.nextSibling) {
+		collectStrings(child, text, out);
 	}
 	return out;
 }
 
-/** 괄호 안 인자(depth 0 쉼표로 나눔)에서 경로 문자열들: 이름 없는 값, value=, path= */
-function mappingPaths(args: string): string[] {
-	const parts: string[] = [];
-	let depth = 0, start = 0;
-	for (let i = 0; i < args.length; i++) {
-		const c = args[i];
-		if (c === '"') { i = args.indexOf('"', i + 1); if (i < 0) { break; } }
-		else if (c === '{' || c === '(') { depth++; }
-		else if (c === '}' || c === ')') { depth--; }
-		else if (c === ',' && depth === 0) { parts.push(args.slice(start, i)); start = i + 1; }
+/** 매핑 애너테이션 하나의 경로 목록(없으면 `['']`) */
+function annotationPaths(node: SyntaxNode, text: string): string[] {
+	const args = node.getChild('AnnotationArgumentList');
+	if (!args) { return ['']; }
+	const pairs = args.getChildren('ElementValuePair');
+	const paths: string[] = [];
+	if (pairs.length) {
+		for (const pair of pairs) {
+			const key = pair.getChild('Identifier');
+			const name = key ? text.slice(key.from, key.to) : '';
+			if (name === 'value' || name === 'path') {
+				collectStrings(pair, text, paths);
+			}
+		}
+	} else {
+		collectStrings(args, text, paths);
 	}
-	parts.push(args.slice(start));
-	const paths = parts.flatMap(part => {
-		const named = /^\s*(\w+)\s*=([\s\S]*)$/.exec(part);
-		if (named && named[1] !== 'value' && named[1] !== 'path') { return []; }
-		return [...(named ? named[2] : part).matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
-	});
 	return paths.length ? paths : [''];
 }
 
-/** 닫는 괄호 자리(문자열 안 괄호는 건너뜀) */
-function closeParen(text: string, open: number): number {
-	let depth = 0;
-	for (let i = open; i < text.length; i++) {
-		const c = text[i];
-		if (c === '"') { const end = text.indexOf('"', i + 1); if (end < 0) { return -1; } i = end; }
-		else if (c === '(') { depth++; }
-		else if (c === ')' && --depth === 0) { return i; }
+/** 선언의 Modifiers에서 Spring 매핑 애너테이션 경로 목록을 모은다 */
+function mappingPathsOf(decl: SyntaxNode, text: string): string[] {
+	const mods = decl.getChild('Modifiers');
+	if (!mods) { return []; }
+	const paths: string[] = [];
+	for (let child = mods.firstChild; child; child = child.nextSibling) {
+		if ((child.name === 'Annotation' || child.name === 'MarkerAnnotation') && MAPPING_NAMES.has(annotationName(child, text))) {
+			paths.push(...annotationPaths(child, text));
+		}
 	}
-	return -1;
+	return paths;
 }
 
 const join = (a: string, b: string) => `/${[a, b].map(p => p.replace(/^\/+|\/+$/g, '')).filter(Boolean).join('/')}`;
 
-/** Java 원문에서 요청 경로가 붙은 메서드들. 클래스에 붙은 경로는 앞에 붙인다(파일에 클래스 하나 가정) */
-export function parseMappings(java: string): ActionMapping[] {
-	const text = blankComments(java);
-	const found: { paths: string[]; at: number; method?: string }[] = [];
-	for (const m of text.matchAll(MAPPING)) {
-		const end = m[2] ? closeParen(text, m.index + m[0].length - 1) : m.index + m[0].length - 1;
-		if (end < 0) { continue; }
-		const paths = m[2] ? mappingPaths(text.slice(m.index + m[0].length, end)) : [''];
-		// 다음 선언까지: `class`가 먼저면 클래스 경로, `이름(`이 먼저면 그 메서드
-		const after = text.slice(end + 1);
-		const decl = /\b(class|interface)\b|([A-Za-z_$][\w$]*)\s*\(/.exec(after.replace(/@\w+(\.\w+)*(\s*\([^)]*\))?/g, s => ' '.repeat(s.length)));
-		if (!decl) { continue; }
-		found.push(decl[1] ? { paths, at: m.index } : { paths, at: end + 1 + decl.index, method: decl[2] });
+/** 줄 시작 offset 표로 0부터 시작하는 줄 번호 계산 */
+function lineFinder(text: string): (offset: number) => number {
+	const starts = [0];
+	for (let i = 0; i < text.length; i++) {
+		if (text.charCodeAt(i) === 10) { starts.push(i + 1); }
 	}
-	const prefixes = found.find(f => !f.method)?.paths ?? [''];
-	const lineAt = (offset: number) => java.slice(0, offset).split('\n').length - 1;
-	return found.filter(f => f.method).flatMap(f => prefixes.flatMap(prefix => f.paths.map(p => ({ path: join(prefix, p), method: f.method!, line: lineAt(f.at) }))));
+	return offset => {
+		let lo = 0, hi = starts.length - 1;
+		while (lo < hi) {
+			const mid = (lo + hi + 1) >> 1;
+			if (starts[mid] <= offset) { lo = mid; } else { hi = mid - 1; }
+		}
+		return lo;
+	};
+}
+
+/** Java 원문에서 요청 경로가 붙은 메서드들. 클래스(·중첩 클래스)에 붙은 경로를 앞에 붙인다 */
+export function parseMappings(java: string): ActionMapping[] {
+	const lineAt = lineFinder(java);
+	const out: ActionMapping[] = [];
+	const visitType = (typeNode: SyntaxNode, outerPrefixes: string[]) => {
+		const own = mappingPathsOf(typeNode, java);
+		const prefixes = own.length ? outerPrefixes.flatMap(outer => own.map(p => join(outer, p))) : outerPrefixes;
+		let body: SyntaxNode | null = null;
+		for (let child = typeNode.firstChild; child; child = child.nextSibling) {
+			if (TYPE_BODIES.has(child.name)) { body = child; break; }
+		}
+		if (!body) { return; }
+		for (let member = body.firstChild; member; member = member.nextSibling) {
+			if (TYPE_DECLS.has(member.name)) {
+				visitType(member, prefixes);
+			} else if (member.name === 'MethodDeclaration') {
+				const methodPaths = mappingPathsOf(member, java);
+				if (!methodPaths.length) { continue; }
+				const def = member.getChild('Definition');
+				if (!def) { continue; }
+				const method = java.slice(def.from, def.to);
+				const line = lineAt(def.from);
+				for (const prefix of prefixes) {
+					for (const p of methodPaths) {
+						out.push({ path: join(prefix, p), method, line });
+					}
+				}
+			}
+		}
+	};
+	const root = javaParser.parse(java).topNode;
+	for (let child = root.firstChild; child; child = child.nextSibling) {
+		if (TYPE_DECLS.has(child.name)) {
+			visitType(child, ['']);
+		}
+	}
+	return out;
 }
 
 /** action URL → 비교할 경로: 주소·쿼리·끝 /를 떼고, 마지막 조각의 확장자(.do 등)도 뗀다 */

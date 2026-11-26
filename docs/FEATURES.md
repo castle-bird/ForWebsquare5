@@ -25,6 +25,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 ## 데이터 흐름
 
 - **데이터 흐름**: ERD 탭 상단 바의 `데이터 흐름` 버튼을 누르면 현재 화면의 Submission 관계를 기존 테이블 영역과 겹치지 않는 오른쪽 빈자리에 그룹과 도형으로 그립니다. Submission마다 파란 그룹(이름: Submission ID)으로 묶고, 그 안에 `Request`(빨강)·`Response`(초록) 그룹을 두며, 가운데 `Controller` 도형(요청 URL)과 요청·응답 `dataMap`(`{}`)·`dataList`(`[]`) 도형(회색)을 화살표로 이어 보여 줍니다. `Controller` 도형을 우클릭해 `Controller 이동`을 누르면 그 URL을 처리하는 Controller 메서드를 엽니다. 그려진 그룹·도형·선은 일반 ERD 항목처럼 옮기거나 수정해 JSON에 저장할 수 있으며, 위치를 옮긴 뒤 다시 눌러도 커스텀 위치가 유지됩니다.
+- **매퍼 테이블 추출**: ERD 탭 상단 바의 `매퍼 테이블` 버튼을 누르면 연결된 MyBatis 매퍼 XML의 SQL을 분석해 사용 테이블·CRUD(등록/조회/수정/삭제)·컬럼·조인 관계를 기존 그림 오른쪽 빈자리에 자동으로 추가합니다. 이미 그려진 테이블은 위치·설명·기존 컬럼을 유지한 채 CRUD와 누락된 컬럼만 병합합니다.
 
 ## 그리드
 
@@ -69,7 +70,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 - 기호로 이동(Ctrl+Shift+O): 현재 코드 탭의 함수(`scwin.*`)·클래스/메서드(Java)·SQL ID(MyBatis XML)·요소 ID(Source XML)·CSS 선택자를 퍼지 검색해 바로 이동합니다
 - 파라미터 힌트: `(`·`,`를 치거나 Ctrl+Shift+Space를 누르면 함수 모양과 지금 파라미터를 보여 줍니다(WebSquare API 문서·JSDoc)
 - 문법 오류 표시, 포맷(단축키 Ctrl+Alt+L. VS Code 기본 포맷 단축키 Shift+Alt+F와 겹치지 않게 IntelliJ와 같은 키를 썼고, VS Code 키보드 단축키에서 `WebSquare5: 코드 탭 포맷`을 찾아 바꿀 수 있습니다. VS Code에 설정한 포매터, 없으면 VS Code 내장), 검색(Ctrl+F, 입력칸 옆에 몇 번째/찾은 개수 예: 2/10. 편집기를 클릭해도 순번은 그대로, Enter는 커서 다음 일치로), 줄바꿈(VS Code 설정을 따름), 다시 하기 Ctrl+Y·Ctrl+Shift+Z
-- 코드 편집기 테마(탭 줄 오른쪽 톱니바퀴 메뉴): "VS Code 따라가기"(지금 VS Code 색 테마의 문법 색), "IntelliJ Dark"·"IntelliJ Light"·"One Dark"·"One Light"·"GitHub Light Default"·"GitHub Dark Default". Git 변경 줄 표시
+- 코드 편집기 테마(탭 줄 오른쪽 톱니바퀴 메뉴): "VS Code 따라가기"(지금 VS Code 색 테마의 문법 색), "IntelliJ Dark"·"IntelliJ Light"·"One Dark"·"One Light"·"GitHub Light Default"·"GitHub Dark Default". Git 변경 줄 표시(왼쪽 변경 막대를 클릭하면 원본과 인라인으로 비교하고 청크별로 되돌릴 수 있으며 `Esc`로 닫음)
 - 테마 색 덮어쓰기: 톱니바퀴 메뉴의 "테마 색 덮어쓰기…" 팝업에서 바꾸면 바로 미리 보이고, 확인하면 저장됩니다(지금 테마만 또는 모든 테마). 설정 `for-websquare5.codeThemeCustomizations`에 직접 적어도 됩니다. 예:
   ```json
   "for-websquare5.codeThemeCustomizations": {

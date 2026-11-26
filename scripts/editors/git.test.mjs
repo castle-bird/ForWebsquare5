@@ -61,7 +61,20 @@ export default async function ({ clickTab, page, reset, javaText }) {
 	await clickTab('Controller');
 	await page.waitForFunction(() => document.querySelectorAll('.tab-body:not([hidden]) .cm-change-ruler .cm-change-mark').length === 1, {timeout: 3000});
 	assert.deepEqual(await marks(), { gutter: ['3:modified'], ruler: ['modified'] });
-	console.log('Git changes: 수정·추가·삭제 표시·입력이 멈추면 갱신·연결 탭 passed');
+	// Git 변경 막대 클릭 → 원본 인라인 비교(unifiedMergeView) 열기 · Esc 닫기 · 청크 되돌리기(rejectChunk)
+	await page.click('.tab-body:not([hidden]) .cm-changes-gutter .cm-change-modified');
+	await page.waitForSelector('.tab-body:not([hidden]) .cm-deletedChunk', { timeout: 3000 });
+	assert.ok((await page.$eval('.tab-body:not([hidden]) .cm-deletedChunk .cm-deletedLine', e => e.textContent)).includes('x()'), '원본 줄 표시');
+	await page.keyboard.press('Escape');
+	await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .cm-deletedChunk'), { timeout: 2000 });
+	// 다시 열어 "되돌리기" 클릭 → 원본 내용으로 복원되고 변경 막대·비교 창이 닫힘
+	await page.click('.tab-body:not([hidden]) .cm-changes-gutter .cm-change-modified');
+	await page.waitForSelector('.tab-body:not([hidden]) .cm-merge-revert', { timeout: 3000 });
+	await page.click('.tab-body:not([hidden]) .cm-merge-revert');
+	await page.waitForFunction(() => window.editor().state.doc.toString().includes('x()'), { timeout: 3000 });
+	await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .cm-deletedChunk'), { timeout: 2000 });
+	await marksAre({ gutter: [], ruler: [] }, '청크 되돌리기 뒤 변경 표시 사라짐');
+	console.log('Git changes: 수정·추가·삭제 표시·인라인 비교·청크 되돌리기·연결 탭 passed');
 	// Git blame: 커서 줄 끝 "작성자 · n일 전"(커밋 안 된 줄은 커밋 안 됨), 지금 문서 버전 것만, 편집하면 숨김, 톱니바퀴에서 끄기
 	{
 		await clickTab('Script');

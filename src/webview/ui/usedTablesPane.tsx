@@ -2,6 +2,8 @@
 // 저장은 확장이 이 PC의 고른 폴더에 화면별 JSON으로(고칠 때마다 잠깐 모았다가). 화면 XML은 건드리지 않는다
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { applyDataFlow, dataFlow } from '../../core/dataFlow';
+import { errorMessage } from '../../core/errors';
+import { isMapperXml } from '../../core/mapperFormat';
 import type { UsedTables } from '../../core/tables';
 import type { ToWebview } from '../../core/protocol';
 import type { XmlNode } from '../../core/xmlModel';
@@ -85,6 +87,7 @@ function useUsedTables() {
 export function UsedTablesPane({ root }: { root?: XmlNode }) {
 	const { status, data, change, undo, redo, canUndo, canRedo } = useUsedTables();
 	const [focusIds, setFocusIds] = useState<{ ids: string[]; key: number }>();
+	const [extracting, setExtracting] = useState(false);
 
 	const addDataFlow = useCallback(() => {
 		if (!data) { return; }
@@ -99,6 +102,42 @@ export function UsedTablesPane({ root }: { root?: XmlNode }) {
 		}
 		setFocusIds({ ids, key: Date.now() });
 	}, [data, root, change]);
+
+	const extractFromMapper = useCallback(async () => {
+		if (!data || extracting) { return; }
+		const { links, codeOptions } = useEditorStore.getState();
+		const xmls = Object.values(links).flatMap(l => l.text && isMapperXml(l.text) ? [l.text] : []);
+		if (!xmls.length) {
+			useEditorStore.setState({ toast: { message: '연결된 MyBatis 매퍼 XML 파일이 없습니다. Mybatis 탭에서 매퍼 XML을 먼저 연결해 주세요.', key: Date.now() } });
+			return;
+		}
+		setExtracting(true);
+		try {
+			const { extractMapperTables, applyMapperTables } = await import('../../core/sqlTables');
+			const extracted = await extractMapperTables(xmls, codeOptions.sqlDialect);
+			const result = applyMapperTables(data, extracted);
+			if (result.added || result.updated || result.linksAdded) {
+				change(result.data);
+				if (result.ids.length) { setFocusIds({ ids: result.ids, key: Date.now() }); }
+				const parts = [
+					result.added ? `테이블 ${result.added}개 추가` : '',
+					result.updated ? `${result.updated}개 갱신` : '',
+					result.linksAdded ? `관계 ${result.linksAdded}개 연결` : '',
+				].filter(Boolean);
+				const note = extracted.failed ? ` (해석하지 못한 구문 ${extracted.failed}건 제외)` : '';
+				useEditorStore.setState({ toast: { message: `매퍼에서 ${parts.join(', ')}했습니다.${note}`, key: Date.now() } });
+			} else {
+				const message = extracted.failed && !extracted.tables.length
+					? `매퍼 SQL을 해석하지 못했습니다. (실패 ${extracted.failed}건)`
+					: '새로 추가하거나 갱신할 테이블이 없습니다.';
+				useEditorStore.setState({ toast: { message, key: Date.now() } });
+			}
+		} catch (e) {
+			useEditorStore.setState({ toast: { message: `매퍼 테이블 추출에 실패했습니다: ${errorMessage(e)}`, key: Date.now() } });
+		} finally {
+			setExtracting(false);
+		}
+	}, [data, extracting, change]);
 
 	if (!status) { return <EmptyState kind="loading">불러오는 중…</EmptyState>; }
 	if (!status.folder) {
@@ -121,6 +160,9 @@ export function UsedTablesPane({ root }: { root?: XmlNode }) {
 			<span className="where" title={status.file}>{status.file}</span>
 			<button type="button" className="btn-tool" title="현재 화면의 Submission·dataList·dataMap·Controller 흐름 그리기" aria-label="데이터 흐름" onClick={addDataFlow}>
 				<span className="codicon codicon-repo-forked" aria-hidden="true" />데이터 흐름
+			</button>
+			<button type="button" className="btn-tool" title="연결된 MyBatis 매퍼 XML의 SQL에서 사용 테이블·CRUD·조인 추출" aria-label="매퍼 테이블" disabled={extracting} onClick={() => void extractFromMapper()}>
+				<span className="codicon codicon-database" aria-hidden="true" />매퍼 테이블
 			</button>
 			<button type="button" className="btn-tool" onClick={() => post({ type: 'chooseTablesFolder', pick: true })}>저장 위치 변경</button>
 		</div>

@@ -39,8 +39,17 @@ export default async function ({ page }) {
 	]);
 	assert.equal(saved.links.length, 4, '요청→Action, Action→응답 선 연결');
 
-	// Action 도형 우클릭 → Controller 이동
-	await page.waitForSelector('.used-shape');
+	// Action 도형 우클릭 → Controller 이동(fitView 전환이 끝난 뒤 클릭)
+	await page.waitForFunction(() => {
+		const el = [...document.querySelectorAll('.used-shape')].find(n => n.textContent?.includes('/a/list.do'));
+		if (!el) { return false; }
+		const r = el.getBoundingClientRect();
+		const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+		const key = `${Math.round(r.x)},${Math.round(r.y)}`;
+		const stable = window.__actPos === key;
+		window.__actPos = key;
+		return stable && hit?.closest('.used-shape') === el;
+	}, { timeout: 3000 });
 	const actPos = await page.evaluate(() => {
 		const el = [...document.querySelectorAll('.used-shape')].find(n => n.textContent?.includes('/a/list.do'));
 		const r = el.getBoundingClientRect();
@@ -50,4 +59,22 @@ export default async function ({ page }) {
 	await page.waitForSelector('.context-menu');
 	await page.$$eval('.context-menu button', bs => bs.find(b => b.textContent.startsWith('Controller 이동')).click());
 	assert.deepEqual(await page.evaluate(() => window.sent.findLast(m => m.type === 'openAction')), { type: 'openAction', action: '/a/list.do' });
+
+	// 연결된 MyBatis 매퍼 XML → "매퍼 테이블" 추출(기존 TB_BASE 유지, 새 테이블·CRUD·조인 추가)
+	await page.evaluate(() => {
+		const mapper = `<mapper namespace="com.example.UserMapper">
+			<select id="selectUsers">SELECT u.USER_ID, d.DEPT_NM FROM TB_USER u INNER JOIN TB_DEPT d ON u.DEPT_CD = d.DEPT_CD</select>
+			<insert id="insertUser">INSERT INTO TB_USER (USER_ID) VALUES (#{userId})</insert>
+		</mapper>`;
+		window.send({ type: 'linked', kind: 'mybatis', path: 'mappers/UserMapper.xml', text: mapper, version: 1, dirty: false });
+	});
+	await page.click('.used-tables-bar button[aria-label="매퍼 테이블"]');
+	await page.waitForFunction(() => window.lastSave()?.tables.some(t => t.name === 'TB_USER'), { timeout: 5000 });
+	const withMapper = await page.evaluate(() => window.lastSave());
+	assert.deepEqual(withMapper.tables.map(t => [t.name, t.crud]), [
+		['TB_BASE', []],
+		['TB_USER', ['C', 'R']],
+		['TB_DEPT', ['R']],
+	]);
+	assert.ok(withMapper.links.some(l => l.label === 'DEPT_CD'), '조인 선 생성');
 }

@@ -1,5 +1,6 @@
 // MyBatis Mapper 인터페이스(.java) ↔ 매퍼 XML. XML의 namespace = 인터페이스 전체 이름, 문(select 등)의 id = 메서드 이름
-import { blankComments } from './actionMapping';
+import { parser as javaParser } from '@lezer/java';
+import type { SyntaxNode } from '@lezer/common';
 
 /** 이름과 그 글자 자리(offset) */
 export interface Named { name: string; at: number }
@@ -23,30 +24,53 @@ const blank = (s: string) => s.replace(/[^\n]/g, ' ');
 const on = (n: Named, offset: number) => offset >= n.at && offset <= n.at + n.name.length;
 const MAPPER_SUFFIX = /(?:Mapper|Dao|Repository)$/i;
 
-/** 인터페이스 본문 바로 안(중괄호·괄호 깊이 0)의 `이름(` = 메서드 선언. 애너테이션·default 메서드 본문은 뺀다 */
-export function parseJavaMapper(java: string): JavaMapper | undefined {
-	const text = blankComments(java).replace(/"""[\s\S]*?"""|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, blank);
-	const type = /\binterface\s+([A-Za-z_$][\w$]*)/.exec(text);
-	const open = type ? text.indexOf('{', type.index) : -1;
-	if (!type || open < 0) { return undefined; }
-	const pkg = /\bpackage\s+([\w.]+)\s*;/.exec(text)?.[1];
-	const methods: Named[] = [];
-	const word = /[A-Za-z_$][\w$]*(?=\s*(\()?)/y;
-	let braces = 0, parens = 0;
-	for (let i = open + 1; i < text.length && braces >= 0; i++) {
-		const c = text[i];
-		if (c === '{') { braces++; } else if (c === '}') { braces--; } else if (c === '(') { parens++; } else if (c === ')') { parens--; }
-		else if (braces === 0 && parens === 0 && /[A-Za-z_$]/.test(c)) {
-			word.lastIndex = i;
-			const m = word.exec(text)!;
-			let b = i - 1;
-			while (b > open && /\s/.test(text[b])) { b--; }
-			if (m[1] && text[b] !== '@' && text[b] !== '.') { methods.push({ name: m[0], at: i }); }
-			i += m[0].length - 1;
+/** 인터페이스 선언에 @Mapper 애너테이션이 붙었는지(@org.apache.ibatis.annotations.Mapper 포함) */
+function hasMapperAnnotation(iface: SyntaxNode, java: string): boolean {
+	const mods = iface.getChild('Modifiers');
+	if (!mods) { return false; }
+	for (let child = mods.firstChild; child; child = child.nextSibling) {
+		if (child.name !== 'Annotation' && child.name !== 'MarkerAnnotation') { continue; }
+		const nameNode = child.getChild('Identifier') ?? child.getChild('ScopedIdentifier');
+		if (!nameNode) { continue; }
+		const raw = java.slice(nameNode.from, nameNode.to).replace(/\s+/g, '');
+		if (raw === 'Mapper' || raw.endsWith('.Mapper')) { return true; }
+	}
+	return false;
+}
+
+/** 첫 번째 인터페이스 선언과 package 선언을 CST에서 찾는다 */
+function parseInterfaceNode(java: string): { pkg?: string; iface: SyntaxNode; def: SyntaxNode } | undefined {
+	const root = javaParser.parse(java).topNode;
+	let pkg: string | undefined;
+	let iface: SyntaxNode | undefined;
+	for (let child = root.firstChild; child; child = child.nextSibling) {
+		if (child.name === 'PackageDeclaration' && !pkg) {
+			const nameNode = child.getChild('ScopedIdentifier') ?? child.getChild('Identifier');
+			if (nameNode) { pkg = java.slice(nameNode.from, nameNode.to).replace(/\s+/g, ''); }
+		} else if (child.name === 'InterfaceDeclaration' && !iface) {
+			iface = child;
 		}
 	}
-	const name = type[1];
-	return { fqcn: pkg ? `${pkg}.${name}` : name, type: { name, at: type.index + type[0].length - name.length }, methods };
+	const def = iface?.getChild('Definition');
+	return iface && def ? { pkg, iface, def } : undefined;
+}
+
+/** 인터페이스 본문 바로 안의 메서드 선언(@lezer/java CST). 주석·애너테이션·default 메서드 본문은 제외 */
+export function parseJavaMapper(java: string): JavaMapper | undefined {
+	const found = parseInterfaceNode(java);
+	if (!found) { return undefined; }
+	const { pkg, iface, def } = found;
+	const name = java.slice(def.from, def.to);
+	const body = iface.getChild('InterfaceBody');
+	const methods: Named[] = [];
+	if (body) {
+		for (let member = body.firstChild; member; member = member.nextSibling) {
+			if (member.name !== 'MethodDeclaration') { continue; }
+			const mDef = member.getChild('Definition');
+			if (mDef) { methods.push({ name: java.slice(mDef.from, mDef.to), at: mDef.from }); }
+		}
+	}
+	return { fqcn: pkg ? `${pkg}.${name}` : name, type: { name, at: def.from }, methods };
 }
 
 /** `<mapper namespace>`와 select·insert·update·delete의 id. 주석·CDATA 안은 보지 않는다 */
@@ -90,12 +114,13 @@ export function xmlTargetAt(xml: string, offset: number): MapperTarget | undefin
 
 /** 자동 아이콘 탐색 대상 Java 인터페이스인지: @Mapper 애너테이션이나 Mapper·Dao·Repository 이름 */
 export function isLikelyJavaMapper(java: string, fileName?: string): boolean {
-	const mapper = parseJavaMapper(java);
-	if (!mapper) { return false; }
-	if (MAPPER_SUFFIX.test(mapper.type.name) || (fileName && /(?:Mapper|Dao|Repository)\.java$/i.test(fileName))) {
+	const found = parseInterfaceNode(java);
+	if (!found) { return false; }
+	const name = java.slice(found.def.from, found.def.to);
+	if (MAPPER_SUFFIX.test(name) || (fileName && /(?:Mapper|Dao|Repository)\.java$/i.test(fileName))) {
 		return true;
 	}
-	return /@(?:[\w.]+\.)?Mapper\b/.test(blankComments(java));
+	return hasMapperAnnotation(found.iface, java);
 }
 
 /** 글자 위치(offset) → 0부터 줄·글자(CRLF·LF·CR 지원) */

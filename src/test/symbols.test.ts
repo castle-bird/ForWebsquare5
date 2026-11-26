@@ -21,8 +21,8 @@ suite('기호 추출(Ctrl+Shift+O)', () => {
 			['Calc', 'class', 7, undefined],
 			['sum', 'method', 7, 'Calc'],
 		]);
-		const broken = 'scwin.init = function() {\n    if (\n};\nfunction recover() {}\n';
-		assert.deepStrictEqual(extractSymbols(broken, 'js').map(s => s.name), ['scwin.init', 'recover']);
+		const broken = 'scwin.init = function() {\n    if (\n};\n// scwin.commented = () => {};\nconst arrowFn = () => {};\nfunction recover() {}\nfunction (\n';
+		assert.deepStrictEqual(extractSymbols(broken, 'js').map(s => s.name), ['scwin.init', 'arrowFn', 'recover']);
 	});
 
 	test('Java: 클래스·인터페이스·메서드만 추출하고 제어문·주석·애너테이션 제외', () => {
@@ -74,11 +74,13 @@ suite('기호 추출(Ctrl+Shift+O)', () => {
 		]);
 	});
 
-	test('CSS: 최상위 선택자 추출(주석 제외)', () => {
-		const css = '/* .hidden {} */\n.btn-primary { color: red; }\n#header .title { font-size: 14px; }\n';
-		assert.deepStrictEqual(extractSymbols(css, 'css').map(s => [s.name, s.line]), [
-			['.btn-primary', 2],
-			['#header .title', 3],
+	test('CSS: 선택자·@media 내부 규칙·@keyframes 추출(주석·문자열 안 기호 무시)', () => {
+		const css = '/* .hidden {} */\n.btn-primary { color: red; content: "{ ; }"; }\n#header .title { font-size: 14px; }\n@media (max-width: 600px) { .mobile { display: block; } }\n@keyframes spin { from { opacity: 0; } to { opacity: 1; } }\n';
+		assert.deepStrictEqual(extractSymbols(css, 'css').map(s => [s.name, s.line, s.detail]), [
+			['.btn-primary', 2, 'css'],
+			['#header .title', 3, 'css'],
+			['.mobile', 4, '@media'],
+			['@keyframes spin', 5, '@keyframes'],
 		]);
 	});
 });

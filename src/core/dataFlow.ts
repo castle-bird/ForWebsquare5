@@ -1,6 +1,7 @@
 // 현재 화면의 Submission 흐름: 요청 데이터(ref) → Submission(action) → 응답 데이터(target)와 이벤트 핸들러.
 // dataList·dataMap은 어느 쪽(요청·응답)에도 올 수 있어 종류로 방향을 가정하지 않는다
 import { DATA_KINDS, modelParts, type DataKind } from './data';
+import { layoutFlat, snap, snapUp } from './erdLayout';
 import { parseDataRef, SUBMISSION_EVENTS } from './submission';
 import type { NoteColor, ShapeKind, TableLink, UsedGroup, UsedShape, UsedTables } from './tables';
 import { isWs, type XmlNode } from './xmlModel';
@@ -36,9 +37,6 @@ export function dataFlow(root: XmlNode | undefined): SubmissionFlow[] {
 	}));
 }
 
-const GRID = 16;
-const snap = (n: number) => Math.round(n / GRID) * GRID;
-const snapUp = (n: number) => Math.ceil(n / GRID) * GRID;
 const FLOW_PREFIX = 'flow-';
 const isFlowId = (id: string) => id.startsWith(FLOW_PREFIX);
 
@@ -63,7 +61,7 @@ function sideBoxes(side: FlowSide): { kind: ShapeKind; text: string; color: Note
 
 /**
  * 현재 화면의 Submission 데이터 흐름을 ERD(UsedTables)의 그룹·도형·선으로 만든다.
- * 이미 그려진 Submission은 사용자가 옮긴 위치를 유지하고, 새로 그리는 것만 기존 영역과 겹치지 않는 오른쪽 빈자리에 배치한다
+ * 이미 그려진 Submission은 사용자가 옮긴 위치를 유지하고, 새로 그리는 것만 @dagrejs/dagre로 계산해 기존 영역과 겹치지 않는 오른쪽 빈자리에 배치한다
  */
 export function applyDataFlow(current: UsedTables, flows: SubmissionFlow[]): { data: UsedTables; ids: string[] } {
 	const baseGroups = current.groups.filter(g => !isFlowId(g.id));
@@ -91,15 +89,13 @@ export function applyDataFlow(current: UsedTables, flows: SubmissionFlow[]): { d
 		return { flow, key: resolvedKey, reqItems, resItems, actText };
 	});
 
-	// 여러 Submission이 위아래로 놓일 때 Request·Action·Response 열 폭을 맞춰 정렬한다.
-	// ITEM_H(48) + ITEM_GAP(16) = 64(짝수 격자)라 항목 수가 달라도 모든 도형 y가 16px 격자에 딱 맞고 가운데가 일치한다
+	// 여러 Submission이 위아래로 놓일 때 Request·Action·Response 열 폭을 맞춰 정렬한다
 	const itemW = Math.max(192, ...prepared.flatMap(p => [...p.reqItems, ...p.resItems].map(x => textBoxWidth(x.text, 192))));
 	const actW = Math.max(192, ...prepared.map(p => textBoxWidth(p.actText, 192)));
-	const ITEM_H = 48, ITEM_GAP = 16, ACT_H = 48, STEP_Y = ITEM_H + ITEM_GAP;
+	const ITEM_H = 48, ITEM_GAP = 16, ACT_H = 48;
 	const OUTER_PAD_X = 32, OUTER_TOP = 48, OUTER_BOTTOM = 32;
 	const SIDE_PAD_X = 32, SIDE_TOP = 48, SIDE_BOTTOM = 32, GAP_X = 64;
 	const sideW = SIDE_PAD_X * 2 + itemW;
-	const outerW = OUTER_PAD_X * 2 + sideW * 2 + GAP_X * 2 + actW;
 
 	const existingOuters = prepared.flatMap(p => { const g = groupById.get(`${FLOW_PREFIX}sbm-${p.key}`); return g ? [g] : []; });
 	const occupied = [
@@ -155,58 +151,70 @@ export function applyDataFlow(current: UsedTables, flows: SubmissionFlow[]): { d
 			continue;
 		}
 
-		const maxCount = Math.max(reqItems.length, resItems.length, 1);
-		const contentH = maxCount * STEP_Y - ITEM_GAP;
-		const sideH = SIDE_TOP + contentH + SIDE_BOTTOM;
-		const outerH = OUTER_TOP + sideH + OUTER_BOTTOM;
+		// Request·Response 안쪽 도형들과 3열(Request → Action → Response)을 @dagrejs/dagre로 배치
+		const reqInner = layoutFlat(inIds.map(id => ({ id, w: itemW, h: ITEM_H })), [], { direction: 'LR', nodesep: ITEM_GAP });
+		const resInner = layoutFlat(outIds.map(id => ({ id, w: itemW, h: ITEM_H })), [], { direction: 'LR', nodesep: ITEM_GAP });
+		const sideH = snapUp(SIDE_TOP + Math.max(reqInner.height, resInner.height, ITEM_H) + SIDE_BOTTOM);
+		const row = layoutFlat(
+			[
+				{ id: reqGroupId, w: sideW, h: sideH },
+				{ id: actId, w: actW, h: ACT_H },
+				{ id: resGroupId, w: sideW, h: sideH },
+			],
+			[{ from: reqGroupId, to: actId }, { from: actId, to: resGroupId }],
+			{ direction: 'LR', ranksep: GAP_X },
+		);
+		const outerW = snapUp(OUTER_PAD_X * 2 + row.width);
+		const outerH = snapUp(OUTER_TOP + row.height + OUTER_BOTTOM);
 
 		// 구성이 바뀌었더라도 기존 그룹이 있었으면 그 그룹이 있던 자리를 기준으로 그린다
 		const boxX = prevOuter ? prevOuter.x : startX;
 		const boxY = prevOuter ? prevOuter.y : curY;
 		if (!prevOuter) { curY += outerH + 48; }
 
-		const reqX = boxX + OUTER_PAD_X;
-		const sideY = boxY + OUTER_TOP;
-		const innerTop = sideY + SIDE_TOP;
-		const actX = reqX + sideW + GAP_X;
-		const resX = actX + actW + GAP_X;
+		const reqPos = row.positions.get(reqGroupId)!;
+		const actPos = row.positions.get(actId)!;
+		const resPos = row.positions.get(resGroupId)!;
+		const reqX = boxX + OUTER_PAD_X + reqPos.x, reqY = boxY + OUTER_TOP + reqPos.y;
+		const actX = boxX + OUTER_PAD_X + actPos.x, actY = boxY + OUTER_TOP + actPos.y;
+		const resX = boxX + OUTER_PAD_X + resPos.x, resY = boxY + OUTER_TOP + resPos.y;
 
 		groups.push(
 			{ id: outerId, title: flow.id || '(id 없음)', color: 'blue', x: boxX, y: boxY, w: outerW, h: outerH },
-			{ id: reqGroupId, title: 'Request', color: 'red', x: reqX, y: sideY, w: sideW, h: sideH },
-			{ id: resGroupId, title: 'Response', color: 'green', x: resX, y: sideY, w: sideW, h: sideH },
+			{ id: reqGroupId, title: 'Request', color: 'red', x: reqX, y: reqY, w: sideW, h: sideH },
+			{ id: resGroupId, title: 'Response', color: 'green', x: resX, y: resY, w: sideW, h: sideH },
 		);
 		ids.push(outerId, reqGroupId, resGroupId, actId);
 
 		shapes.push({
 			id: actId, kind: 'controller', text: actText, color: 'blue',
-			x: actX, y: innerTop + (maxCount - 1) * (STEP_Y / 2), w: actW, h: ACT_H,
+			x: actX, y: actY, w: actW, h: ACT_H,
 		});
 
-		const reqStartY = innerTop + (maxCount - reqItems.length) * (STEP_Y / 2);
+		const reqOffsetY = snap((sideH - SIDE_TOP - SIDE_BOTTOM - reqInner.height) / 2);
 		reqItems.forEach((item, j) => {
-			const id = inIds[j];
+			const id = inIds[j], p = reqInner.positions.get(id)!;
 			ids.push(id);
 			shapes.push({
 				id, kind: item.kind, text: item.text, color: item.color,
-				x: reqX + SIDE_PAD_X, y: reqStartY + j * STEP_Y, w: itemW, h: ITEM_H,
+				x: reqX + SIDE_PAD_X + p.x, y: reqY + SIDE_TOP + reqOffsetY + p.y, w: itemW, h: ITEM_H,
 			});
 			links.push({ from: id, to: actId, arrow: 'end', label: '' });
 		});
 
-		const resStartY = innerTop + (maxCount - resItems.length) * (STEP_Y / 2);
+		const resOffsetY = snap((sideH - SIDE_TOP - SIDE_BOTTOM - resInner.height) / 2);
 		resItems.forEach((item, j) => {
-			const id = outIds[j];
+			const id = outIds[j], p = resInner.positions.get(id)!;
 			ids.push(id);
 			shapes.push({
 				id, kind: item.kind, text: item.text, color: item.color,
-				x: resX + SIDE_PAD_X, y: resStartY + j * STEP_Y, w: itemW, h: ITEM_H,
+				x: resX + SIDE_PAD_X + p.x, y: resY + SIDE_TOP + resOffsetY + p.y, w: itemW, h: ITEM_H,
 			});
 			links.push({ from: actId, to: id, arrow: 'end', label: '' });
 		});
 	}
 
-	const validIds = new Set([... current.tables, ...baseMemos, ...baseGroups, ...baseShapes, ...groups, ...shapes].map(n => n.id));
+	const validIds = new Set([...current.tables, ...baseMemos, ...baseGroups, ...baseShapes, ...groups, ...shapes].map(n => n.id));
 	const userLinks = current.links.filter(l => validIds.has(l.from) && validIds.has(l.to) && !(isFlowId(l.from) && isFlowId(l.to)));
 
 	return {

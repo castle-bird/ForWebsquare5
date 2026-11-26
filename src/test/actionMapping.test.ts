@@ -42,4 +42,29 @@ suite('Submission action → Controller', () => {
 		assert.strictEqual(matchAction('/xuser/selectList.do', '/user/selectList.do'), 0, '조각 경계');
 		assert.strictEqual(matchAction('/user', '/'), 0);
 	});
+
+	test('@lezer/java: 중첩 괄호 애너테이션·텍스트 블록·다중 클래스 처리', () => {
+		const java = [
+			'@RequestMapping("/a")',
+			'public class First {',
+			'\t@PreAuthorize("hasRole(\'ADMIN\')")',
+			'\t@PostMapping("/run")',
+			'\tpublic String run() {',
+			'\t\treturn """',
+			'\t\t\t@GetMapping("/fake")',
+			'\t\t\tpublic void fake() {}',
+			'\t\t""";',
+			'\t}',
+			'}',
+			'@RequestMapping("/b")',
+			'class Second {',
+			'\t@GetMapping("/ok")',
+			'\tvoid ok() {}',
+			'}',
+		].join('\n');
+		assert.deepStrictEqual(parseMappings(java).map(m => `${m.path} ${m.method} ${m.line}`), [
+			'/a/run run 4',
+			'/b/ok ok 14',
+		]);
+	});
 });

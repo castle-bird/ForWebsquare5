@@ -64,9 +64,13 @@ function inComment(state: EditorState, pos: number): boolean {
 	if (COMMENT.test(node.name) && pos > node.from) {
 		return true;
 	}
-	// @lezer/java는 아직 */ 를 안 친 /* 를 주석이 아닌 오류로 읽는다 → 앞의 /* 가 오류 자리고 그 뒤에 */ 가 없으면 주석 안
+	// @lezer/java는 아직 */ 를 안 친 /* 를 주석이 아닌 오류(⚠ 또는 ⚠ 안의 ArithOp)로 읽는다 → 앞의 /* 가 오류 자리고 그 뒤에 */ 가 없으면 주석 안
 	const before = state.sliceDoc(0, pos), open = before.lastIndexOf('/*');
-	return open >= 0 && !before.includes('*/', open + 2) && tree.resolveInner(open, 1).type.isError;
+	if (open < 0 || before.includes('*/', open + 2)) {
+		return false;
+	}
+	const atOpen = tree.resolveInner(open, 1);
+	return atOpen.type.isError || !!atOpen.parent?.type.isError;
 }
 
 /** 주석 안이면 자동완성 없음 */

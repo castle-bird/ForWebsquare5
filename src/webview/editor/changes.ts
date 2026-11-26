@@ -1,7 +1,8 @@
-// Git 변경 표시: 기준 내용(스테이지)과 지금 내용을 줄 단위로 비교해 줄 번호 옆 막대(추가·수정·삭제)와 오른쪽 끝 띠(파일 전체 위치)로 보여 준다
-import { diff } from '@codemirror/merge';
-import { RangeSetBuilder, StateEffect, StateField, Text, type Extension, type EditorState } from '@codemirror/state';
-import { EditorView, GutterMarker, gutter, ViewPlugin, type ViewUpdate } from '@codemirror/view';
+// Git 변경 표시: 기준 내용(스테이지)과 지금 내용을 줄 단위로 비교해 줄 번호 옆 막대(추가·수정·삭제)와 오른쪽 끝 띠(파일 전체 위치)로 보여 준다.
+// 변경 막대를 클릭하면 @codemirror/merge의 unifiedMergeView로 원본 인라인 비교와 청크 되돌리기(rejectChunk)를 연다
+import { diff, getChunks, unifiedMergeView } from '@codemirror/merge';
+import { Compartment, RangeSetBuilder, StateEffect, StateField, Text, type Extension, type EditorState } from '@codemirror/state';
+import { EditorView, GutterMarker, gutter, keymap, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 
 type Kind = 'added' | 'modified' | 'deleted';
 /** 바뀐 줄 범위(1부터, 끝 포함). 삭제는 지워진 자리 바로 아래 줄 하나 */
@@ -76,8 +77,66 @@ function bestShift(lines: string[], from: number, to: number): number {
 
 const setBase = StateEffect.define<Text | null>();
 const refresh = StateEffect.define<null>();
+const inlineDiffConf = new Compartment();
 /** 입력이 멈추고 이 시간 뒤에 다시 비교한다(긴 파일에서 입력마다 전체를 비교하면 느리다) */
 const SETTLE_MS = 200;
+
+function closeInlineDiff(view: EditorView): void {
+	if (getChunks(view.state) !== null) {
+		view.dispatch({ effects: inlineDiffConf.reconfigure([]) });
+	}
+}
+
+/** Git 기준 내용과 현재 문서를 인라인 비교·청크 되돌리기(rejectChunk)하는 unifiedMergeView 확장 */
+function makeInlineDiff(base: Text, view: EditorView): Extension {
+	return unifiedMergeView({
+		original: base,
+		gutter: false,
+		highlightChanges: true,
+		syntaxHighlightDeletions: true,
+		diffConfig: DIFF,
+		mergeControls: (type, action) => {
+			const btn = document.createElement('button');
+			btn.type = 'button';
+			if (type === 'reject') {
+				btn.name = 'reject';
+				btn.className = 'cm-merge-btn cm-merge-revert';
+				btn.textContent = '되돌리기';
+				btn.title = '이 변경을 Git 기준으로 되돌리기';
+				btn.disabled = view.state.readOnly;
+				btn.onmousedown = e => {
+					if (view.state.readOnly) { e.preventDefault(); return; }
+					action(e);
+				};
+			} else {
+				btn.name = 'close';
+				btn.className = 'cm-merge-btn cm-merge-close';
+				btn.textContent = '닫기';
+				btn.title = '원본 비교 닫기 (Esc)';
+				btn.onmousedown = e => {
+					e.preventDefault();
+					closeInlineDiff(view);
+				};
+			}
+			return btn;
+		},
+	});
+}
+
+function toggleInlineDiff(view: EditorView, pos: number): void {
+	if (getChunks(view.state) !== null) {
+		closeInlineDiff(view);
+		return;
+	}
+	const current = view.state.field(changes, false);
+	if (!current) { return; }
+	view.dispatch({
+		effects: [
+			inlineDiffConf.reconfigure(makeInlineDiff(current.base, view)),
+			EditorView.scrollIntoView(pos, { y: 'center' }),
+		],
+	});
+}
 
 // 입력 중에는 이전 표시를 그대로 두고(줄이 바뀐 만큼 어긋날 수 있어 범위만 문서 안으로 자른다) 멈춘 뒤 refresh로 다시 계산한다
 const changes = StateField.define<{ base: Text; ranges: Range[] } | null>({
@@ -99,9 +158,34 @@ const settle = ViewPlugin.fromClass(class {
 	timer: ReturnType<typeof setTimeout> | undefined;
 	constructor(readonly view: EditorView) {}
 	update(u: ViewUpdate) {
+		const baseChanged = u.transactions.some(tr => tr.effects.some(e => e.is(setBase)));
+		const merged = getChunks(u.state);
+		if (baseChanged && merged !== null) {
+			const next = u.state.field(changes, false);
+			queueMicrotask(() => {
+				if (getChunks(this.view.state) === null) { return; }
+				this.view.dispatch({ effects: inlineDiffConf.reconfigure(next ? makeInlineDiff(next.base, this.view) : []) });
+			});
+		}
 		if (u.docChanged && u.state.field(changes, false)) {
 			clearTimeout(this.timer);
-			this.timer = setTimeout(() => this.view.dispatch({ effects: refresh.of(null) }), SETTLE_MS);
+			if (u.transactions.some(tr => tr.isUserEvent('revert'))) {
+				// 청크 되돌리기 직후에는 기다리지 않고 변경 막대·미니맵을 즉시 갱신하고, 남은 변경이 없으면 비교를 닫는다
+				queueMicrotask(() => {
+					const effects: StateEffect<unknown>[] = [refresh.of(null)];
+					if (getChunks(this.view.state)?.chunks.length === 0) {
+						effects.push(inlineDiffConf.reconfigure([]));
+					}
+					this.view.dispatch({ effects });
+				});
+			} else {
+				this.timer = setTimeout(() => this.view.dispatch({ effects: refresh.of(null) }), SETTLE_MS);
+				if (merged !== null && merged.chunks.length === 0) {
+					queueMicrotask(() => {
+						if (getChunks(this.view.state)?.chunks.length === 0) { closeInlineDiff(this.view); }
+					});
+				}
+			}
 		}
 	}
 	destroy() {
@@ -126,7 +210,10 @@ class ChangeMarker extends GutterMarker {
 		return other instanceof ChangeMarker && other.kind === this.kind;
 	}
 	toDOM() {
-		return Object.assign(document.createElement('div'), { className: `cm-change cm-change-${this.kind}` });
+		return Object.assign(document.createElement('div'), {
+			className: `cm-change cm-change-${this.kind}`,
+			title: '클릭하여 Git 원본 비교 · 되돌리기',
+		});
 	}
 }
 const MARKERS = { added: new ChangeMarker('added'), modified: new ChangeMarker('modified'), deleted: new ChangeMarker('deleted') };
@@ -145,6 +232,16 @@ const changeGutter = gutter({
 			}
 		}
 		return builder.finish();
+	},
+	domEventHandlers: {
+		mousedown(view, line, event) {
+			if ((event as MouseEvent).button !== 0) { return false; }
+			const lineNo = view.state.doc.lineAt(line.from).number;
+			if (!changedRanges(view.state).some(r => lineNo >= r.from && lineNo <= r.to)) { return false; }
+			event.preventDefault();
+			toggleInlineDiff(view, line.from);
+			return true;
+		},
 	},
 });
 
@@ -189,4 +286,13 @@ const overviewRuler = ViewPlugin.fromClass(class {
 	}
 });
 
-export const gitChanges: Extension = [changes, settle, changeGutter, overviewRuler];
+const closeDiffOnEsc = keymap.of([{
+	key: 'Escape',
+	run: view => {
+		if (getChunks(view.state) === null) { return false; }
+		closeInlineDiff(view);
+		return true;
+	},
+}]);
+
+export const gitChanges: Extension = [changes, inlineDiffConf.of([]), settle, changeGutter, overviewRuler, closeDiffOnEsc];

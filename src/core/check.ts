@@ -1,45 +1,49 @@
 // 화면 점검: 겹치는 id, 없는 데이터·컬럼을 가리키는 바인딩, Script에 없는 이벤트 함수
-import { parse } from 'acorn';
+import { parse, type Options as AcornOptions } from 'acorn';
+import { parse as parseLoose } from 'acorn-loose';
 import { isDataKind } from './data';
 import { EV, isWs, localName, pathTo, type XmlNode } from './xmlModel';
 
 interface JsNode { type: string; [key: string]: unknown }
+const JS_OPTIONS: AcornOptions = {
+	ecmaVersion: 'latest',
+	sourceType: 'script',
+	allowReturnOutsideFunction: true,
+	allowAwaitOutsideFunction: true,
+	allowHashBang: true,
+};
+const DUMMY_ID = '✖';
 
 let lastScript = '';
 let lastDefined = new Set<string>();
 
-/** Script에서 실제 대입(`scwin.fn = ...`)으로 정의된 핸들러 이름들(주석·문자열 제외, 문법 오류 시 정규식 폴백) */
+/** Script에서 실제 대입(`scwin.fn = ...`)으로 정의된 핸들러 이름들(주석·문자열 제외, 문법 오류 시 acorn-loose 복구) */
 function definedHandlers(script: string): Set<string> {
 	if (!script) { return new Set(); }
 	if (script === lastScript) { return lastDefined; }
 	const defined = new Set<string>();
+	let ast: JsNode;
 	try {
-		const ast = parse(script, {
-			ecmaVersion: 'latest',
-			sourceType: 'script',
-			allowReturnOutsideFunction: true,
-			allowAwaitOutsideFunction: true,
-			allowHashBang: true,
-		}) as unknown as JsNode;
-		const visit = (node: JsNode) => {
-			if (node.type === 'AssignmentExpression') {
-				const left = node.left as JsNode;
-				if (left.type === 'MemberExpression' && (left.object as JsNode).type === 'Identifier' && (left.object as JsNode).name === 'scwin') {
-					const prop = left.property as JsNode;
-					const name = !left.computed && prop.type === 'Identifier' ? prop.name : left.computed && prop.type === 'Literal' ? prop.value : undefined;
-					if (typeof name === 'string') { defined.add(name); }
-				}
-			}
-			for (const v of Object.values(node)) {
-				for (const child of Array.isArray(v) ? v : [v]) {
-					if (child && typeof child === 'object' && typeof (child as JsNode).type === 'string') { visit(child as JsNode); }
-				}
-			}
-		};
-		visit(ast);
+		ast = parse(script, JS_OPTIONS) as unknown as JsNode;
 	} catch {
-		for (const m of script.matchAll(/\bscwin\.([\w$]+)\s*=/g)) { defined.add(m[1]); }
+		ast = parseLoose(script, JS_OPTIONS) as unknown as JsNode;
 	}
+	const visit = (node: JsNode) => {
+		if (node.type === 'AssignmentExpression') {
+			const left = node.left as JsNode;
+			if (left.type === 'MemberExpression' && (left.object as JsNode).type === 'Identifier' && (left.object as JsNode).name === 'scwin') {
+				const prop = left.property as JsNode;
+				const name = !left.computed && prop.type === 'Identifier' ? prop.name : left.computed && prop.type === 'Literal' ? prop.value : undefined;
+				if (typeof name === 'string' && name && name !== DUMMY_ID) { defined.add(name); }
+			}
+		}
+		for (const v of Object.values(node)) {
+			for (const child of Array.isArray(v) ? v : [v]) {
+				if (child && typeof child === 'object' && typeof (child as JsNode).type === 'string') { visit(child as JsNode); }
+			}
+		}
+	};
+	visit(ast);
 	lastScript = script;
 	lastDefined = defined;
 	return defined;

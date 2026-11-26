@@ -48,8 +48,9 @@ suite('화면 점검·중복 id', () => {
 		assert.strictEqual(of(byId('i2')), undefined, '컬럼을 모르는 linkedDataList는 컬럼 안 봄');
 		assert.strictEqual(of(byId('i3')), undefined);
 		assert.deepStrictEqual(of(byId('i4')), ['등록되지 않은 handler가 적용되어 있습니다. `scwin.gone`'], '주석·문자열 안 scwin.gone 대입은 무시');
-		const broken = screenProblems(root, 'scwin.sbm_done = function () {};\nfunction (');
-		assert.strictEqual(broken.get(byId('sbm').index), undefined, '문법 오류 중에도 이미 적힌 핸들러는 폴백으로 인정');
+		const broken = screenProblems(root, 'scwin.sbm_done = function () {};\n// scwin.gone = function () {};\nconst s = "scwin.gone = 1";\nfunction (');
+		assert.strictEqual(broken.get(byId('sbm').index), undefined, '문법 오류 중에도 이미 적힌 핸들러는 acorn-loose로 인정');
+		assert.deepStrictEqual(broken.get(byId('i4').index), ['등록되지 않은 handler가 적용되어 있습니다. `scwin.gone`'], '문법 오류 중에도 주석·문자열 안 대입은 무시');
 		const details = screenProblemDetails(root, script);
 		assert.deepStrictEqual(details.get(byId('dlt', 'xf:input').index)?.map(d => d.attr), ['id', 'ref']);
 		assert.strictEqual(details.get(byId('i4').index)?.[0].attr, 'ev:onblur');
