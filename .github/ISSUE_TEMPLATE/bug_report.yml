@@ -1,0 +1,74 @@
+name: 버그 제보
+description: 기능이 동작하지 않거나 화면이 잘못 보이는 문제를 알려 주세요.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        알려 주셔서 감사합니다. 개발자 한 명이 SP5 개발팩 환경에서만 확인하고 있어서, 사용하시는 환경 정보가 원인을 찾는 데 큰 도움이 됩니다.
+        **스크린샷이나 XML에 회사 이름·화면 내용·개인 정보가 보이지 않게** 가린 뒤 올려 주세요.
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: ForWebsquare5 버전
+      description: 확장 탭에서 ForWebsquare5를 선택하면 버전을 볼 수 있습니다.
+      placeholder: 예) 1.21.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: websquare-version
+    attributes:
+      label: WebSquare5 버전
+      options:
+        - SP5
+        - SP4
+        - 기타·모름
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: 그 밖의 환경
+      description: 알고 계신 것만 적어 주세요.
+      placeholder: 예) Windows 11, VS Code 1.125, Tomcat 9, 전자정부 프레임워크 4.1 Eclipse
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 어떤 문제가 있나요?
+      description: 어느 탭(Design·Info·Script·Source 등)에서 무엇이 잘못되는지 적어 주세요.
+      placeholder: 예) Design 탭에서 공통 CSS가 적용되지 않아 버튼 모양이 깨집니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 재현 방법
+      description: 문제가 생기기까지 한 일을 순서대로 적어 주세요.
+      placeholder: |
+        1. 화면 XML을 엽니다.
+        2. Design 탭에서 버튼을 선택합니다.
+        3. ...
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대한 동작
+      description: Eclipse(WebSquare Studio)나 실제 서버에서는 어떻게 보이는지 함께 적어 주시면 좋습니다.
+
+  - type: textarea
+    id: settings
+    attributes:
+      label: 관련 설정·파일 구조 (선택)
+      description: 경로·CSS 문제라면 `websquare/config.xml`의 위치, 화면의 CSS 주소, `for-websquare5.*` 설정값을 적어 주세요. Design 탭 위에 경고 문구가 있다면 함께 적어 주세요.
+      render: text
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 스크린샷 (선택)
+      description: 이미지를 끌어다 놓으면 첨부됩니다.

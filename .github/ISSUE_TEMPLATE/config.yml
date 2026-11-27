@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 기능 설명 보기
+    url: https://github.com/castle-bird/ForWebsquare5/blob/main/docs/FEATURES.md
+    about: 이슈를 남기기 전에 기능 설명과 README의 문제 해결 항목을 확인해 보세요.

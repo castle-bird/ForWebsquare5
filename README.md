@@ -14,7 +14,7 @@ Inswave Systems의 공식 제품이 아닌 비공식 확장입니다.
 
 VS Code 확장 탭(`Ctrl+Shift+X`)에서 **ForWebsquare5**를 검색해 설치합니다.
 
-직접 설치하려면 [Releases](https://github.com/castle-bird/ForWebsquare5/releases)에서 `.vsix` 파일을 받은 뒤, 확장 탭 오른쪽 위 `...` 메뉴 → **VSIX에서 설치...**를 선택합니다.
+직접 설치하려면 [Releases](https://github.com/castle-bird/ForWebsquare5/releases)에서 `.vsix` 파일을 받은 뒤, 확장 탭 오른쪽 위 `...` 메뉴에서 **VSIX에서 설치...** 를 선택합니다.
 
 ## 시작하기
 
@@ -32,7 +32,7 @@ VS Code 확장 탭(`Ctrl+Shift+X`)에서 **ForWebsquare5**를 검색해 설치�
 
 ### 새 화면 만들기
 
-탐색기에서 폴더를 우클릭하고 **New Websquare5 File...**을 선택합니다. 저장 위치를 고르면 빈 화면 XML이 열립니다.
+탐색기에서 폴더를 우클릭하고 **New Websquare5 File...** 메뉴를 선택합니다. 저장 위치를 고르면 빈 화면 XML이 열립니다.
 
 ### 탭 구성
 

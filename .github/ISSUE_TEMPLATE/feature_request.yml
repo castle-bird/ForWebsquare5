@@ -1,0 +1,43 @@
+name: 기능 요청
+description: 있으면 좋을 기능이나 바뀌었으면 하는 동작을 제안해 주세요.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        제안해 주셔서 감사합니다. 지금 작업 방식과 불편한 점을 구체적으로 적어 주시면 반영하기 쉽습니다.
+        **스크린샷이나 XML에 회사 이름·화면 내용·개인 정보가 보이지 않게** 가린 뒤 올려 주세요.
+
+  - type: textarea
+    id: situation
+    attributes:
+      label: 어떤 상황에서 필요한가요?
+      description: 지금 어떻게 작업하고 있고, 무엇이 불편한지 적어 주세요.
+      placeholder: 예) 화면마다 같은 그리드 설정을 반복해서 입력하고 있습니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 원하는 동작
+      description: 어떻게 동작하면 좋을지 적어 주세요. Eclipse(WebSquare Studio)에 비슷한 기능이 있다면 함께 알려 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 지금 쓰고 있는 우회 방법 (선택)
+
+  - type: input
+    id: environment
+    attributes:
+      label: 사용 환경 (선택)
+      placeholder: 예) ForWebsquare5 1.21.1, WebSquare5 SP4, Windows 11
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 스크린샷·참고 자료 (선택)
+      description: 이미지를 끌어다 놓으면 첨부됩니다.

@@ -9,4 +9,4 @@
 
 ---
 
-명령 팔레트(`Ctrl+Shift+P`)에서 **New Websquare5 File...**로도 만들 수 있습니다.
+명령 팔레트(`Ctrl+Shift+P`)에서 **New Websquare5 File...** 명령으로도 만들 수 있습니다.
