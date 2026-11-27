@@ -6,12 +6,12 @@ import * as path from 'path';
 import { parseXml, type XmlNode } from '../core/xmlModel';
 import { annotate, findDefinitionFile, isDefinitionDir, parseComponents, pickDefinitionFile } from '../project/components';
 import { convert, eclipseDeployRoots, findWpack, isWpackDir, pickWpack, publish, readWpackConfig, wpackArgs } from '../project/wpack';
-import { scopeCss } from '../project/styles';
+import { findEngineRoot, scopeCss, stylesheetFiles } from '../project/styles';
 import { engineModules, udcNames } from '../project/modules';
 import { attachFrames } from '../project/frames';
 import { cleanSample, findApiDocs, isApiDocsDir, loadApiDocs, parseApiEvents, parseApiMethods } from '../project/apiDocs';
 import { SCREEN, DEFS } from './helpers';
-import { cached, findDirs, fromWebPath, mapLimit } from '../project/paths';
+import { cached, contextPaths, findDirs, fromWebPath, mapLimit, useContextPaths } from '../project/paths';
 import { eclipseUsage, findInstalls, isInside, unescapeProperty } from '../project/discover';
 
 suite('비동기 캐시', () => {
@@ -58,6 +58,30 @@ suite('웹 경로 경계', () => {
 		assert.strictEqual(fromWebPath(root, '/images/한 글.png?x=1#icon', '/screens/main.xml'), path.join(root, 'images', '한 글.png'));
 		assert.strictEqual(fromWebPath(root, '/..assets/a.png', '/screens/main.xml'), path.join(root, '..assets', 'a.png'));
 		assert.throws(() => fromWebPath(root, '//evil.com/a.xml', '/screens/main.xml'), /웹 루트 밖/);
+	});
+
+	test('컨텍스트 경로: 접두사만 떼고 비슷한 이름·대소문자 다름·루트 밖은 그대로', () => {
+		const root = path.resolve('web-root');
+		assert.deepStrictEqual(contextPaths(['myapp/', '\\app', '/app/admin', '', '/']), ['/app/admin', '/myapp', '/app']);
+		assert.deepStrictEqual(contextPaths('\\myapp/'), ['/myapp']);
+		useContextPaths(() => contextPaths(['myapp/', '/app', '/app/admin']));
+		try {
+			assert.strictEqual(fromWebPath(root, '/myapp/css/a.css', '/screens/main.xml'), path.join(root, 'css', 'a.css'));
+			assert.strictEqual(fromWebPath(root, '/app/admin/x.xml', '/screens/main.xml'), path.join(root, 'x.xml'));
+			assert.strictEqual(fromWebPath(root, '/myappX/a.css', '/screens/main.xml'), path.join(root, 'myappX', 'a.css'));
+			assert.strictEqual(fromWebPath(root, '/MyApp/a.css', '/screens/main.xml'), path.join(root, 'MyApp', 'a.css'));
+			const css = fromWebPath(root, '/myapp/myapp/css/a.css', '/screens/main.xml');
+			assert.strictEqual(css, path.join(root, 'myapp', 'css', 'a.css'));
+			const imagePaths: string[] = [];
+			scopeCss('.a { background: url(../img/a.png), url(/myapp/img/b.png); }', css, root, file => {
+				imagePaths.push(file);
+				return '/image.png';
+			});
+			assert.deepStrictEqual(imagePaths, [path.join(root, 'myapp', 'img', 'a.png'), path.join(root, 'img', 'b.png')]);
+			assert.throws(() => fromWebPath(root, '/myapp/%2e%2e%2fsecret.xml', '/screens/main.xml'), /웹 루트 밖/);
+		} finally {
+			useContextPaths(() => []);
+		}
 	});
 });
 
@@ -171,6 +195,37 @@ suite('Engine modules', () => {
 		fs.writeFileSync(path.join(webRoot, 'websquare', 'config.xml'), '<WebSquare><engine><module src="/js/common.js"/><module src="/js/missing.js"/></engine><module src="/js/outside.js"/></WebSquare>');
 		fs.writeFileSync(path.join(webRoot, 'js', 'common.js'), 'window.app = {};');
 		assert.deepStrictEqual(await engineModules(webRoot), { files: [{ path: '/js/common.js', text: 'window.app = {};' }], failed: ['/js/missing.js'] });
+	});
+
+	test('기본 스킨: 웹 루트에 없으면 요청한 CSS 파일이 있는 최신 엔진에서 가져옴', async () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws5-skin-'));
+		const webRoot = path.join(dir, 'web'), install = path.join(dir, 'eclipse');
+		const skin = (root: string) => path.join(root, 'websquare', '_websquare_', 'skin', 'stylesheet_ext.css');
+		fs.mkdirSync(path.join(webRoot, 'websquare'), { recursive: true });
+		fs.writeFileSync(path.join(webRoot, 'websquare', 'config.xml'), '<WebSquare><stylesheet value="stylesheet_ext.css" earlyImportList="/cm/base.css"/></WebSquare>');
+		const older = path.join(install, 'plugins', 'com.inswave.websquare.webapp.engine_1.0.0.9');
+		const newer = path.join(install, 'plugins', 'com.inswave.websquare.webapp.engine_1.0.0.10');
+		for (const engine of [older, newer]) {
+			fs.mkdirSync(path.dirname(skin(engine)), { recursive: true });
+		}
+		useContextPaths(root => root === webRoot ? ['/websquare'] : []);
+		try {
+			assert.strictEqual(await findEngineRoot(install, webRoot), undefined);
+			fs.writeFileSync(skin(older), '');
+			const engine = await findEngineRoot(install, webRoot);
+			assert.strictEqual(engine, older);
+			const screen = path.join(webRoot, 'main.xml');
+			assert.deepStrictEqual(await stylesheetFiles(webRoot, screen, '', engine), [
+				{ file: skin(older), root: older }, { file: path.join(webRoot, 'cm', 'base.css'), root: webRoot }]);
+			fs.writeFileSync(skin(newer), '');
+			assert.strictEqual(await findEngineRoot(install, webRoot), newer);
+			fs.mkdirSync(path.dirname(skin(webRoot)), { recursive: true });
+			fs.writeFileSync(skin(webRoot), '');
+			assert.strictEqual(await findEngineRoot(install, webRoot), undefined);
+			assert.deepStrictEqual((await stylesheetFiles(webRoot, screen, '', newer))[0], { file: skin(webRoot), root: webRoot });
+		} finally {
+			useContextPaths(() => []);
+		}
 	});
 });
 

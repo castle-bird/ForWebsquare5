@@ -4,7 +4,9 @@ import type { ToWebview } from './core/protocol';
 import { findWebRoot } from './project/paths';
 import { disposeBrowserPreviews } from './vscode/browserPreview';
 import { disposeWpack } from './project/wpack';
-import { registerSetup } from './vscode/setup';
+import { registerSetup, resolvePath } from './vscode/setup';
+import { findEngineRoot } from './project/styles';
+import { registerContextPaths } from './vscode/resources';
 import { registerLinks } from './vscode/links';
 import { registerViewSettings } from './vscode/viewSettings';
 import { registerCodeTheme } from './vscode/codeTheme';
@@ -18,6 +20,7 @@ import { ScreenSession, VIEW_TYPE } from './vscode/screenSession';
 export { openFrame, VIEW_TYPE } from './vscode/screenSession';
 
 export function activate(context: vscode.ExtensionContext) {
+	registerContextPaths(context);
 	registerSetup(context);
 	registerWpack(context);
 	registerViewSettings(context);
@@ -76,12 +79,15 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 		panels.add(panel);
 		panel.onDidDispose(() => panels.delete(panel));
 		const dist = vscode.Uri.joinPath(this.extensionUri, 'dist');
-		panel.webview.options = { enableScripts: true, localResourceRoots: [dist, vscode.Uri.file(webRoot)] };
+		// 웹 루트에 기본 스킨이 없으면 설치본 엔진에서 읽는다. 웹뷰 허용 폴더는 나중에 바꾸면 웹뷰가 다시 그려지므로 열 때 정한다(이미 고른 설치본만, 자동 탐색은 기다리지 않음)
+		const install = await resolvePath('eclipseInstallPath', document.uri, webRoot).catch(() => undefined);
+		const engineRoot = install && await findEngineRoot(install, webRoot).catch(() => undefined);
+		panel.webview.options = { enableScripts: true, localResourceRoots: [dist, vscode.Uri.file(webRoot), ...engineRoot ? [vscode.Uri.file(engineRoot)] : []] };
 		panel.webview.html = html(panel.webview, dist);
 		new ScreenSession(document, panel, webRoot, {
 			globalState: this.globalState, workspaceState: this.workspaceState, tablesFolder: this.tablesFolder,
 			broadcast: msg => broadcast(panel, msg),
-		}).warmWpack();
+		}, engineRoot).warmWpack();
 	}
 }
 

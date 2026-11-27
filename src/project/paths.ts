@@ -93,11 +93,37 @@ export function isInside(file: string, dir: string): boolean {
 
 export const webPath = (webRoot: string, file: string) => '/' + path.relative(webRoot, file).split(path.sep).join('/');
 
+/** 컨텍스트 경로 설정값을 `/myapp` 꼴로 정리해 긴 것부터(`/app/admin`이 `/app`보다 먼저 맞게). 빈 값·`/`는 버린다 */
+export function contextPaths(value: unknown): string[] {
+	const paths = (Array.isArray(value) ? value : [value]).filter((v): v is string => typeof v === 'string')
+		.map(v => '/' + v.split(/[\\/]/).filter(Boolean).join('/')).filter(p => p !== '/');
+	return [...new Set(paths)].sort((a, b) => b.length - a.length);
+}
+
+let contextOf: (webRoot: string) => readonly string[] = () => [];
+
+/** 웹 루트별 컨텍스트 경로(서버 주소 앞 접두사, Eclipse의 Context Root)를 알려 줄 함수. vscode 계층이 설정에서 읽어 넣는다 */
+export function useContextPaths(fn: (webRoot: string) => readonly string[]): void {
+	contextOf = fn;
+}
+
+/** 컨텍스트 경로로 시작하면 떼고 웹 루트 기준 경로로(대소문자 구분, `/myappX`는 그대로) */
+function stripContext(webRoot: string, pathname: string): string {
+	const context = contextOf(webRoot).find(c => pathname === c || pathname.startsWith(c + '/'));
+	return context ? pathname.slice(context.length) || '/' : pathname;
+}
+
 export function fromWebPath(webRoot: string, href: string, from: string): string {
 	const base = 'http://root' + (from.startsWith('/') ? '' : '/') + from.split('/').map(encodeURIComponent).join('/');
 	const url = new URL(href, base);
-	const file = url.origin === 'http://root' ? path.resolve(path.join(webRoot, decodeURIComponent(url.pathname))) : '';
-	if (!file || !isInside(file, path.resolve(webRoot))) {
+	if (url.origin !== 'http://root') {
+		throw new Error('웹 루트 밖의 경로는 사용할 수 없습니다.');
+	}
+	const pathname = decodeURIComponent(url.pathname);
+	// 상대 URL의 기준 주소는 이미 웹 루트 기준이므로 컨텍스트를 다시 떼지 않는다.
+	const localPath = href.trimStart().startsWith('/') ? stripContext(webRoot, pathname) : pathname;
+	const file = path.resolve(path.join(webRoot, localPath));
+	if (!isInside(file, path.resolve(webRoot))) {
 		throw new Error('웹 루트 밖의 경로는 사용할 수 없습니다.');
 	}
 	return file;

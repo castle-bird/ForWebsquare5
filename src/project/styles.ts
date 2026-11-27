@@ -1,26 +1,60 @@
 import type { CssRuleSource } from '../core/protocol';
+import { readdir, stat } from 'node:fs/promises';
+import * as path from 'node:path';
 import { DomUtils } from 'htmlparser2';
 import postcss, { CssSyntaxError, type Root } from 'postcss';
 import safeParse from 'postcss-safe-parser';
 import selectorParser from 'postcss-selector-parser';
 import valueParser from 'postcss-value-parser';
 import { readWebConfig } from './config';
-import { fromWebPath, webPath } from './paths';
+import { ENGINE_PAGE, fromWebPath, numeric, webPath } from './paths';
 
-export async function stylesheetFiles(webRoot: string, screenFile: string, screenText: string): Promise<string[]> {
-	const el = DomUtils.findOne(e => e.name === 'stylesheet', (await readWebConfig(webRoot)).children);
-	const hrefs: string[] = [];
-	if (el && el.attribs.enable !== 'false') {
-		if (el.attribs.value) {
-			hrefs.push('/websquare/_websquare_/skin/' + el.attribs.value);
+async function stylesheetConfig(webRoot: string) {
+	const attrs = DomUtils.findOne(e => e.name === 'stylesheet', (await readWebConfig(webRoot)).children)?.attribs;
+	return attrs?.enable === 'false' ? undefined : attrs;
+}
+
+const skinFile = (root: string, value: string) => fromWebPath(root, '_websquare_/skin/' + value, ENGINE_PAGE);
+const isFile = (file: string) => stat(file).then(info => info.isFile(), () => false);
+
+/** 웹 루트에 기본 스킨이 없으면 요청한 CSS가 있는 설치본 엔진을 최신순으로 찾는다. */
+export async function findEngineRoot(installRoot: string, webRoot: string): Promise<string | undefined> {
+	const skin = (await stylesheetConfig(webRoot))?.value;
+	if (!skin || await isFile(skinFile(webRoot, skin))) {
+		return undefined;
+	}
+	const plugins = path.join(installRoot, 'plugins');
+	const names = (await readdir(plugins).catch(() => [] as string[])).filter(n => n.startsWith('com.inswave.websquare.webapp.engine_')).sort(numeric);
+	for (const name of names.reverse()) {
+		const root = path.join(plugins, name);
+		if (await isFile(skinFile(root, skin))) {
+			return root;
 		}
-		hrefs.push(...(el.attribs.earlyImportList ?? '').split(',').map(s => s.trim()).filter(Boolean));
+	}
+	return undefined;
+}
+
+/** 화면에 적용할 CSS 파일과 그 파일의 웹 루트(CSS url() 기준). 기본 스킨이 웹 루트에 없으면 engineRoot(설치본 엔진)에서 */
+export async function stylesheetFiles(webRoot: string, screenFile: string, screenText: string, engineRoot?: string): Promise<{ file: string; root: string }[]> {
+	const config = await stylesheetConfig(webRoot);
+	const hrefs = (config?.earlyImportList ?? '').split(',').map(s => s.trim()).filter(Boolean);
+	let skin: { file: string; root: string } | undefined;
+	if (config?.value) {
+		const file = skinFile(webRoot, config.value);
+		skin = { file, root: webRoot };
+		if (engineRoot && !await isFile(file)) {
+			const fallback = skinFile(engineRoot, config.value);
+			if (await isFile(fallback)) {
+				skin = { file: fallback, root: engineRoot };
+			}
+		}
 	}
 	for (const m of screenText.matchAll(/<\?xml-stylesheet\s[^?]*href="([^"]+)"/g)) {
 		hrefs.push(m[1]);
 	}
 	const screenUrl = webPath(webRoot, screenFile);
-	return [...new Set(hrefs.map(h => fromWebPath(webRoot, h, screenUrl)))];
+	const files = [...new Set(hrefs.map(h => fromWebPath(webRoot, h, screenUrl)))].filter(f => f !== skin?.file);
+	return [...skin ? [skin] : [], ...files.map(file => ({ file, root: webRoot }))];
 }
 
 export function scopeCss(css: string, file: string, webRoot: string, toUri: (fsPath: string) => string, imports?: string[], errors?: string[], sources?: CssRuleSource[]): string {

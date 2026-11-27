@@ -68,7 +68,7 @@ export class ScreenSession {
 	private earlySent = false;
 	private definitions: ReturnType<typeof loadDefinitions>;
 	private api?: ReturnType<ScreenSession['loadApi']>;
-	private readonly styles: ReturnType<typeof loadStyles>;
+	private styles: ReturnType<typeof loadStyles>;
 	private modules?: ReturnType<typeof loadModules>;
 	private secondaryStarted = false;
 	private readonly udcs: Promise<Set<string>>;
@@ -89,10 +89,10 @@ export class ScreenSession {
 	private readonly subs: vscode.Disposable[];
 
 	constructor(private readonly document: vscode.TextDocument, private readonly panel: vscode.WebviewPanel,
-		private readonly webRoot: string, private readonly host: SessionHost) {
+		private readonly webRoot: string, private readonly host: SessionHost, private readonly engineRoot?: string) {
 		this.browserPreview = new BrowserPreview(document, panel.webview, webRoot, on => void this.post({ type: 'browserPreview', on }));
 		this.definitions = this.trackDefinitions();
-		this.styles = loadStyles(document, panel.webview, webRoot);
+		this.styles = loadStyles(document, panel.webview, webRoot, this.engineRoot);
 		this.udcs = udcNames(webRoot).catch(() => new Set<string>());
 		this.links = new LinkedFiles(document, this.post);
 		this.usedTables = new UsedTablesStore(document.uri, host.workspaceState, vscode.Uri.joinPath(host.tablesFolder, 'used-tables'), this.post);
@@ -125,6 +125,16 @@ export class ScreenSession {
 				}
 				if (eclipse || changed('apiDocumentationPath')) {
 					this.reloadApi();
+				}
+				// 컨텍스트 경로가 바뀌면 웹 경로로 찾는 CSS·공통 JS·프레임·이미지를 다시 읽는다
+				if (e.affectsConfiguration('for-websquare5.contextPath', document.uri)) {
+					this.styles = loadStyles(document, panel.webview, webRoot, this.engineRoot);
+					void this.styles.then(this.post);
+					if (this.modules) {
+						this.modules = loadModules(webRoot);
+						void this.modules.then(this.post);
+					}
+					void this.sendDocument();
 				}
 			}),
 			// 설정 없이 설치 폴더를 자동으로 찾았거나 기억한 위치가 바뀌면: 정의·API를 다시 읽고 변환기를 미리 띄운다

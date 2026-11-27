@@ -5,7 +5,7 @@ import { defOf, parseXml, type XmlNode } from '../core/xmlModel';
 import { scriptBody } from '../core/edit';
 import { errorMessage } from '../core/errors';
 import type { CssRuleSource, ToWebview } from '../core/protocol';
-import { ENGINE_PAGE, fromWebPath } from '../project/paths';
+import { ENGINE_PAGE, contextPaths, fromWebPath, useContextPaths } from '../project/paths';
 import { scopeCss, stylesheetFiles } from '../project/styles';
 import { attachFrames } from '../project/frames';
 import { engineModules } from '../project/modules';
@@ -72,29 +72,49 @@ export async function loadDefinitions(uri: vscode.Uri, webRoot?: string): Promis
  */
 const scopedCss = new Map<string, { text: string; uriBase: string; css: string; imports: string[]; errors: string[]; rules: CssRuleSource[] }>();
 
-export async function loadStyles(document: vscode.TextDocument, webview: vscode.Webview, webRoot: string): Promise<Extract<ToWebview, { type: 'styles' }>> {
+/** 웹 루트별 컨텍스트 경로 설정. 경로를 계산할 때마다 설정을 읽지 않게 기억하고, 바뀌면 비운다(CSS url() 변환 결과도) */
+export function registerContextPaths(context: vscode.ExtensionContext): void {
+	const cache = new Map<string, string[]>();
+	useContextPaths(root => {
+		let paths = cache.get(root);
+		if (!paths) {
+			paths = contextPaths(vscode.workspace.getConfiguration('for-websquare5', vscode.Uri.file(root)).get('contextPath'));
+			cache.set(root, paths);
+		}
+		return paths;
+	});
+	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+		if (e.affectsConfiguration('for-websquare5.contextPath')) {
+			cache.clear();
+			scopedCss.clear();
+		}
+	}));
+}
+
+/** engineRoot: 웹 루트에 기본 스킨이 없을 때 대신 읽을 설치본 엔진 폴더(웹뷰 localResourceRoots에 들어 있어야 한다) */
+export async function loadStyles(document: vscode.TextDocument, webview: vscode.Webview, webRoot: string, engineRoot?: string): Promise<Extract<ToWebview, { type: 'styles' }>> {
 	const css: string[] = [], rules: CssRuleSource[] = [], imports: string[] = [], failed: string[] = [], broken: string[] = [];
 	try {
-		const files = await stylesheetFiles(webRoot, document.uri.fsPath, document.getText());
-		const texts = await Promise.all(files.map(file => readFile(file, 'utf8').catch(() => undefined)));
+		const files = await stylesheetFiles(webRoot, document.uri.fsPath, document.getText(), engineRoot);
+		const texts = await Promise.all(files.map(({ file }) => readFile(file, 'utf8').catch(() => undefined)));
 		const toUri = (p: string) => webview.asWebviewUri(vscode.Uri.file(p)).toString();
 		for (let i = 0; i < files.length; i++) {
-			const file = files[i], text = texts[i];
+			const { file, root } = files[i], text = texts[i];
 			if (text === undefined) {
-				failed.push(path.relative(webRoot, file));
+				failed.push(path.relative(root, file));
 				continue;
 			}
-			const key = `${webRoot}\n${file}`, uriBase = toUri(webRoot);
+			const key = `${root}\n${file}`, uriBase = toUri(root);
 			let scoped = scopedCss.get(key);
 			if (scoped?.text !== text || scoped.uriBase !== uriBase) {
 				const fileImports: string[] = [], errors: string[] = [], fileRules: CssRuleSource[] = [];
-				scoped = { text, uriBase, css: scopeCss(text, file, webRoot, toUri, fileImports, errors, fileRules), imports: fileImports, errors, rules: fileRules };
+				scoped = { text, uriBase, css: scopeCss(text, file, root, toUri, fileImports, errors, fileRules), imports: fileImports, errors, rules: fileRules };
 				scopedCss.set(key, scoped);
 			}
 			css.push(scoped.css);
 			imports.push(...scoped.imports);
 			rules.push(...scoped.rules);
-			broken.push(...scoped.errors.map(e => `${path.relative(webRoot, file)} ${e}`));
+			broken.push(...scoped.errors.map(e => `${path.relative(root, file)} ${e}`));
 		}
 	} catch (e) {
 		return { type: 'styles', css, rules, imports, error: `websquare/config.xml 읽기 실패: ${errorMessage(e)}` };
