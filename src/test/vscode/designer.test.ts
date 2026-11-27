@@ -175,4 +175,40 @@ suite('designer', () => {
 			await config.update('eclipseInstallPath', undefined, vscode.ConfigurationTarget.Global);
 		}
 	});
+
+	test('인코딩: EUC-KR 화면은 UTF-8 기본 설정에서도, UTF-8 화면은 euckr 설정에서도 선언대로 읽고 저장해 한글 바이트를 지킨다', async function () {
+		this.timeout(30000);
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws5-encoding-'));
+		fs.mkdirSync(path.join(dir, 'websquare'));
+		fs.writeFileSync(path.join(dir, 'websquare', 'config.xml'), '<WebSquare/>');
+		const files = vscode.workspace.getConfiguration('files');
+		const screen = (encoding: string, label: Buffer) => Buffer.concat([
+			Buffer.from(`<?xml version="1.0" encoding="${encoding}"?>\n<html xmlns="http://www.w3.org/1999/xhtml" xmlns:w2="http://www.inswave.com/websquare"><head></head><body><w2:textbox id="tbx_a" label="`),
+			label, Buffer.from('" style="width:100px;"/></body></html>\n')]);
+		// 디자이너로 열어 한글과 무관한 속성만 고쳐 저장한 바이트
+		const roundTrip = async (name: string, bytes: Buffer) => {
+			const uri = vscode.Uri.file(path.join(dir, name));
+			fs.writeFileSync(uri.fsPath, bytes);
+			await vscode.commands.executeCommand('vscode.open', uri);
+			const find = () => vscode.workspace.textDocuments.find(d => d.uri.fsPath === uri.fsPath);
+			await waitFor(() => vscode.window.tabGroups.activeTabGroup.activeTab?.input instanceof vscode.TabInputCustom && find()?.getText().includes('한글') === true);
+			const doc = find()!;
+			assert.ok(doc.getText().includes('label="한글"'), `${name}: 한글로 읽음 (${doc.encoding})`);
+			const at = doc.getText().indexOf('100px');
+			const edit = new vscode.WorkspaceEdit();
+			edit.replace(uri, new vscode.Range(doc.positionAt(at), doc.positionAt(at + 3)), '200');
+			await vscode.workspace.applyEdit(edit);
+			await doc.save();
+			await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+			return fs.readFileSync(uri.fsPath);
+		};
+		const euckr = Buffer.from([0xc7, 0xd1, 0xb1, 0xdb]), utf8 = Buffer.from('한글');
+		try {
+			assert.deepStrictEqual(await roundTrip('legacy.xml', screen('EUC-KR', euckr)), Buffer.from(screen('EUC-KR', euckr).toString('latin1').replace('100px', '200px'), 'latin1'));
+			await files.update('encoding', 'euckr', vscode.ConfigurationTarget.Global);
+			assert.deepStrictEqual(await roundTrip('modern.xml', screen('UTF-8', utf8)), Buffer.from(screen('UTF-8', utf8).toString().replace('100px', '200px')));
+		} finally {
+			await files.update('encoding', undefined, vscode.ConfigurationTarget.Global);
+		}
+	});
 });

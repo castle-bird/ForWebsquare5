@@ -9,6 +9,7 @@ import { convert, eclipseDeployRoots, findWpack, isWpackDir, pickWpack, publish,
 import { findEngineRoot, scopeCss, stylesheetFiles } from '../project/styles';
 import { engineModules, udcNames } from '../project/modules';
 import { attachFrames } from '../project/frames';
+import { decodeXml, xmlEncoding } from '../project/encoding';
 import { cleanSample, findApiDocs, isApiDocsDir, loadApiDocs, parseApiEvents, parseApiMethods } from '../project/apiDocs';
 import { SCREEN, DEFS } from './helpers';
 import { cached, contextPaths, findDirs, fromWebPath, mapLimit, useContextPaths } from '../project/paths';
@@ -41,6 +42,22 @@ suite('비동기 캐시', () => {
 		assert.ok(peak <= 3 && peak >= 2, `peak=${peak}`);
 		assert.deepStrictEqual(await mapLimit([], 3, async (n: number) => n), []);
 		assert.deepStrictEqual(await mapLimit([1, 2], 0, async n => n + 1), [2, 3]);
+	});
+});
+
+suite('화면 XML 인코딩', () => {
+	test('선언과 바이트로 판정: 선언만 EUC-KR인 UTF-8·한글 없는 EUC-KR·모르는 인코딩', () => {
+		const xml = (encoding: string, body: Buffer) => Buffer.concat([Buffer.from(`<?xml version="1.0" encoding="${encoding}"?><a b="`), body, Buffer.from('"/>')]);
+		const euckr = Buffer.from([0xc7, 0xd1, 0xb1, 0xdb]);
+		assert.strictEqual(xmlEncoding(xml('EUC-KR', euckr)), 'euckr');
+		assert.strictEqual(xmlEncoding(xml('ms949', euckr)), 'euckr');
+		assert.strictEqual(xmlEncoding(xml('euc-kr', Buffer.from('a'))), 'euckr', '한글 없는 EUC-KR 화면도 새 한글은 EUC-KR로 저장');
+		assert.strictEqual(xmlEncoding(xml('EUC-KR', Buffer.from('한글'))), 'utf8', '선언만 EUC-KR이고 실제로는 UTF-8');
+		assert.strictEqual(xmlEncoding(xml('UTF-8', Buffer.from('한글'))), 'utf8');
+		assert.strictEqual(xmlEncoding(Buffer.from('<a b="한글"/>')), 'utf8', '선언 없으면 UTF-8');
+		assert.strictEqual(xmlEncoding(xml('UTF-8', euckr)), undefined, '선언과 바이트가 어긋나면 판단하지 않음');
+		assert.strictEqual(xmlEncoding(xml('ISO-8859-1', euckr)), undefined);
+		assert.strictEqual(decodeXml(xml('EUC-KR', euckr)), '<?xml version="1.0" encoding="EUC-KR"?><a b="한글"/>');
 	});
 });
 

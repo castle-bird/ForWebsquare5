@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { isScreen, parseXml, type XmlNode } from './core/xmlModel';
 import type { ToWebview } from './core/protocol';
 import { findWebRoot } from './project/paths';
+import { xmlEncoding } from './project/encoding';
 import { disposeBrowserPreviews } from './vscode/browserPreview';
 import { disposeWpack } from './project/wpack';
 import { registerSetup, resolvePath } from './vscode/setup';
@@ -65,7 +66,13 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			parsed = parseXml(document.getText());
 		} catch {
 		}
-		if (!webRoot || !parsed || !isScreen(parsed)) {
+		const encoded = !webRoot || !parsed || !isScreen(parsed) || await matchEncoding(document);
+		if (!encoded) {
+			// 텍스트로 연 뒤 다시 디자이너로 돌리지 않게 표시한다
+			rememberScreenEditor(document);
+			void vscode.window.showWarningMessage('화면 XML이 선언된 인코딩과 다르게 열려 있어 텍스트 편집기로 엽니다. 이대로 저장하면 한글이 깨질 수 있으니, 저장하지 않은 변경을 정리한 뒤 상태 표시줄의 인코딩을 눌러 "인코딩하여 다시 열기(Reopen with Encoding)"로 맞춰 주세요.');
+		}
+		if (!webRoot || !parsed || !isScreen(parsed) || !encoded) {
 			// 화면이 아니면 같은 자리에서 텍스트로 바꾼다. 탐색기 한 번 클릭처럼 미리보기로 열린 경우는 포커스를 탐색기에 남긴다(F2 이름 바꾸기 등)
 			const tab = vscode.window.tabGroups.all.flatMap(g => g.tabs.map(t => ({ g, t })))
 				.find(({ g, t }) => g.viewColumn === panel.viewColumn && t.input instanceof vscode.TabInputCustom && t.input.viewType === VIEW_TYPE && t.input.uri.toString() === document.uri.toString());
@@ -89,6 +96,22 @@ class DesignerProvider implements vscode.CustomTextEditorProvider {
 			broadcast: msg => broadcast(panel, msg),
 		}, engineRoot).warmWpack();
 	}
+}
+
+/**
+ * 옛 EUC-KR 화면을 UTF-8로(files.encoding 기본값) 또는 UTF-8 화면을 EUC-KR로 읽었으면 고쳐 저장할 때 한글 바이트가 깨진다.
+ * XML 선언·바이트에 맞는 인코딩으로 다시 읽는다. 저장 안 한 변경이 있어 다시 읽지 못하면 false
+ */
+async function matchEncoding(document: vscode.TextDocument): Promise<boolean> {
+	if (document.uri.scheme !== 'file') {
+		return true;
+	}
+	const want = xmlEncoding(await vscode.workspace.fs.readFile(document.uri));
+	const matched = () => !want || document.encoding.replace(/bom$/, '') === want;
+	if (!matched() && !document.isDirty) {
+		await vscode.workspace.openTextDocument(document.uri, { encoding: want }).then(undefined, () => undefined);
+	}
+	return matched();
 }
 
 function html(webview: vscode.Webview, dist: vscode.Uri): string {

@@ -2,6 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 import { defOf, kid, parseXml, type XmlNode } from '../core/xmlModel';
 import { annotate, type ComponentDef } from './components';
+import { decodeXml } from './encoding';
 import { ENGINE_PAGE, exists, fromWebPath, webPath } from './paths';
 
 const MAX_DEPTH = 5;
@@ -30,7 +31,7 @@ async function readScreen(file: string): Promise<string> {
 	if (hit?.mtimeMs === mtimeMs && hit.size === size) {
 		return hit.text;
 	}
-	const text = await readFile(file, 'utf8');
+	const text = decodeXml(await readFile(file));
 	texts.set(file, { mtimeMs, size, text });
 	return text;
 }
