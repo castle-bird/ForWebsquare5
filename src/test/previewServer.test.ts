@@ -59,6 +59,31 @@ suite('미리보기 서버', () => {
 		assert.strictEqual((await get(at('f/..%2fws5-outside.png'))).status, 404, '웹 루트 밖(인코딩된 ..)');
 		assert.strictEqual((await get(at('f/%2e%2e/ws5-outside.png'))).status, 404, '웹 루트 밖(%2e%2e)');
 		assert.strictEqual((await get(at('f/img/none.png'))).status, 404, '없는 파일');
+		assert.strictEqual(preview.engineBase, undefined, 'engineRoot 미지정 시 engineBase 없음');
+		assert.strictEqual((await get(at('e/img/a.png'))).status, 404, 'engineRoot 미지정 시 e/ 거부');
+	});
+
+	test('엔진 폴더(engineRoot)의 그림·폰트도 경계와 확장자를 검사해 내준다', async () => {
+		const engineRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ws5-preview-engine-'));
+		const outside = path.join(path.dirname(engineRoot), 'ws5-engine-outside.png');
+		fs.mkdirSync(path.join(engineRoot, 'websquare', '_websquare_', 'uiplugin', 'images'), { recursive: true });
+		fs.writeFileSync(path.join(engineRoot, 'websquare', '_websquare_', 'uiplugin', 'images', 'icon.gif'), 'GIF');
+		fs.writeFileSync(path.join(engineRoot, 'plugin.xml'), '<secret/>');
+		fs.writeFileSync(outside, 'OUT');
+		try {
+			const withEngine = await server.open(root, () => undefined, engineRoot);
+			withEngine.publish(page('e'));
+			const atEngine = (rest: string) => new URL(rest, withEngine.url).href;
+			const ok = await get(atEngine(`${path.posix.basename(withEngine.engineBase!)}/websquare/_websquare_/uiplugin/images/icon.gif`));
+			assert.deepStrictEqual([ok.status, ok.type, ok.body], [200, 'image/gif', 'GIF']);
+			assert.strictEqual((await get(atEngine('e/plugin.xml'))).status, 404, '허용하지 않는 확장자');
+			assert.strictEqual((await get(atEngine('e/..%2fws5-engine-outside.png'))).status, 404, '엔진 폴더 밖(인코딩된 ..)');
+			assert.strictEqual((await get(atEngine('e/%2e%2e/ws5-engine-outside.png'))).status, 404, '엔진 폴더 밖(%2e%2e)');
+			withEngine.close();
+		} finally {
+			fs.rmSync(engineRoot, { recursive: true, force: true });
+			fs.rmSync(outside, { force: true });
+		}
 	});
 
 	test('열린 브라우저(SSE)에 처음과 갱신 화면을 보낸다', async () => {

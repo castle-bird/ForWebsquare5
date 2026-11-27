@@ -18,11 +18,12 @@ export class BrowserPreview {
 	private imports: string[] = [];
 
 	/** notify: 미리보기가 시작·종료되면(브라우저를 닫은 경우 포함) 웹뷰에 알린다 */
-	constructor(private readonly document: vscode.TextDocument, private readonly webview: vscode.Webview, private readonly webRoot: string, private readonly notify: (on: boolean) => void) {}
+	constructor(private readonly document: vscode.TextDocument, private readonly webview: vscode.Webview,
+		private readonly webRoot: string, private readonly notify: (on: boolean) => void, private readonly engineRoot?: string) {}
 
 	/** 처음이면 서버에 등록하고, 이미 열려 있으면 같은 주소를 다시 연다 */
 	async open(page: BrowserPage): Promise<void> {
-		this.opened ??= server.open(this.webRoot, () => { this.opened = this.preview = undefined; this.notify(false); })
+		this.opened ??= server.open(this.webRoot, () => { this.opened = this.preview = undefined; this.notify(false); }, this.engineRoot)
 			.then(preview => { this.preview = preview; this.notify(true); return preview; })
 			.catch(e => { this.opened = undefined; throw e; });
 		const preview = await this.opened;
@@ -34,9 +35,14 @@ export class BrowserPreview {
 	update(page: Pick<BrowserPage, 'html'> & Partial<BrowserPage>): void {
 		const preview = this.preview;
 		if (!preview) { return; }
-		// 캔버스 CSS·그림 주소는 웹뷰 전용 주소라 브라우저가 못 읽는다: 웹 루트 주소를 미리보기 서버의 파일 경로로 바꾼다
-		const from = this.webview.asWebviewUri(vscode.Uri.file(this.webRoot)).toString();
-		const local = (text: string) => text.split(from).join(preview.fileBase);
+		// 캔버스 CSS·그림 주소는 웹뷰 전용 주소라 브라우저가 못 읽는다: 웹 루트·설치본 엔진 주소를 미리보기 서버의 파일 경로로 바꾼다
+		const uriPrefix = (dir: string) => this.webview.asWebviewUri(vscode.Uri.file(dir)).toString().replace(/\/$/, '') + '/';
+		const replacements: [string, string][] = [[uriPrefix(this.webRoot), `${preview.fileBase}/`]];
+		if (this.engineRoot && preview.engineBase) {
+			replacements.push([uriPrefix(this.engineRoot), `${preview.engineBase}/`]);
+		}
+		replacements.sort((a, b) => b[0].length - a[0].length);
+		const local = (text: string) => replacements.reduce((out, [from, to]) => out.split(from).join(to), text);
 		if (page.css) {
 			this.css = page.css.map(local);
 			this.imports = page.imports ?? [];

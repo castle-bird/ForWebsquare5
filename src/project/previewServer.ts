@@ -26,6 +26,8 @@ export interface Preview {
 	url: string;
 	/** 웹 루트 파일(그림·폰트)을 내주는 경로(CSS·HTML 안의 주소를 이것으로 바꾼다) */
 	fileBase: string;
+	/** 설치본 엔진 폴더의 그림·폰트를 내주는 경로(engineRoot를 넘긴 경우) */
+	engineBase?: string;
 	/** 화면을 정한다: 열린 브라우저가 있으면 새 화면을 바로 보낸다 */
 	publish(page: PreviewPage): void;
 	close(): void;
@@ -34,6 +36,7 @@ export interface Preview {
 interface Entry {
 	id: string;
 	webRoot: string;
+	engineRoot?: string;
 	page?: PreviewPage;
 	clients: Set<ServerResponse>;
 	timer?: NodeJS.Timeout;
@@ -49,16 +52,17 @@ export class PreviewServer {
 	constructor(private readonly firstConnectMs = FIRST_CONNECT_MS, private readonly idleMs = IDLE_MS) {}
 
 	/** onClosed: 브라우저가 닫혀 미리보기가 끝났을 때(끝난 뒤에는 publish가 아무것도 하지 않는다). 첫 publish 전에는 요청에 404 */
-	async open(webRoot: string, onClosed: () => void): Promise<Preview> {
+	async open(webRoot: string, onClosed: () => void, engineRoot?: string): Promise<Preview> {
 		await this.start();
 		const id = randomBytes(16).toString('hex');
-		const entry: Entry = { id, webRoot, clients: new Set(), onClosed };
+		const entry: Entry = { id, webRoot, engineRoot, clients: new Set(), onClosed };
 		this.entries.set(id, entry);
 		this.idleAfter(entry, this.firstConnectMs);
 		const base = `/p/${id}`;
 		return {
 			url: `http://127.0.0.1:${this.port}${base}/`,
 			fileBase: `${base}/f`,
+			...engineRoot && { engineBase: `${base}/e` },
 			publish: next => {
 				if (!this.entries.has(id)) { return; }
 				// 같은 CSS 배열이면(BrowserPreview가 바뀌지 않은 CSS는 이전 배열을 그대로 넘긴다) 화면만 보낸다
@@ -140,6 +144,8 @@ export class PreviewServer {
 			});
 		} else if (rest.startsWith('f/')) {
 			this.serveFile(entry.webRoot, rest.slice(2), res, deny);
+		} else if (entry.engineRoot && rest.startsWith('e/')) {
+			this.serveFile(entry.engineRoot, rest.slice(2), res, deny);
 		} else {
 			deny(404);
 		}

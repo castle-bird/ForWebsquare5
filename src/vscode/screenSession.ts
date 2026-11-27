@@ -90,7 +90,7 @@ export class ScreenSession {
 
 	constructor(private readonly document: vscode.TextDocument, private readonly panel: vscode.WebviewPanel,
 		private readonly webRoot: string, private readonly host: SessionHost, private readonly engineRoot?: string) {
-		this.browserPreview = new BrowserPreview(document, panel.webview, webRoot, on => void this.post({ type: 'browserPreview', on }));
+		this.browserPreview = new BrowserPreview(document, panel.webview, webRoot, on => void this.post({ type: 'browserPreview', on }), this.engineRoot);
 		this.definitions = this.trackDefinitions();
 		this.styles = loadStyles(document, panel.webview, webRoot, this.engineRoot);
 		this.udcs = udcNames(webRoot).catch(() => new Set<string>());
