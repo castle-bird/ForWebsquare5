@@ -12,14 +12,16 @@ suite('Create WebSquare5 file', () => {
 		let applied = true, failure = false, dialogs = 0, notices = 0;
 		const edits: Edit[] = [], opened: unknown[][] = [];
 		class Edit {
-			files: unknown[][] = [];
+			files: [ReturnType<typeof uri>, { overwrite?: boolean; ignoreIfExists?: boolean; contents?: Uint8Array } | undefined][] = [];
 			text = '';
-			createFile(...args: unknown[]) { this.files.push(args); }
-			insert(_uri: unknown, _position: unknown, text: string) { this.text = text; }
+			createFile(target: ReturnType<typeof uri>, options?: { overwrite?: boolean; ignoreIfExists?: boolean; contents?: Uint8Array }) {
+				this.files.push([target, options]);
+				if (options?.contents) { this.text = new TextDecoder().decode(options.contents); }
+			}
 		}
 		const mock = {
 			Uri: { joinPath: (base: ReturnType<typeof uri>, name: string) => uri(base.path + '/' + name) },
-			WorkspaceEdit: Edit, Position: class { constructor(public line: number, public character: number) {} },
+			WorkspaceEdit: Edit,
 			workspace: {
 				isTrusted: true, workspaceFolders: [{ uri: uri('/project') }],
 				applyEdit: async (edit: Edit) => { edits.push(edit); if (failure) { throw new Error('exists'); } return applied; },
@@ -37,11 +39,12 @@ suite('Create WebSquare5 file', () => {
 		};
 		const bundle = buildSync({ entryPoints: [path.resolve(__dirname, '../../src/vscode/createScreen.ts')], bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
 		const module = { exports: {} as { createScreen(folder?: unknown): Promise<void> } };
-		runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: (name: string) => { assert.strictEqual(name, 'vscode'); return mock; } });
+		runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, TextEncoder, require: (name: string) => { assert.strictEqual(name, 'vscode'); return mock; } });
 		const { createScreen } = module.exports;
 		await createScreen(uri('/selected'));
-		assert.strictEqual((edits[0].files[0][0] as ReturnType<typeof uri>).path, '/project/screen.xml');
-		assert.deepStrictEqual(structuredClone(edits[0].files[0][1]), { overwrite: false, ignoreIfExists: false });
+		assert.strictEqual(edits[0].files[0][0].path, '/project/screen.xml');
+		assert.deepStrictEqual({ overwrite: edits[0].files[0][1]?.overwrite, ignoreIfExists: edits[0].files[0][1]?.ignoreIfExists }, { overwrite: false, ignoreIfExists: false });
+		assert.ok(edits[0].files[0][1]?.contents instanceof Uint8Array);
 		// saxes 타입 선언은 확장 호스트 tsc와 호환되지 않아 테스트에서 런타임으로만 읽는다.
 		const { SaxesParser } = require('saxes');
 		new SaxesParser({ xmlns: true }).write(edits[0].text).close();

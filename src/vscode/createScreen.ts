@@ -37,8 +37,7 @@ export async function createScreen(folder?: vscode.Uri): Promise<void> {
 		if (!chosen) { return; }
 		const uri = /\.xml$/i.test(chosen.path) ? chosen : chosen.with({ path: chosen.path + '.xml' });
 		const edit = new vscode.WorkspaceEdit();
-		edit.createFile(uri, { overwrite: false, ignoreIfExists: false });
-		edit.insert(uri, new vscode.Position(0, 0), EMPTY_SCREEN);
+		edit.createFile(uri, { overwrite: false, ignoreIfExists: false, contents: new TextEncoder().encode(EMPTY_SCREEN) });
 		if (!await vscode.workspace.applyEdit(edit)) {
 			throw new Error('파일을 만들지 못했습니다. 같은 이름의 파일이 있는지 확인해 주세요.');
 		}

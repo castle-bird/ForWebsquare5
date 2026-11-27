@@ -117,4 +117,15 @@ suite('format', () => {
 		const doc = await vscode.workspace.openTextDocument({ content: '<html><script><![CDATA[\nif (a) {\n\tb()\n}\n]]></script></html>', language: 'xml' });
 		assert.match((await formatCode(doc, 'script'))!, /\n {4}b\(\)/);
 	});
+
+	test('Script: files.encoding이 euckr이어도 임시 JS 포맷에서 한글이 깨지지 않는다', async () => {
+		const files = vscode.workspace.getConfiguration('files');
+		await files.update('encoding', 'euckr', vscode.ConfigurationTarget.Global);
+		try {
+			const doc = await vscode.workspace.openTextDocument({ content: '<html><script><![CDATA[\nconst msg="한글 테스트";\n]]></script></html>', language: 'xml' });
+			assert.match((await formatCode(doc, 'script'))!, /const msg = "한글 테스트";/);
+		} finally {
+			await files.update('encoding', undefined, vscode.ConfigurationTarget.Global);
+		}
+	});
 });

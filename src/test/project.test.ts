@@ -46,18 +46,25 @@ suite('비동기 캐시', () => {
 });
 
 suite('화면 XML 인코딩', () => {
-	test('선언과 바이트로 판정: 선언만 EUC-KR인 UTF-8·한글 없는 EUC-KR·모르는 인코딩', () => {
+	test('선언과 바이트로 판정·디코딩: 2바이트 UTF-8 충돌·CP949 확장 한글·선언만 EUC-KR인 UTF-8·모르는 인코딩', () => {
 		const xml = (encoding: string, body: Buffer) => Buffer.concat([Buffer.from(`<?xml version="1.0" encoding="${encoding}"?><a b="`), body, Buffer.from('"/>')]);
 		const euckr = Buffer.from([0xc7, 0xd1, 0xb1, 0xdb]);
+		const collide = Buffer.from([0xc3, 0xbc, 0xc5, 0xa9]); // EUC-KR '체크' — 2바이트 UTF-8('üũ')로도 유효
+		const cp949 = Buffer.from([0xc7, 0xd1, 0xb1, 0xdb, 0x94, 0xee, 0x8c, 0x63, 0xc1, 0x64]); // 한글뷁똠햏
 		assert.strictEqual(xmlEncoding(xml('EUC-KR', euckr)), 'euckr');
 		assert.strictEqual(xmlEncoding(xml('ms949', euckr)), 'euckr');
 		assert.strictEqual(xmlEncoding(xml('euc-kr', Buffer.from('a'))), 'euckr', '한글 없는 EUC-KR 화면도 새 한글은 EUC-KR로 저장');
+		assert.strictEqual(xmlEncoding(xml('EUC-KR', collide)), 'euckr', '2바이트 UTF-8과 겹치는 EUC-KR 한글은 euckr 유지');
 		assert.strictEqual(xmlEncoding(xml('EUC-KR', Buffer.from('한글'))), 'utf8', '선언만 EUC-KR이고 실제로는 UTF-8');
+		assert.strictEqual(xmlEncoding(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), xml('EUC-KR', Buffer.from('a'))])), 'utf8', 'UTF-8 BOM이 있으면 ASCII만 있어도 utf8');
 		assert.strictEqual(xmlEncoding(xml('UTF-8', Buffer.from('한글'))), 'utf8');
 		assert.strictEqual(xmlEncoding(Buffer.from('<a b="한글"/>')), 'utf8', '선언 없으면 UTF-8');
 		assert.strictEqual(xmlEncoding(xml('UTF-8', euckr)), undefined, '선언과 바이트가 어긋나면 판단하지 않음');
 		assert.strictEqual(xmlEncoding(xml('ISO-8859-1', euckr)), undefined);
 		assert.strictEqual(decodeXml(xml('EUC-KR', euckr)), '<?xml version="1.0" encoding="EUC-KR"?><a b="한글"/>');
+		assert.strictEqual(decodeXml(xml('EUC-KR', collide)), '<?xml version="1.0" encoding="EUC-KR"?><a b="체크"/>');
+		assert.strictEqual(decodeXml(xml('MS949', cp949)), '<?xml version="1.0" encoding="MS949"?><a b="한글뷁똠햏"/>');
+		assert.strictEqual(decodeXml(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), xml('UTF-8', Buffer.from('한글'))])), '<?xml version="1.0" encoding="UTF-8"?><a b="한글"/>', 'UTF-8 BOM 제거');
 	});
 });
 

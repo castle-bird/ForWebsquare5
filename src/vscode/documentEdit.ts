@@ -119,7 +119,7 @@ export async function formatCode(document: vscode.TextDocument, target: CodeTarg
 	const file = vscode.Uri.file(path.join(dir, 'script.js'));
 	try {
 		await fs.writeFile(file.fsPath, source);
-		const formatted = await formatDocument(await vscode.workspace.openTextDocument(file), true);
+		const formatted = await formatDocument(await vscode.workspace.openTextDocument(file, { encoding: 'utf8' }), true);
 		return formatted === undefined ? undefined : source.match(/^\s*/)![0] + formatted.trim() + source.match(/\s*$/)![0];
 	} finally {
 		await fs.rm(dir, { recursive: true, force: true });

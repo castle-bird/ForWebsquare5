@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { WEBSQUARE_NS, isScreen, parseXml } from '../core/xmlModel';
 import { errorMessage } from '../core/errors';
 import { GENERATED_DIRS, findWebRoot, serial } from '../project/paths';
+import { decodeXml } from '../project/encoding';
 import { convert, disposeWpack, publish, readWpackConfig, warmWpack } from '../project/wpack';
 import { offerSetup, resolvePath } from './setup';
 
@@ -42,7 +43,7 @@ function watchScreenFiles(): vscode.Disposable {
 				return;
 			}
 			try {
-				const disk = (await readFile(uri.fsPath, 'utf8')).replace(/^\uFEFF/, '');
+				const disk = decodeXml(await readFile(uri.fsPath));
 				await wpackConvert(uri, disk, true);
 			} catch {
 				// 지워졌거나 아직 쓰는 중: 다음 변경 때 다시

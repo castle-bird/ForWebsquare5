@@ -207,6 +207,16 @@ suite('designer', () => {
 			assert.deepStrictEqual(await roundTrip('legacy.xml', screen('EUC-KR', euckr)), Buffer.from(screen('EUC-KR', euckr).toString('latin1').replace('100px', '200px'), 'latin1'));
 			await files.update('encoding', 'euckr', vscode.ConfigurationTarget.Global);
 			assert.deepStrictEqual(await roundTrip('modern.xml', screen('UTF-8', utf8)), Buffer.from(screen('UTF-8', utf8).toString().replace('100px', '200px')));
+			// euckr 기본 설정에서도 createFile(contents)로 만든 UTF-8 새 화면이 경고 없이 디자이너로 열린다
+			const created = vscode.Uri.file(path.join(dir, 'created.xml'));
+			const createEdit = new vscode.WorkspaceEdit();
+			createEdit.createFile(created, { overwrite: false, ignoreIfExists: false, contents: new TextEncoder().encode(screen('UTF-8', utf8).toString()) });
+			assert.ok(await vscode.workspace.applyEdit(createEdit));
+			await vscode.commands.executeCommand('vscode.open', created, { preview: false });
+			await waitFor(() => vscode.window.tabGroups.activeTabGroup.activeTab?.input instanceof vscode.TabInputCustom
+				&& vscode.workspace.textDocuments.find(d => d.uri.fsPath === created.fsPath)?.encoding.replace(/bom$/, '') === 'utf8');
+			assert.ok(vscode.workspace.textDocuments.find(d => d.uri.fsPath === created.fsPath)?.getText().includes('label="한글"'));
+			await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 		} finally {
 			await files.update('encoding', undefined, vscode.ConfigurationTarget.Global);
 		}

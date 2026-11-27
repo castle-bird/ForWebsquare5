@@ -106,7 +106,8 @@ async function matchEncoding(document: vscode.TextDocument): Promise<boolean> {
 	if (document.uri.scheme !== 'file') {
 		return true;
 	}
-	const want = xmlEncoding(await vscode.workspace.fs.readFile(document.uri));
+	const bytes = await vscode.workspace.fs.readFile(document.uri).then(undefined, () => undefined);
+	const want = bytes && xmlEncoding(bytes);
 	const matched = () => !want || document.encoding.replace(/bom$/, '') === want;
 	if (!matched() && !document.isDirty) {
 		await vscode.workspace.openTextDocument(document.uri, { encoding: want }).then(undefined, () => undefined);
