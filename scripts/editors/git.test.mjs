@@ -61,20 +61,42 @@ export default async function ({ clickTab, page, reset, javaText }) {
 	await clickTab('Controller');
 	await page.waitForFunction(() => document.querySelectorAll('.tab-body:not([hidden]) .cm-change-ruler .cm-change-mark').length === 1, {timeout: 3000});
 	assert.deepEqual(await marks(), { gutter: ['3:modified'], ruler: ['modified'] });
-	// Git 변경 막대 클릭 → 원본 인라인 비교(unifiedMergeView) 열기 · Esc 닫기 · 청크 되돌리기(rejectChunk)
+	// Git 변경 막대 클릭 → VS Code Peek Diff 열기 · Esc 닫기 · 청크 되돌리기 · 여러 청크 이동
 	await page.click('.tab-body:not([hidden]) .cm-changes-gutter .cm-change-modified');
-	await page.waitForSelector('.tab-body:not([hidden]) .cm-deletedChunk', { timeout: 3000 });
-	assert.ok((await page.$eval('.tab-body:not([hidden]) .cm-deletedChunk .cm-deletedLine', e => e.textContent)).includes('x()'), '원본 줄 표시');
+	await page.waitForSelector('.tab-body:not([hidden]) .cm-git-peek', { timeout: 3000 });
+	assert.ok((await page.$eval('.tab-body:not([hidden]) .cm-git-peek .cm-git-peek-del .cm-git-peek-code', e => e.textContent)).includes('x()'), '원본 줄 표시');
+	assert.ok((await page.$eval('.tab-body:not([hidden]) .cm-git-peek .cm-git-peek-add .cm-git-peek-code', e => e.textContent)).includes('memberService.find(1)'), '현재 줄 표시');
 	await page.keyboard.press('Escape');
-	await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .cm-deletedChunk'), { timeout: 2000 });
-	// 다시 열어 "되돌리기" 클릭 → 원본 내용으로 복원되고 변경 막대·비교 창이 닫힘
+	await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .cm-git-peek'), { timeout: 2000 });
+	// 다시 열어 "되돌리기" 클릭 → 원본 내용으로 복원되고 변경 막대·Peek 창이 닫힘
 	await page.click('.tab-body:not([hidden]) .cm-changes-gutter .cm-change-modified');
-	await page.waitForSelector('.tab-body:not([hidden]) .cm-merge-revert', { timeout: 3000 });
-	await page.click('.tab-body:not([hidden]) .cm-merge-revert');
+	await page.waitForSelector('.tab-body:not([hidden]) .cm-git-peek-revert', { timeout: 3000 });
+	await page.click('.tab-body:not([hidden]) .cm-git-peek-revert');
 	await page.waitForFunction(() => window.editor().state.doc.toString().includes('x()'), { timeout: 3000 });
-	await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .cm-deletedChunk'), { timeout: 2000 });
+	await page.waitForFunction(() => !document.querySelector('.tab-body:not([hidden]) .cm-git-peek'), { timeout: 2000 });
 	await marksAre({ gutter: [], ruler: [] }, '청크 되돌리기 뒤 변경 표시 사라짐');
-	console.log('Git changes: 수정·추가·삭제 표시·인라인 비교·청크 되돌리기·연결 탭 passed');
+	// 여러 청크(수정·추가·삭제)에서 이전/다음 이동 및 추가·삭제 청크 되돌리기
+	await clickTab('Script');
+	await reset('line1\nline2_mod\nline3\nline4_add');
+	await page.evaluate(() => window.send({ type: 'gitBase', target: 'script', text: 'line1\nline2\nline3' }));
+	await marksAre({ gutter: ['2:modified', '4:added'], ruler: ['modified', 'added'] }, '다중 청크 준비');
+	await page.click('.tab-body:not([hidden]) .cm-changes-gutter .cm-change-modified');
+	await page.waitForSelector('.tab-body:not([hidden]) .cm-git-peek', { timeout: 3000 });
+	assert.equal(await page.$eval('.tab-body:not([hidden]) .cm-git-peek-count', e => e.textContent), '1 / 2');
+	await page.click('.tab-body:not([hidden]) .cm-git-peek button[name="next"]');
+	await page.waitForFunction(() => document.querySelector('.tab-body:not([hidden]) .cm-git-peek-count')?.textContent === '2 / 2', { timeout: 2000 });
+	await page.click('.tab-body:not([hidden]) .cm-git-peek-revert');
+	await page.waitForFunction(() => window.editor().state.doc.toString() === 'line1\nline2_mod\nline3', { timeout: 3000 });
+	await marksAre({ gutter: ['2:modified'], ruler: ['modified'] }, '추가 청크 되돌리기 뒤 수정 청크만 남음');
+	// 삭제 청크 되돌리기
+	await reset('line1\nline3');
+	await marksAre({ gutter: ['2:deleted'], ruler: ['deleted'] }, '삭제 청크 표시');
+	await page.click('.tab-body:not([hidden]) .cm-changes-gutter .cm-change-deleted');
+	await page.waitForSelector('.tab-body:not([hidden]) .cm-git-peek-deleted', { timeout: 3000 });
+	await page.click('.tab-body:not([hidden]) .cm-git-peek-revert');
+	await page.waitForFunction(() => window.editor().state.doc.toString() === 'line1\nline2\nline3', { timeout: 3000 });
+	await marksAre({ gutter: [], ruler: [] }, '삭제 청크 되돌리기 뒤 원복');
+	console.log('Git changes: 수정·추가·삭제 표시·Peek Diff·청크 이동·되돌리기·연결 탭 passed');
 	// Git blame: 커서 줄 끝 "작성자 · n일 전"(커밋 안 된 줄은 커밋 안 됨), 지금 문서 버전 것만, 편집하면 숨김, 톱니바퀴에서 끄기
 	{
 		await clickTab('Script');

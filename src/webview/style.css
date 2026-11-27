@@ -257,9 +257,10 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .code-editor:not(.custom-theme) .cm-selectionBackground, .code-editor:not(.custom-theme) .cm-focused .cm-selectionBackground { background: var(--code-selection, var(--vscode-editor-selectionBackground)) !important; }
 /* 선택 레이어는 글자 뒤에 있어서 VS Code의 불투명한 현재 줄 배경이면 가려진다. */
 .code-editor:not(.custom-theme) .cm-activeLine { background-color: var(--code-line, color-mix(in srgb, var(--vscode-editor-lineHighlightBackground, #888) 25%, transparent)) !important; }
-/* Git 변경 표시: 줄 번호 옆 막대(클릭 시 인라인 비교·되돌리기), 오른쪽 끝 띠(스크롤바 위, 클릭은 스크롤바로). 색은 VS Code 줄 옆 변경 표시 색 */
+/* Git 변경 표시: 줄 번호 옆 막대(클릭 시 VS Code Peek Diff), 오른쪽 끝 띠(스크롤바 위, 클릭은 스크롤바로). 색은 VS Code 줄 옆 변경 표시 색 */
 .code-editor .cm-changes-gutter { width: 6px; padding-left: 2px; box-sizing: border-box; }
-.code-editor .cm-change { width: 3px; height: 100%; cursor: pointer; }
+.code-editor .cm-change { width: 3px; height: 100%; cursor: pointer; transition: width .1s ease; }
+.code-editor .cm-changes-gutter .cm-gutterElement:hover .cm-change:not(.cm-change-deleted) { width: 4px; }
 .code-editor .cm-change-added { --change: var(--vscode-editorGutter-addedBackground, #2ea043); }
 .code-editor .cm-change-modified { --change: var(--vscode-editorGutter-modifiedBackground, #0078d4); }
 .code-editor .cm-change-deleted { --change: var(--vscode-editorGutter-deletedBackground, #f85149); }
@@ -267,20 +268,79 @@ button.icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground
 .code-editor .cm-change.cm-change-deleted { width: 4px; height: 0; border-top: 3px solid var(--change); }
 .code-editor .cm-change-ruler { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; z-index: 3; pointer-events: none; }
 .code-editor .cm-change-mark { position: absolute; left: 0; right: 0; min-height: 2px; background: var(--change); opacity: .8; }
-/* Git 인라인 원본 비교·청크 되돌리기(unifiedMergeView) */
-.code-editor .cm-merge-b .cm-changedLine { background: var(--vscode-diffEditor-insertedLineBackground, rgba(46, 160, 67, .14)); }
-.code-editor .cm-merge-b .cm-changedText { background: var(--vscode-diffEditor-insertedTextBackground, rgba(46, 160, 67, .28)); }
-.code-editor .cm-deletedChunk { position: relative; padding: 2px 6px 4px; margin: 1px 0; border-left: 2px solid var(--vscode-editorGutter-deletedBackground, #f85149);
-	background: var(--vscode-diffEditor-removedLineBackground, rgba(248, 81, 73, .14)); }
-.code-editor .cm-deletedChunk .cm-deletedLine del { text-decoration: none; opacity: .88; }
-.code-editor .cm-deletedChunk .cm-deletedText { background: var(--vscode-diffEditor-removedTextBackground, rgba(248, 81, 73, .3)); }
-.code-editor .cm-chunkButtons { position: static; display: flex; justify-content: flex-end; gap: 4px; margin-bottom: 2px; }
-.code-editor .cm-merge-btn { padding: 1px 8px; border-radius: 3px; font-family: var(--vscode-font-family, sans-serif); font-size: 11px; line-height: 18px; cursor: pointer;
-	color: var(--vscode-foreground); background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border: 1px solid var(--vscode-panel-border); }
-.code-editor .cm-merge-btn:hover:not(:disabled) { background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, .2)); }
-.code-editor .cm-merge-btn.cm-merge-revert { color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0e639c); border-color: transparent; }
-.code-editor .cm-merge-btn.cm-merge-revert:hover:not(:disabled) { background: var(--vscode-button-hoverBackground, #1177bb); }
-.code-editor .cm-merge-btn:disabled { opacity: .45; cursor: default; }
+/* Git 인라인 비교 Peek 위젯(VS Code Dirty Diff 스타일) */
+.code-editor .cm-git-peek {
+	--peek-accent: var(--vscode-editorGutter-modifiedBackground, var(--vscode-peekView-border, #0078d4));
+	--peek-head-bg: var(--vscode-peekViewTitle-background, color-mix(in srgb, var(--peek-accent) 12%, var(--vscode-editorWidget-background, var(--vscode-sideBar-background, var(--git-peek-bg, #252526)))));
+	--peek-body-bg: var(--vscode-peekViewEditor-background, var(--vscode-editor-background, var(--git-peek-bg, #1e1e1e)));
+	--peek-gutter-bg: var(--vscode-peekViewEditorGutter-background, var(--peek-body-bg));
+	--peek-del-line: var(--vscode-diffEditor-removedLineBackground, rgba(248, 81, 73, .14));
+	--peek-del-word: var(--vscode-diffEditor-removedTextBackground, rgba(248, 81, 73, .32));
+	--peek-add-line: var(--vscode-diffEditor-insertedLineBackground, rgba(46, 160, 67, .14));
+	--peek-add-word: var(--vscode-diffEditor-insertedTextBackground, rgba(46, 160, 67, .3));
+	position: sticky; left: var(--git-peek-left, 0px); width: var(--git-peek-width, 100%); box-sizing: border-box;
+	margin: 4px 0; white-space: normal; outline: none;
+	border-top: 1px solid var(--peek-accent); border-bottom: 1px solid var(--peek-accent);
+	background: var(--peek-body-bg);
+	box-shadow: 0 3px 10px color-mix(in srgb, var(--vscode-widget-shadow, rgba(0, 0, 0, .4)) 70%, transparent);
+}
+.code-editor .cm-git-peek-added { --peek-accent: var(--vscode-editorGutter-addedBackground, #2ea043); }
+.code-editor .cm-git-peek-deleted { --peek-accent: var(--vscode-editorGutter-deletedBackground, #f85149); }
+.code-editor.custom-theme .cm-git-peek {
+	--peek-head-bg: color-mix(in srgb, var(--peek-accent) 12%, var(--git-peek-bg, #1e1e1e));
+	--peek-body-bg: color-mix(in srgb, var(--git-peek-bg, #1e1e1e) 96%, currentColor 4%);
+	--peek-gutter-bg: color-mix(in srgb, var(--git-peek-bg, #1e1e1e) 94%, currentColor 6%);
+	--peek-del-line: rgba(248, 81, 73, .15); --peek-del-word: rgba(248, 81, 73, .32);
+	--peek-add-line: rgba(46, 160, 67, .15); --peek-add-word: rgba(46, 160, 67, .3);
+}
+.code-editor .cm-git-peek-head {
+	display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 26px; padding: 0 6px 0 10px;
+	font-family: var(--vscode-font-family, sans-serif); font-size: 12px; line-height: 1; user-select: none;
+	background: var(--peek-head-bg); color: var(--vscode-peekViewTitleLabel-foreground, var(--vscode-foreground));
+	border-bottom: 1px solid color-mix(in srgb, var(--peek-accent) 26%, transparent);
+}
+.code-editor.custom-theme .cm-git-peek-head { color: inherit; }
+.code-editor .cm-git-peek-title { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.code-editor .cm-git-peek-kind { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.code-editor .cm-git-peek-kind::before { content: ""; width: 3px; height: 12px; border-radius: 1.5px; background: var(--peek-accent); }
+.code-editor .cm-git-peek-count { font-size: 11px; opacity: .75; font-variant-numeric: tabular-nums; }
+.code-editor .cm-git-peek-stats { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.code-editor .cm-git-peek-stat-del { color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-editorGutter-deletedBackground, #f14c4c)); }
+.code-editor .cm-git-peek-stat-add { color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green, #73c991)); }
+.code-editor .cm-git-peek-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+.code-editor .cm-git-peek-divider { width: 1px; height: 12px; margin: 0 3px; background: currentColor; opacity: .2; }
+.code-editor .cm-git-peek-btn {
+	display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0;
+	border: none; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; opacity: .82;
+	transition: background-color .1s ease, opacity .1s ease;
+}
+.code-editor .cm-git-peek-btn .codicon { font-size: 14px; line-height: 1; }
+.code-editor .cm-git-peek-btn:hover:not(:disabled) { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, .22)); }
+.code-editor.custom-theme .cm-git-peek-btn:hover:not(:disabled) { background: color-mix(in srgb, currentColor 14%, transparent); }
+.code-editor .cm-git-peek-btn:disabled { opacity: .32; cursor: default; }
+.code-editor .cm-git-peek-body {
+	max-height: 280px; overflow: auto; user-select: text; cursor: text;
+	font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); line-height: 1.45;
+}
+.code-editor .cm-git-peek-lines { display: flex; flex-direction: column; width: max-content; min-width: 100%; }
+.code-editor .cm-git-peek-line { display: flex; align-items: stretch; min-height: 1.45em; }
+.code-editor .cm-git-peek-del { --line-bg: var(--peek-del-line); background: var(--line-bg); }
+.code-editor .cm-git-peek-add { --line-bg: var(--peek-add-line); background: var(--line-bg); }
+.code-editor .cm-git-peek-gutter {
+	flex: none; display: inline-flex; align-items: stretch; position: sticky; left: 0; z-index: 1;
+	padding-left: 6px; user-select: none;
+	background: linear-gradient(var(--line-bg), var(--line-bg)), var(--peek-gutter-bg);
+}
+.code-editor .cm-git-peek-ln {
+	min-width: var(--ln-ch, 2ch); padding: 0 5px 0 2px; text-align: right; font-variant-numeric: tabular-nums;
+	color: var(--vscode-editorLineNumber-foreground, currentColor); opacity: .55;
+}
+.code-editor .cm-git-peek-sign { width: 16px; text-align: center; font-weight: 600; flex: none; }
+.code-editor .cm-git-peek-del .cm-git-peek-sign { color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-editorGutter-deletedBackground, #f14c4c)); }
+.code-editor .cm-git-peek-add .cm-git-peek-sign { color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green, #73c991)); }
+.code-editor .cm-git-peek-code { flex: 1; padding: 0 12px 0 4px; white-space: pre; tab-size: 4; }
+.code-editor .cm-git-peek-word-del { background: var(--peek-del-word); }
+.code-editor .cm-git-peek-word-add { background: var(--peek-add-word); }
 /* Mapper ↔ 매퍼 XML 줄 옆 아이콘(링크가 있을 때만 표시)과 Ctrl+hover 정의 이동 밑줄 */
 .code-editor .cm-editor:not(.cm-has-mapper-links) .cm-mapper-gutter { display: none !important; }
 .code-editor .cm-editor.cm-has-mapper-links .cm-gutter-lint:not(:has(.cm-lint-marker)) { width: 0; min-width: 0; overflow: hidden; }
