@@ -70,7 +70,7 @@ XML 원문은 바뀐 부분만 교체하고, 저장·Undo는 VS Code 방식 그�
 - 기호로 이동(Ctrl+Shift+O): 현재 코드 탭의 함수(`scwin.*`)·클래스/메서드(Java)·SQL ID(MyBatis XML)·요소 ID(Source XML)·CSS 선택자를 퍼지 검색해 바로 이동합니다
 - 파라미터 힌트: `(`·`,`를 치거나 Ctrl+Shift+Space를 누르면 함수 모양과 지금 파라미터를 보여 줍니다(WebSquare API 문서·JSDoc)
 - 문법 오류 표시, 포맷(단축키 Ctrl+Alt+L. VS Code 기본 포맷 단축키 Shift+Alt+F와 겹치지 않게 IntelliJ와 같은 키를 썼고, VS Code 키보드 단축키에서 `WebSquare5: 코드 탭 포맷`을 찾아 바꿀 수 있습니다. VS Code에 설정한 포매터, 없으면 VS Code 내장), 검색(Ctrl+F, 입력칸 옆에 몇 번째/찾은 개수 예: 2/10. 편집기를 클릭해도 순번은 그대로, Enter는 커서 다음 일치로), 줄바꿈(VS Code 설정을 따름), 다시 하기 Ctrl+Y·Ctrl+Shift+Z
-- 코드 편집기 테마(탭 줄 오른쪽 톱니바퀴 메뉴): "VS Code 따라가기"(지금 VS Code 색 테마의 문법 색), "IntelliJ Dark"·"IntelliJ Light"·"One Dark"·"One Light"·"GitHub Light Default"·"GitHub Dark Default". Git 변경 줄 표시(왼쪽 변경 막대를 클릭하면 원본과 인라인으로 비교하고 청크별로 되돌릴 수 있으며 `Esc`로 닫음)
+- 코드 편집기 테마(탭 줄 오른쪽 톱니바퀴 메뉴): "VS Code 따라가기"(지금 VS Code 색 테마의 문법 색), "IntelliJ Dark"·"IntelliJ Light"·"One Dark"·"One Light"·"GitHub Light Default"·"GitHub Dark Default". Git 변경 줄 표시(왼쪽 변경 막대를 클릭하면 VS Code Peek Diff 스타일의 인라인 비교 창이 열려 이전/다음 변경 이동과 청크별 되돌리기를 할 수 있으며 `Esc`로 닫음)
 - 테마 색 덮어쓰기: 톱니바퀴 메뉴의 "테마 색 덮어쓰기…" 팝업에서 바꾸면 바로 미리 보이고, 확인하면 저장됩니다(지금 테마만 또는 모든 테마). 설정 `for-websquare5.codeThemeCustomizations`에 직접 적어도 됩니다. 예:
   ```json
   "for-websquare5.codeThemeCustomizations": {
